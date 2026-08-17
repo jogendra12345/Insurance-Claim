@@ -1,0 +1,15 @@
+# Camunda local runtime data (Docker volume mount) — regenerated on `docker compose up`
+camunda-docker/camunda-data/*
+!camunda-docker/camunda-data/.gitkeep
+
+# Optional JDBC driver jars
+camunda-docker/driver-lib/*
+!camunda-docker/driver-lib/.gitkeep
+
+# Environment & secrets — reproducible by re-downloading the release archive; never commit real secrets here
+camunda-docker/.env
+camunda-docker/connector-secrets.txt
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
