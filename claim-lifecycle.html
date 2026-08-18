@@ -139,7 +139,7 @@
   .dek {
     font-size: 1.05rem;
     color: var(--ink-soft);
-    max-width: 60ch;
+    max-width: 62ch;
     margin-bottom: 2rem;
   }
 
@@ -323,9 +323,9 @@
 </style>
 
 <header class="page">
-  <div class="kicker">Insurance Claim &middot; Process Architecture</div>
+  <div class="kicker">ClaimFlow AI &middot; Process Architecture</div>
   <h1 class="title">Claim Lifecycle Ledger</h1>
-  <p class="dek">Every step a claim passes through, from the intake form to a paid or denied outcome — what runs it, and exactly where Camunda's job ends and yours begins.</p>
+  <p class="dek">Every step a claim passes through in ClaimFlow AI, from the intake form to a settled or denied outcome — what runs it, and exactly where Camunda's job ends and yours begins.</p>
   <div class="legend">
     <div class="legend-item"><span class="badge native">Engine native</span> Camunda executes this step directly</div>
     <div class="legend-item"><span class="badge global">Global limit</span> true for any app built on Camunda</div>
@@ -346,7 +346,7 @@
       <div class="entry-body">
         <h3>Submit claim</h3>
         <p>Claimant fills out the claim form and attaches evidence — photos, a police report, receipts.</p>
-        <div class="tech"><span>React / Next.js</span><span>file upload widget</span></div>
+        <div class="tech"><span>Next.js</span><span>file upload widget</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -358,8 +358,8 @@
       <div class="entry-num">02</div>
       <div class="entry-body">
         <h3>Receive &amp; store</h3>
-        <p>Backend accepts the submission, uploads files to object storage, and writes the claim record.</p>
-        <div class="tech"><span>Node/Express or Spring Boot</span><span>PostgreSQL</span><span>S3</span></div>
+        <p>Backend accepts the submission, tags it to the carrier it belongs to, uploads files to object storage, and writes the claim record.</p>
+        <div class="tech"><span>Node.js/TypeScript API</span><span>PostgreSQL</span><span>S3</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -371,8 +371,8 @@
       <div class="entry-num">03</div>
       <div class="entry-body">
         <h3>Start the process</h3>
-        <p>Backend calls Zeebe to spin up a process instance keyed to this claim's ID.</p>
-        <div class="tech"><span>Zeebe client (gRPC/REST)</span></div>
+        <p>Backend calls Zeebe to spin up a <code>claim-case-process</code> instance keyed to this claim's ID.</p>
+        <div class="tech"><span>@camunda8/sdk</span></div>
       </div>
       <div class="note">
         <span class="badge native">Native</span>
@@ -386,7 +386,7 @@
 <section class="phase">
   <div class="phase-head">
     <span class="phase-num">Phase 02</span>
-    <span class="phase-title">Automated processing</span>
+    <span class="phase-title">Validation</span>
     <span class="phase-line"></span>
   </div>
   <div class="steps">
@@ -396,7 +396,7 @@
       <div class="entry-body">
         <h3>Validate claim</h3>
         <p>A worker checks required fields are present and confirms the policy is active.</p>
-        <div class="tech"><span>job worker (Node/Java)</span><span>policy service</span></div>
+        <div class="tech"><span>job worker (Node/TS)</span><span>policy service (mocked)</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -407,40 +407,13 @@
     <div class="entry">
       <div class="entry-num">05</div>
       <div class="entry-body">
-        <h3>Route the claim</h3>
-        <p>Low-complexity, low-value claims go straight through; everything else waits for a person.</p>
-        <div class="tech"><span>DMN decision table</span></div>
+        <h3>Resolve exceptions, if invalid</h3>
+        <p>A triage staffer fixes data issues or rejects the claim outright before anything else runs.</p>
+        <div class="tech"><span>Camunda Tasklist</span><span>candidate group: triage-team</span></div>
       </div>
       <div class="note">
-        <span class="badge native">Native</span>
-        <p>DMN tables ship with the engine — simple rule evaluation is what Camunda is built for.</p>
-        <div class="aside">Actuarial math beyond a rule table → app-specific gap</div>
-      </div>
-    </div>
-
-    <div class="entry">
-      <div class="entry-num">06</div>
-      <div class="entry-body">
-        <h3>Read the evidence</h3>
-        <p>Uploaded documents and photos are extracted into structured claim data.</p>
-        <div class="tech"><span>worker (Python/Node)</span><span>Claude API</span></div>
-      </div>
-      <div class="note">
-        <span class="badge global">Global</span>
-        <p>No OCR or document intelligence exists anywhere in the platform.</p>
-      </div>
-    </div>
-
-    <div class="entry">
-      <div class="entry-num">07</div>
-      <div class="entry-body">
-        <h3>Score the risk</h3>
-        <p>The claim is checked against history and known patterns for fraud signals.</p>
-        <div class="tech"><span>worker</span><span>Claude API reasoning</span><span>claims-history store</span></div>
-      </div>
-      <div class="note">
-        <span class="badge global">Global</span>
-        <p>No modeling, scoring, or inference capability of any kind.</p>
+        <span class="badge app">App-specific</span>
+        <p>Camunda ships the task queue; the actual exception-handling screen is generic and plain.</p>
       </div>
     </div>
 
@@ -450,34 +423,61 @@
 <section class="phase">
   <div class="phase-head">
     <span class="phase-num">Phase 03</span>
-    <span class="phase-title">Human review</span>
+    <span class="phase-title">AI triage</span>
     <span class="phase-line"></span>
   </div>
   <div class="steps">
 
     <div class="entry">
-      <div class="entry-num">08</div>
+      <div class="entry-num">06</div>
       <div class="entry-body">
-        <h3>Route by risk</h3>
-        <p>High-risk or high-value claims are pulled aside specifically for a person to look at.</p>
-        <div class="tech"><span>exclusive gateway</span></div>
+        <h3>Extract evidence &amp; summarize</h3>
+        <p>Uploaded documents are read and turned into structured data plus a case summary a reviewer can actually use.</p>
+        <div class="tech"><span>worker (Node/TS)</span><span>Claude API</span></div>
       </div>
       <div class="note">
-        <span class="badge native">Native</span>
-        <p>Branching on a variable is core engine behavior.</p>
+        <span class="badge global">Global</span>
+        <p>No OCR, document intelligence, or summarization exists anywhere in the platform.</p>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-num">07</div>
+      <div class="entry-body">
+        <h3>Detect fraud indicators</h3>
+        <p>The claim and its evidence are checked against known fraud patterns and the claimant's history.</p>
+        <div class="tech"><span>worker</span><span>Claude API</span><span>claims-history store</span></div>
+      </div>
+      <div class="note">
+        <span class="badge global">Global</span>
+        <p>No pattern-matching or fraud modeling capability of any kind.</p>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-num">08</div>
+      <div class="entry-body">
+        <h3>Score the risk</h3>
+        <p>Fraud signal and claim complexity are combined into a single risk score.</p>
+        <div class="tech"><span>worker</span><span>Claude API reasoning</span></div>
+      </div>
+      <div class="note">
+        <span class="badge global">Global</span>
+        <p>No scoring or inference capability — this is pure application logic.</p>
       </div>
     </div>
 
     <div class="entry">
       <div class="entry-num">09</div>
       <div class="entry-body">
-        <h3>Adjuster reviews</h3>
-        <p>A person opens the claim, reads the AI summary and risk score, and makes the call.</p>
-        <div class="tech"><span>Camunda Tasklist</span><span>or custom UI via Task API</span></div>
+        <h3>Determine routing</h3>
+        <p>A decision table picks a suggested reviewer role from the risk score, fraud count, claim amount, and claim type.</p>
+        <div class="tech"><span>DMN decision table</span></div>
       </div>
       <div class="note">
-        <span class="badge app">App-specific</span>
-        <p>Camunda ships the task queue; the reviewer's actual working surface is generic and plain — a real adjuster tool needs its own frontend.</p>
+        <span class="badge native">Native</span>
+        <p>DMN tables ship with the engine — this is exactly what Camunda is built for.</p>
+        <div class="aside">Per-carrier threshold tuning beyond a shared table → app-specific gap</div>
       </div>
     </div>
 
@@ -487,7 +487,7 @@
 <section class="phase">
   <div class="phase-head">
     <span class="phase-num">Phase 04</span>
-    <span class="phase-title">Resolution</span>
+    <span class="phase-title">Human triage</span>
     <span class="phase-line"></span>
   </div>
   <div class="steps">
@@ -495,22 +495,83 @@
     <div class="entry">
       <div class="entry-num">10</div>
       <div class="entry-body">
-        <h3>Route the decision</h3>
+        <h3>Confirm or override routing</h3>
+        <p>A triage reviewer sees the AI's summary, fraud flags, and suggested role, then confirms it or sends the claim somewhere else.</p>
+        <div class="tech"><span>Camunda Tasklist</span><span>candidate group: triage-team</span></div>
+      </div>
+      <div class="note">
+        <span class="badge app">App-specific</span>
+        <p>This is the human-in-the-loop gate on the AI's suggestion — Camunda provides the queue, not the judgment.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">Phase 05</span>
+    <span class="phase-title">Review</span>
+    <span class="phase-line"></span>
+  </div>
+  <div class="steps">
+
+    <div class="entry">
+      <div class="entry-num">11</div>
+      <div class="entry-body">
+        <h3>Route to a reviewer</h3>
+        <p>The claim reaches exactly one queue: an adjuster for standard claims, an investigator when fraud indicators are present, or legal for high-value and liability claims.</p>
+        <div class="tech"><span>Camunda Tasklist</span><span>candidate groups: adjusters / investigators / legal-reviewers</span></div>
+      </div>
+      <div class="note">
+        <span class="badge app">App-specific</span>
+        <p>Same generic Tasklist screen for all three roles — no role-specific working surface out of the box.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">Phase 06</span>
+    <span class="phase-title">Resolution</span>
+    <span class="phase-line"></span>
+  </div>
+  <div class="steps">
+
+    <div class="entry">
+      <div class="entry-num">12</div>
+      <div class="entry-body">
+        <h3>Decide</h3>
         <p>Approve, deny, or send the claim back for more information.</p>
         <div class="tech"><span>exclusive gateway</span></div>
       </div>
       <div class="note">
         <span class="badge native">Native</span>
-        <p>Another branch on the adjuster's decision variable.</p>
+        <p>Branching on the reviewer's decision variable is core engine behavior.</p>
       </div>
     </div>
 
     <div class="entry">
-      <div class="entry-num">11</div>
+      <div class="entry-num">13</div>
       <div class="entry-body">
-        <h3>Pay out, if approved</h3>
-        <p>A disbursement is triggered for the approved amount.</p>
-        <div class="tech"><span>worker</span><span>Stripe / ACH / disbursement API</span></div>
+        <h3>Second sign-off, on large settlements</h3>
+        <p>A supervisor countersigns before a big payout goes out.</p>
+        <div class="tech"><span>Camunda Tasklist</span><span>candidate group: supervisors</span></div>
+      </div>
+      <div class="note">
+        <span class="badge app">App-specific</span>
+        <p>Maker-checker approval is a workflow you design, not something Camunda enforces for you.</p>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-num">14</div>
+      <div class="entry-body">
+        <h3>Settle, if approved</h3>
+        <p>A settlement is triggered for the approved amount.</p>
+        <div class="tech"><span>worker</span><span>settlement provider (mocked)</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -519,11 +580,11 @@
     </div>
 
     <div class="entry">
-      <div class="entry-num">12</div>
+      <div class="entry-num">15</div>
       <div class="entry-body">
         <h3>Draft denial, if denied</h3>
-        <p>A denial letter is generated citing the specific coverage reason.</p>
-        <div class="tech"><span>worker</span><span>Claude API drafting</span><span>PDF generation</span></div>
+        <p>A denial letter is generated citing the specific reason.</p>
+        <div class="tech"><span>worker</span><span>Claude API drafting</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -532,11 +593,11 @@
     </div>
 
     <div class="entry">
-      <div class="entry-num">13</div>
+      <div class="entry-num">16</div>
       <div class="entry-body">
         <h3>Notify the claimant</h3>
-        <p>The outcome — either direction — is sent to the customer.</p>
-        <div class="tech"><span>worker</span><span>SendGrid / Twilio</span></div>
+        <p>Either outcome is sent to the customer.</p>
+        <div class="tech"><span>worker</span><span>notification provider (mocked)</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -549,14 +610,14 @@
 
 <section class="phase">
   <div class="phase-head">
-    <span class="phase-num">Phase 05</span>
+    <span class="phase-num">Phase 07</span>
     <span class="phase-title">Close</span>
     <span class="phase-line"></span>
   </div>
   <div class="steps">
 
     <div class="entry">
-      <div class="entry-num">14</div>
+      <div class="entry-num">17</div>
       <div class="entry-body">
         <h3>Close the case</h3>
         <p>A worker writes the final status to the claims database as the engine ends the instance.</p>
@@ -569,7 +630,20 @@
     </div>
 
     <div class="entry">
-      <div class="entry-num">15</div>
+      <div class="entry-num">18</div>
+      <div class="entry-body">
+        <h3>Reconstruct the audit trail</h3>
+        <p>Every automated and human decision on the claim — who, what, and why — is queryable end to end.</p>
+        <div class="tech"><span>audit_log table</span><span>written by every worker &amp; task</span></div>
+      </div>
+      <div class="note">
+        <span class="badge global">Global</span>
+        <p>Operate gives you process-level history for free; a business-level, per-decision audit trail is something you build.</p>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-num">19</div>
       <div class="entry-body">
         <h3>Check status</h3>
         <p>The claimant checks progress; operations watches the pipeline for stuck claims.</p>
@@ -577,7 +651,7 @@
       </div>
       <div class="note">
         <span class="badge app">App-specific</span>
-        <p>Operate covers process health for your team, not a customer status page or regulatory reporting — how much of that you need depends on the insurer.</p>
+        <p>Operate covers process health for your team, not a customer status page or regulatory reporting — how much of that you need depends on the carrier.</p>
       </div>
     </div>
 
@@ -585,5 +659,5 @@
 </section>
 
 <footer class="page">
-  Fifteen steps, three that Camunda runs itself, one split down the middle, eleven built entirely around it. That ratio is normal — the engine's job is staying small.
+  Nineteen steps, three that Camunda runs itself, one split down the middle, fifteen built entirely around it. That ratio is normal — the engine's job is staying small, even as the case gets more sophisticated.
 </footer>
