@@ -2,11 +2,13 @@
 
 **Status:** Locked
 
-> Note: this spec covers the initial database setup as a whole (Roadmap step 1: `claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) rather than a single table, since that's what "database setup" refers to in `ROADMAP.md`. Each table is broken out below in the same Purpose / Columns / Constraints / Relationships / Indexes shape used for a single-table db spec, per `SPEC.md` §8.
+> Note: this spec covers the initial database setup as a whole (Roadmap step 1: `claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) rather than a single table, since that's what "database setup" refers to in `ROADMAP.md`. Each table is broken out below in the same Purpose / Columns / Constraints / Relationships / Indexes shape used for a single-table db spec, per `SPEC.md` §9.
+>
+> Updated 2026-08-19 to match `SPEC.md`'s insurance-type extensibility rewrite (§3): `claims` gained `insurance_type`, and the `claim_type`/`document_type` enumerations below are health-specific. Amended in place rather than as a follow-on migration, since nothing had been applied to a live database yet.
 
 ## Purpose
 
-Stand up the four core Postgres tables that back the claims process end to end — the claim record itself, its uploaded documents, AI-flagged fraud indicators, and the durable audit trail — exactly as defined in `SPEC.md` §8. This is the first roadmap item; the BPMN process, job workers, and API all depend on this schema existing before they can be built.
+Stand up the four core Postgres tables that back the claims process end to end — the claim record itself, its uploaded documents, AI-flagged fraud indicators, and the durable audit trail — exactly as defined in `SPEC.md` §9. This is the first roadmap item; the BPMN process, job workers, and API all depend on this schema existing before they can be built.
 
 ---
 
@@ -18,6 +20,7 @@ Stand up the four core Postgres tables that back the claims process end to end �
 |---|---|---|---|
 | `id` | uuid | NOT NULL (PK) | — |
 | `carrier_id` | uuid | NOT NULL | — |
+| `insurance_type` | text | NOT NULL | `'health'` |
 | `policy_number` | text | NOT NULL | — |
 | `claim_type` | text | NOT NULL | — |
 | `claimant_name` | text | NOT NULL | — |
@@ -39,7 +42,8 @@ Stand up the four core Postgres tables that back the claims process end to end �
 
 ### Constraints
 
-- `claim_type` restricted to: `property`, `injury`, `liability`, `total_loss`, `other`.
+- `insurance_type` unconstrained (no CHECK) — v1 only sets `'health'`, but this column is deliberately open so a new type (e.g. `vehicle`) is additive and doesn't require a migration to unlock (`SPEC.md` §3).
+- `claim_type` restricted to: `outpatient`, `inpatient`, `pharmacy`, `dental`, `maternity`, `other` (health sub-categories; a new insurance type would need its own values added here).
 - `status` restricted to: `submitted`, `validating`, `triage`, `in_review`, `approved`, `denied`, `awaiting_info`.
 - `decision`, when set, restricted to: `approve`, `deny`, `moreInfo`.
 - `assigned_role` / `confirmed_role`, when set, restricted to: `adjuster`, `investigator`, `legal`, `auto`.
@@ -50,7 +54,7 @@ Stand up the four core Postgres tables that back the claims process end to end �
 
 ### Indexes
 
-- `idx_claims_carrier_id` on `carrier_id` — carrier-scoped queries will be the primary access pattern once tenant isolation lands (§13), and MGA/TPA dashboards filter by carrier today even without enforcement.
+- `idx_claims_carrier_id` on `carrier_id` — carrier-scoped queries will be the primary access pattern once tenant isolation lands (§14), and MGA/TPA dashboards filter by carrier today even without enforcement.
 - `idx_claims_status` on `status` — Tasklist-adjacent dashboards and the claimant status endpoint filter/poll by status.
 - `idx_claims_process_instance_key` on `process_instance_key` — worker callbacks and audit correlation look up a claim by its Zeebe process instance key.
 
@@ -71,7 +75,7 @@ Stand up the four core Postgres tables that back the claims process end to end �
 
 ### Constraints
 
-- `document_type`, when set, restricted to: `photo`, `police_report`, `receipt`, `other`.
+- `document_type`, when set, restricted to: `medical_bill`, `discharge_summary`, `prescription`, `other` (health-specific).
 
 ### Relationships
 
@@ -134,13 +138,13 @@ Stand up the four core Postgres tables that back the claims process end to end �
 
 ### Indexes
 
-- `idx_audit_log_claim_id` on `claim_id` — reconstructing a claim's full case history (SPEC.md §12) is the primary read pattern, and every worker/user-task handler writes here.
+- `idx_audit_log_claim_id` on `claim_id` — reconstructing a claim's full case history (SPEC.md §13) is the primary read pattern, and every worker/user-task handler writes here.
 - `idx_audit_log_created_at` on `created_at` — supports chronological/paginated audit views without a full scan as the table grows.
 
 ---
 
 ## Migration
 
-Implemented as `backend/db/migrations/0001_initial_schema.sql`, applied via `backend/db/run-migrations.sh` (raw SQL, no ORM, forward-only, tracked in a `schema_migrations` table). Rationale recorded as an ADR in `SPEC.md` §8 "Migration tooling" — schema is small (4 tables) and stable, raw SQL is more reliably correct here than an ORM migration DSL, and no rollback tooling is needed yet since dev resets via drop/recreate.
+Implemented as `backend/db/migrations/0001_initial_schema.sql`, applied via `backend/db/run-migrations.sh` (raw SQL, no ORM, forward-only, tracked in a `schema_migrations` table). Rationale recorded as an ADR in `SPEC.md` §9 "Migration tooling" — schema is small (4 tables) and stable, raw SQL is more reliably correct here than an ORM migration DSL, and no rollback tooling is needed yet since dev resets via drop/recreate.
 
 Numbering convention: `NNNN_description.sql`, zero-padded to 4 digits, starting at `0001`.

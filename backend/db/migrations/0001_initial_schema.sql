@@ -1,14 +1,19 @@
 -- ClaimFlow AI: initial schema (claims, claim_documents, claim_fraud_indicators, audit_log)
--- See .claude/specs/db/database-setup.md and SPEC.md §8 for the source spec.
+-- See .claude/specs/db/database-setup.md and SPEC.md §9 for the source spec.
+-- v1 ships health insurance claims only (SPEC.md §3) — insurance_type is a
+-- first-class, unconstrained column so a future type is additive (no schema
+-- change needed to add e.g. 'vehicle'); claim_type/document_type CHECKs below
+-- are health-specific and will need their own values added per new type.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE claims (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   carrier_id            uuid NOT NULL,
+  insurance_type        text NOT NULL DEFAULT 'health',
   policy_number         text NOT NULL,
   claim_type            text NOT NULL
-                          CHECK (claim_type IN ('property', 'injury', 'liability', 'total_loss', 'other')),
+                          CHECK (claim_type IN ('outpatient', 'inpatient', 'pharmacy', 'dental', 'maternity', 'other')),
   claimant_name         text NOT NULL,
   claimant_email        text NOT NULL,
   incident_date         date NOT NULL,
@@ -40,7 +45,7 @@ CREATE TABLE claim_documents (
   claim_id       uuid NOT NULL REFERENCES claims (id) ON DELETE CASCADE,
   file_url       text NOT NULL,
   document_type  text
-                   CHECK (document_type IN ('photo', 'police_report', 'receipt', 'other')),
+                   CHECK (document_type IN ('medical_bill', 'discharge_summary', 'prescription', 'other')),
   extracted_data jsonb,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
