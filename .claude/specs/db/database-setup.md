@@ -1,6 +1,6 @@
 # db/database-setup
 
-**Status:** Draft
+**Status:** Locked
 
 > Note: this spec covers the initial database setup as a whole (Roadmap step 1: `claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) rather than a single table, since that's what "database setup" refers to in `ROADMAP.md`. Each table is broken out below in the same Purpose / Columns / Constraints / Relationships / Indexes shape used for a single-table db spec, per `SPEC.md` §8.
 
@@ -141,10 +141,6 @@ Stand up the four core Postgres tables that back the claims process end to end �
 
 ## Migration
 
-No migrations exist yet under `backend/db/migrations/` (directory not yet created). This spec maps to the first migration in that directory:
+Implemented as `backend/db/migrations/0001_initial_schema.sql`, applied via `backend/db/run-migrations.sh` (raw SQL, no ORM, forward-only, tracked in a `schema_migrations` table). Rationale recorded as an ADR in `SPEC.md` §8 "Migration tooling" — schema is small (4 tables) and stable, raw SQL is more reliably correct here than an ORM migration DSL, and no rollback tooling is needed yet since dev resets via drop/recreate.
 
-```
-backend/db/migrations/0001_initial_schema.sql
-```
-
-Numbering convention assumed as `NNNN_description.sql`, zero-padded to 4 digits, starting at `0001` — no existing migrations to confirm this against, so treat as a proposal to confirm during Review & Lock, not a fixed convention yet.
+Numbering convention: `NNNN_description.sql`, zero-padded to 4 digits, starting at `0001`.

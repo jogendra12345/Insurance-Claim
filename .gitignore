@@ -10,6 +10,9 @@ camunda-docker/driver-lib/*
 camunda-docker/.env
 camunda-docker/connector-secrets.txt
 
+# App Postgres env — see .env.example for the template
+.env
+
 # OS/editor cruft
 .DS_Store
 Thumbs.db
