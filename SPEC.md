@@ -278,6 +278,12 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 - Customer-facing status page pulling live process state.
 - Auth for the claimant portal.
 - Deploying to Camunda 8 SaaS instead of local Docker Compose.
+- **Cloud hosting for the rest of the stack** (beyond Camunda, above). What needs to change before this app runs anywhere but a local machine:
+  - Bucket access: the `claim-documents` MinIO bucket is public-read (`.claude/specs/generic/object-storage-provisioning.md`) — fine for throwaway dev data, not acceptable for real claim documents (often PII/health info) in production. Needs presigned URLs or an auth-gated proxy instead.
+  - Object storage endpoint: swapping `MINIO_ENDPOINT`/credentials for a real S3-compatible provider (AWS S3, or self-hosted MinIO on a cloud VM/cluster) is mostly config-only, since `backend/api` already talks to it via the standard S3 API — but every `file_url` already stored in Postgres is baked with `localhost:9000`, so existing rows would need a migration, not just a config change.
+  - Base URLs: `NEXT_PUBLIC_API_BASE_URL` (frontend) and `CORS_ORIGIN` (backend/api) both currently assume `localhost` — need real domains.
+  - `docker-compose.yaml` (root) is a local-dev convenience, not a deployment target — Postgres, MinIO/S3, `backend/api`, and `frontend/portal` each become their own actually-hosted service (managed DB, managed object storage or a real MinIO deployment, container hosting for the two Node apps).
+  - Secrets: `.env` files with plaintext credentials are fine locally; production needs a real secrets manager.
 
 ## 15. Definition of done (v1)
 
