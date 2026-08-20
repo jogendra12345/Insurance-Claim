@@ -9,11 +9,14 @@ type LoadState = "loading" | "loaded" | "error";
 export function PolicySelect({
   value,
   onChange,
+  onPolicySelect,
   id,
   style,
 }: {
   value: string;
   onChange: (policyNumber: string) => void;
+  /** Fires with the full matching policy whenever the selection changes, and once more after the list loads if `value` was already prefilled. */
+  onPolicySelect?: (policy: Policy | undefined) => void;
   id?: string;
   style?: React.CSSProperties;
 }) {
@@ -27,6 +30,9 @@ export function PolicySelect({
         if (cancelled) return;
         setPolicies(data);
         setState("loaded");
+        if (value) {
+          onPolicySelect?.(data.find((p) => p.policyNumber === value));
+        }
       })
       .catch(() => {
         if (!cancelled) setState("error");
@@ -34,7 +40,14 @@ export function PolicySelect({
     return () => {
       cancelled = true;
     };
+    // Only re-run on mount — `value`/`onPolicySelect` are read for the initial prefill only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleChange(policyNumber: string) {
+    onChange(policyNumber);
+    onPolicySelect?.(policies.find((p) => p.policyNumber === policyNumber));
+  }
 
   if (state === "loading") {
     return (
@@ -53,7 +66,7 @@ export function PolicySelect({
   }
 
   return (
-    <select id={id} value={value} onChange={(e) => onChange(e.target.value)} style={style}>
+    <select id={id} value={value} onChange={(e) => handleChange(e.target.value)} style={style}>
       <option value="" disabled>
         Select a policy…
       </option>

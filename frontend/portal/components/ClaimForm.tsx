@@ -124,7 +124,12 @@ export function ClaimForm() {
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }} noValidate>
       <Field label="Policy number" error={fieldErrors.policyNumber}>
-        <PolicySelect value={policyNumber} onChange={setPolicyNumber} style={inputStyle} />
+        <PolicySelect
+          value={policyNumber}
+          onChange={setPolicyNumber}
+          onPolicySelect={(policy) => setClaimantName(policy?.policyholderName ?? "")}
+          style={inputStyle}
+        />
       </Field>
 
       <Field label="Claim type">
