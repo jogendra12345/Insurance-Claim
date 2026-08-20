@@ -49,11 +49,25 @@ export const ACTIVE_STATUSES: ClaimStatus[] = [
   "awaiting_info",
 ];
 
+export type PolicyStatus = "active" | "lapsed" | "cancelled";
+
 export interface Policy {
   id: string;
   policyNumber: string;
   policyholderName: string;
-  status: "active" | "lapsed" | "cancelled";
+  insuranceType: string;
+  status: PolicyStatus;
+  effectiveDate: string;
+  expiryDate: string;
+  createdAt: string;
+}
+
+export interface NewPolicyInput {
+  policyNumber: string;
+  policyholderName: string;
+  status: PolicyStatus;
+  effectiveDate: string;
+  expiryDate: string;
 }
 
 export interface NewClaimInput {

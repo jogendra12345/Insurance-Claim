@@ -19,23 +19,36 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// GET /api/claims?policyNumber=... — backs the claimant portal's active-claims
-// list (Follow-up dependency #1 in .claude/specs/generic/claimant-portal-ui.md).
+// GET /api/claims — all claims, or /api/claims?policyNumber=... to scope to one
+// policy (Follow-up dependency #1 in .claude/specs/generic/claimant-portal-ui.md).
 claimsRouter.get("/", async (req, res) => {
   const policyNumber = req.query.policyNumber;
-  if (typeof policyNumber !== "string" || !policyNumber.trim()) {
-    return res.status(400).json({ message: "policyNumber query parameter is required." });
-  }
 
   try {
-    const result = await pool.query(
-      `SELECT * FROM claims WHERE policy_number = $1 ORDER BY created_at DESC`,
-      [policyNumber.trim()]
-    );
+    const result =
+      typeof policyNumber === "string" && policyNumber.trim()
+        ? await pool.query(`SELECT * FROM claims WHERE policy_number = $1 ORDER BY created_at DESC`, [
+            policyNumber.trim(),
+          ])
+        : await pool.query(`SELECT * FROM claims ORDER BY created_at DESC`);
     res.json(result.rows.map(serializeClaim));
   } catch (err) {
     console.error("GET /api/claims failed:", err);
     res.status(500).json({ message: "Couldn't load claims." });
+  }
+});
+
+// GET /api/claims/:id — SPEC.md §7's single-claim status endpoint.
+claimsRouter.get("/:id", async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM claims WHERE id = $1`, [req.params.id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Claim not found." });
+    }
+    res.json(serializeClaim(result.rows[0]));
+  } catch (err) {
+    console.error("GET /api/claims/:id failed:", err);
+    res.status(500).json({ message: "Couldn't load that claim." });
   }
 });
 

@@ -140,7 +140,7 @@ export function ClaimForm() {
           We&apos;ll review this and update its status — check back on your claims list any time.
         </p>
         <button
-          onClick={() => router.push(`/?policyNumber=${encodeURIComponent(policyNumber.trim())}`)}
+          onClick={() => router.push("/")}
           className="transition"
           style={{
             alignSelf: "flex-start",

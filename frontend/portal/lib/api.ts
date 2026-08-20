@@ -1,4 +1,4 @@
-import type { Claim, NewClaimInput, Policy } from "./types";
+import type { Claim, NewClaimInput, NewPolicyInput, Policy } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -33,6 +33,48 @@ export async function fetchClaim(claimId: string): Promise<Claim> {
     throw new ApiError(`Couldn't load that claim (${res.status}).`);
   }
   return res.json();
+}
+
+// GET /api/claims — all claims, for the Claims tab's grid + KPIs.
+export async function fetchAllClaims(): Promise<Claim[]> {
+  const res = await fetch(`${API_BASE_URL}/api/claims`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new ApiError(`Couldn't load claims (${res.status}).`);
+  }
+  return res.json();
+}
+
+// POST /api/policies — the Policies tab's "add policy" panel.
+export async function createPolicy(input: NewPolicyInput): Promise<Policy> {
+  const res = await fetch(`${API_BASE_URL}/api/policies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = (await res.json())?.message ?? "";
+    } catch {
+      // not JSON — fall through
+    }
+    throw new ApiError(detail || `Adding the policy failed (${res.status}).`);
+  }
+  return res.json();
+}
+
+// DELETE /api/policies/:id
+export async function deletePolicy(policyId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/policies/${policyId}`, { method: "DELETE" });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = (await res.json())?.message ?? "";
+    } catch {
+      // not JSON — fall through
+    }
+    throw new ApiError(detail || `Deleting the policy failed (${res.status}).`);
+  }
 }
 
 // POST /api/claims — SPEC.md §5/§7 (BUILD-PLAN.md feature #3).
