@@ -1,56 +1,77 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
 :root {
-  --bg: #f6f7f9;
+  /* Warm neutrals instead of flat grey — reads considered, not templated */
+  --bg: #f7f5f1;
   --surface: #ffffff;
-  --surface-muted: #eef1f5;
-  --text: #1a1f29;
-  --text-muted: #5b6472;
-  --border: #dde2e9;
-  --accent: #1d6fae;
-  --accent-contrast: #ffffff;
+  --surface-2: #f0ede6;
+  --text: #1c1a17;
+  --text-muted: #6f6858;
+  --border: #e5e0d5;
 
-  --status-neutral-bg: #eef1f5;
-  --status-neutral-fg: #45505f;
-  --status-progress-bg: #e5f0fa;
-  --status-progress-fg: #1d6fae;
-  --status-attention-bg: #fbf1de;
-  --status-attention-fg: #8a5a12;
-  --status-good-bg: #e6f4ea;
-  --status-good-fg: #1f7a3d;
-  --status-bad-bg: #faeae9;
-  --status-bad-fg: #a6423a;
+  /* Deep navy — the trust-forward primary fintech/insurance products lean on */
+  --primary: #1f3a5c;
+  --primary-hover: #16293f;
+  --primary-contrast: #ffffff;
+  --primary-soft: #e6ecf3;
 
-  --danger-bg: #faeae9;
-  --danger-fg: #a6423a;
-  --danger-border: #edc8c5;
+  /* Semantic status — used sparingly, only where it's a real signal */
+  --status-neutral-bg: #f0ede6;
+  --status-neutral-fg: #6f6858;
+  --status-progress-bg: #e6ecf3;
+  --status-progress-fg: #1f3a5c;
+  --status-attention-bg: #fbf0dc;
+  --status-attention-fg: #8f5c0a;
+  --status-good-bg: #e5f2ea;
+  --status-good-fg: #1c7a48;
+  --status-bad-bg: #fbe9e7;
+  --status-bad-fg: #ac3d33;
+
+  --danger-bg: #fbe9e7;
+  --danger-fg: #ac3d33;
+  --danger-border: #f0c9c3;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-card: 0 1px 2px rgba(28, 26, 23, 0.04), 0 1px 8px rgba(28, 26, 23, 0.03);
+
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12161c;
-    --surface: #191e26;
-    --surface-muted: #1f2530;
-    --text: #e7eaf0;
-    --text-muted: #9aa4b2;
-    --border: #2b3341;
-    --accent: #6fb1e6;
-    --accent-contrast: #0b1420;
+    --bg: #16140f;
+    --surface: #1e1b16;
+    --surface-2: #26221b;
+    --text: #f1ede4;
+    --text-muted: #a89f8e;
+    --border: #372f24;
 
-    --status-neutral-bg: #1f2530;
-    --status-neutral-fg: #b7c0cc;
-    --status-progress-bg: #1c2c3a;
-    --status-progress-fg: #6fb1e6;
-    --status-attention-bg: #322611;
-    --status-attention-fg: #e0a94a;
-    --status-good-bg: #16281c;
-    --status-good-fg: #4fbd76;
-    --status-bad-bg: #351f1e;
-    --status-bad-fg: #e08880;
+    --primary: #7ea3cc;
+    --primary-hover: #9bb9dc;
+    --primary-contrast: #0e1a28;
+    --primary-soft: #1e2c3c;
 
-    --danger-bg: #351f1e;
-    --danger-fg: #e08880;
-    --danger-border: #55302e;
+    --status-neutral-bg: #26221b;
+    --status-neutral-fg: #b7ad99;
+    --status-progress-bg: #1e2c3c;
+    --status-progress-fg: #8fb3da;
+    --status-attention-bg: #332711;
+    --status-attention-fg: #e3b562;
+    --status-good-bg: #17281d;
+    --status-good-fg: #55c081;
+    --status-bad-bg: #34211e;
+    --status-bad-fg: #e2897d;
+
+    --danger-bg: #34211e;
+    --danger-fg: #e2897d;
+    --danger-border: #55352f;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 1px 8px rgba(0, 0, 0, 0.16);
 
     color-scheme: dark;
   }
@@ -69,16 +90,35 @@ body {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-body);
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
 }
 
 a {
-  color: var(--accent);
+  color: var(--primary);
 }
 
 button {
   font-family: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 input,
@@ -90,4 +130,10 @@ textarea {
 
 ::selection {
   background: var(--status-progress-bg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .transition {
+    transition: all 0.15s ease;
+  }
 }

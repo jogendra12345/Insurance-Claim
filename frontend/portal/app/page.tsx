@@ -59,30 +59,27 @@ function HomePageContent() {
     void load(trimmed);
   }
 
+  const totalPending = claims.reduce((sum, c) => sum + c.claimAmount, 0);
+  const needsAttention = claims.filter((c) => c.status === "awaiting_info").length;
+
   return (
-    <main style={{ maxWidth: "720px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "2rem" }}>
-      <header style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <span style={{ fontSize: "0.8rem", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--accent)" }}>
-          ClaimFlow AI
-        </span>
-        <h1 style={{ margin: 0, fontSize: "1.6rem" }}>Your claims</h1>
+    <main style={{ maxWidth: "840px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "2rem" }}>
+      <header style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <h1 style={{ margin: 0, fontSize: "1.9rem" }}>Your claims</h1>
         <p style={{ margin: 0, color: "var(--text-muted)" }}>
           Choose your policy to see your active claims, or submit a new one.
         </p>
       </header>
 
-      <form
-        onSubmit={handleLookup}
-        style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}
-      >
+      <form onSubmit={handleLookup} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
         <PolicySelect
           value={policyInput}
           onChange={setPolicyInput}
           id="policy-lookup"
           style={{
             flex: "1 1 240px",
-            padding: "0.6rem 0.85rem",
-            borderRadius: "8px",
+            padding: "0.65rem 0.9rem",
+            borderRadius: "var(--radius-sm)",
             border: "1px solid var(--border)",
             background: "var(--surface)",
             color: "var(--text)",
@@ -90,12 +87,13 @@ function HomePageContent() {
         />
         <button
           type="submit"
+          className="transition"
           style={{
-            padding: "0.6rem 1.1rem",
-            borderRadius: "8px",
+            padding: "0.65rem 1.25rem",
+            borderRadius: "var(--radius-sm)",
             border: "none",
-            background: "var(--accent)",
-            color: "var(--accent-contrast)",
+            background: "var(--primary)",
+            color: "var(--primary-contrast)",
             fontWeight: 600,
             cursor: "pointer",
           }}
@@ -104,8 +102,23 @@ function HomePageContent() {
         </button>
       </form>
 
+      {state === "loaded" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.85rem" }}>
+          <StatCard label="Active claims" value={String(claims.length)} />
+          <StatCard
+            label="Total pending"
+            value={totalPending.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+          />
+          <StatCard
+            label="Needs your attention"
+            value={String(needsAttention)}
+            tone={needsAttention > 0 ? "attention" : undefined}
+          />
+        </div>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
+        <h2 style={{ margin: 0, fontSize: "1.15rem" }}>
           {activePolicy ? `Active claims for ${activePolicy}` : "Active claims"}
         </h2>
         <div style={{ display: "flex", gap: "0.75rem" }}>
@@ -113,9 +126,10 @@ function HomePageContent() {
             <button
               onClick={() => void load(activePolicy)}
               disabled={state === "loading"}
+              className="transition"
               style={{
-                padding: "0.4rem 0.8rem",
-                borderRadius: "8px",
+                padding: "0.45rem 0.85rem",
+                borderRadius: "var(--radius-sm)",
                 border: "1px solid var(--border)",
                 background: "var(--surface)",
                 color: "var(--text)",
@@ -127,12 +141,13 @@ function HomePageContent() {
           )}
           <a
             href={`/claims/new${activePolicy ? `?policyNumber=${encodeURIComponent(activePolicy)}` : ""}`}
+            className="transition"
             style={{
-              padding: "0.4rem 0.9rem",
-              borderRadius: "8px",
+              padding: "0.45rem 1rem",
+              borderRadius: "var(--radius-sm)",
               border: "none",
-              background: "var(--accent)",
-              color: "var(--accent-contrast)",
+              background: "var(--primary)",
+              color: "var(--primary-contrast)",
               fontWeight: 600,
               textDecoration: "none",
               display: "inline-flex",
@@ -147,7 +162,7 @@ function HomePageContent() {
       {state === "idle" && (
         <EmptyState
           title="Look up your claims"
-          body="Enter your policy number above to see your active claims, or submit a new one straight away."
+          body="Choose your policy above to see your active claims, or submit a new one straight away."
         />
       )}
 
@@ -157,9 +172,9 @@ function HomePageContent() {
             <div
               key={i}
               style={{
-                height: "84px",
-                borderRadius: "12px",
-                background: "var(--surface-muted)",
+                height: "96px",
+                borderRadius: "var(--radius-md)",
+                background: "var(--surface-2)",
                 animation: "pulse 1.4s ease-in-out infinite",
               }}
             />
@@ -173,7 +188,7 @@ function HomePageContent() {
           role="alert"
           style={{
             padding: "1rem 1.25rem",
-            borderRadius: "10px",
+            borderRadius: "var(--radius-sm)",
             border: "1px solid var(--danger-border)",
             background: "var(--danger-bg)",
             color: "var(--danger-fg)",
@@ -198,5 +213,36 @@ function HomePageContent() {
         </div>
       )}
     </main>
+  );
+}
+
+function StatCard({ label, value, tone }: { label: string; value: string; tone?: "attention" }) {
+  return (
+    <div
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-md)",
+        background: "var(--surface)",
+        boxShadow: "var(--shadow-card)",
+        padding: "0.9rem 1.1rem",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.25rem",
+      }}
+    >
+      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>
+        {label}
+      </span>
+      <span
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: "1.6rem",
+          fontWeight: 600,
+          color: tone === "attention" && value !== "0" ? "var(--status-attention-fg)" : "var(--text)",
+        }}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
