@@ -28,10 +28,14 @@ export function PolicySelect({
     fetchPolicies()
       .then((data) => {
         if (cancelled) return;
-        setPolicies(data);
+        // Claims are only ever filed against/filtered by active policies —
+        // lapsed/cancelled ones stay manageable on the Policies tab, but
+        // don't clutter this picker.
+        const active = data.filter((p) => p.status === "active");
+        setPolicies(active);
         setState("loaded");
         if (value) {
-          onPolicySelect?.(data.find((p) => p.policyNumber === value));
+          onPolicySelect?.(active.find((p) => p.policyNumber === value));
         }
       })
       .catch(() => {
@@ -73,7 +77,6 @@ export function PolicySelect({
       {policies.map((p) => (
         <option key={p.id} value={p.policyNumber}>
           {p.policyNumber} — {p.policyholderName}
-          {p.status !== "active" ? ` (${p.status})` : ""}
         </option>
       ))}
     </select>

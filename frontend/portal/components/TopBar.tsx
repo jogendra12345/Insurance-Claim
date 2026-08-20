@@ -3,8 +3,8 @@
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { href: "/", label: "Claims", match: (path: string) => path === "/" || path.startsWith("/claims") },
   { href: "/policies", label: "Policies", match: (path: string) => path.startsWith("/policies") },
+  { href: "/", label: "Claims", match: (path: string) => path === "/" || path.startsWith("/claims") },
 ];
 
 export function TopBar() {
