@@ -2,7 +2,9 @@
 
 # generic/object-storage-provisioning
 
-**Status:** Draft
+**Status:** Locked
+
+> Locked 2026-08-20. All three Open Questions resolved with the recommendation stated for each: public-read bucket access, API-startup bucket creation (no extra compose service), and the `minio` npm package. Folded into Design below.
 
 ## Purpose
 
@@ -33,19 +35,21 @@ Mirrors the existing `postgres` service's shape:
 - Volume: a named volume (`miniodata`) for persistence across `docker compose down`/`up`, matching `pgdata`.
 - Healthcheck: MinIO's `/minio/health/live` endpoint via `curl`, mirroring the `pg_isready` healthcheck already on `postgres`.
 
-### Bucket creation
+### Bucket creation — decided: API-startup check
 
-MinIO doesn't auto-create buckets. Two ways to handle this, either is fine — pick one at build time:
-- A short-lived `mc` (MinIO Client) init container in the compose file that runs `mc mb` for the bucket once and exits, using `depends_on` so it only runs after `minio` is healthy.
-- Or, `backend/api` checks-and-creates the bucket on startup (`bucketExists` / `makeBucket` calls) before it starts accepting requests — simpler (no extra compose service), but couples bucket lifecycle to the API process starting at least once.
+`backend/api` checks-and-creates the bucket on startup (`bucketExists` / `makeBucket` calls in `src/index.ts`, before the server starts accepting requests) rather than a separate `mc` init container. No extra compose service to maintain, at the cost of coupling bucket lifecycle to the API process having started at least once — acceptable for a single-developer dev setup.
 
 Bucket name: `claim-documents` (matches what it holds; no need to namespace by environment since this is dev-only).
 
+### Bucket access policy — decided: public-read
+
+The bucket is set public-read at creation (part of the same startup check that creates it, via `setBucketPolicy`). `claim_documents.file_url` is a stable, directly-fetchable URL — the same shape of value the local-disk stand-in already produced (`/uploads/<filename>` → now `http://localhost:9000/claim-documents/<key>`), so nothing downstream of `file_url` needs to change to consume it differently. Matches this app's existing no-auth-anywhere-yet posture (§2); revisit if a later spec introduces real access control.
+
 ### `backend/api` changes
 
-- Add a MinIO client (the official `minio` npm package — MinIO's own SDK, lighter than pulling in the full AWS SDK for one bucket).
+- Add the `minio` npm package (MinIO's own SDK — decided over `@aws-sdk/client-s3`, since `SPEC.md` §14 doesn't plan a move off MinIO to real S3, so there's no reason to carry the AWS SDK's weight for that yet).
 - Replace `multer.diskStorage` with `multer.memoryStorage()` in `claims.ts`, so file buffers are available in-process rather than written to local disk first.
-- In the `POST /api/claims` handler, for each uploaded file: `putObject` into the `claim-documents` bucket with a generated key (same `${Date.now()}-${file.originalname}` pattern already used for local-disk filenames, to avoid collisions), then set `claim_documents.file_url` to the resulting object's accessible URL (see Open Questions — access policy affects what this URL actually is).
+- In the `POST /api/claims` handler, for each uploaded file: `putObject` into the `claim-documents` bucket with a generated key (same `${Date.now()}-${file.originalname}` pattern already used for local-disk filenames, to avoid collisions), then set `claim_documents.file_url` to `http://localhost:9000/claim-documents/<key>`.
 - Remove the `/uploads` static file route in `backend/api/src/index.ts` once nothing writes there anymore.
 
 ### Docs to update
@@ -54,8 +58,3 @@ Bucket name: `claim-documents` (matches what it holds; no need to namespace by e
 - `PREREQUISITES.md`: add MinIO to the tools table (mirroring the Postgres row and its "Running the local app Postgres" usage section — this needs an equivalent "Running local object storage" section with `docker compose up -d` / console URL / login).
 - `backend/api/.env.example`: add whatever `backend/api` itself needs to reach MinIO (endpoint, bucket name, credentials) — same duplication pattern already used for `DATABASE_URL` there.
 
-## Open Questions
-
-1. **Bucket access policy: public-read vs. presigned URLs.** Public-read is the simplest to implement and matches this app's existing "no auth anywhere yet" posture (§2) — `claim_documents.file_url` would be a stable, directly-fetchable URL, same as today's local-disk `/uploads/...` links. Presigned URLs (time-limited, generated per request) are more realistic for how a production S3 setup would actually work, but add real complexity (URLs expire, so `file_url` can't just be stored once — it'd need regenerating on read) for a dev-only bucket holding throwaway data. Recommend public-read for now unless there's a reason to practice the presigned pattern early.
-2. **Bucket creation mechanism** — init container vs. API-startup check (see Design above). Either works; pick whichever fits how deliberate you want the compose file to be about ordering vs. how much you want in `backend/api` code.
-3. **MinIO client library** — the `minio` npm package (native, minimal) vs. `@aws-sdk/client-s3` (heavier, but "the same code would talk to real S3 with different endpoint config" if this app ever grows beyond MinIO). Recommend `minio` for now, since `SPEC.md` §14 doesn't currently list "move off MinIO to real S3" as planned future work — no reason to pay the AWS SDK's weight for that yet.
