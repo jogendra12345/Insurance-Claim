@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, submitClaim } from "@/lib/api";
 import type { ClaimType, NewClaimInput } from "@/lib/types";
+import { PolicySelect } from "./PolicySelect";
 
 const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
   { value: "outpatient", label: "Outpatient" },
@@ -123,12 +124,7 @@ export function ClaimForm() {
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }} noValidate>
       <Field label="Policy number" error={fieldErrors.policyNumber}>
-        <input
-          value={policyNumber}
-          onChange={(e) => setPolicyNumber(e.target.value)}
-          placeholder="e.g. POL-100234"
-          style={inputStyle}
-        />
+        <PolicySelect value={policyNumber} onChange={setPolicyNumber} style={inputStyle} />
       </Field>
 
       <Field label="Claim type">

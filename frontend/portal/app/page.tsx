@@ -6,6 +6,7 @@ import { ApiError, fetchActiveClaimsByPolicy } from "@/lib/api";
 import { ACTIVE_STATUSES, type Claim } from "@/lib/types";
 import { ClaimCard } from "@/components/ClaimCard";
 import { EmptyState } from "@/components/EmptyState";
+import { PolicySelect } from "@/components/PolicySelect";
 
 type LoadState = "idle" | "loading" | "loaded" | "error";
 
@@ -66,7 +67,7 @@ function HomePageContent() {
         </span>
         <h1 style={{ margin: 0, fontSize: "1.6rem" }}>Your claims</h1>
         <p style={{ margin: 0, color: "var(--text-muted)" }}>
-          Enter your policy number to see your active claims, or submit a new one.
+          Choose your policy to see your active claims, or submit a new one.
         </p>
       </header>
 
@@ -74,12 +75,10 @@ function HomePageContent() {
         onSubmit={handleLookup}
         style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}
       >
-        <input
-          type="text"
+        <PolicySelect
           value={policyInput}
-          onChange={(e) => setPolicyInput(e.target.value)}
-          placeholder="Policy number (e.g. POL-100234)"
-          aria-label="Policy number"
+          onChange={setPolicyInput}
+          id="policy-lookup"
           style={{
             flex: "1 1 240px",
             padding: "0.6rem 0.85rem",

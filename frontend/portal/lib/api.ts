@@ -1,8 +1,17 @@
-import type { Claim, NewClaimInput } from "./types";
+import type { Claim, NewClaimInput, Policy } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 export class ApiError extends Error {}
+
+// GET /api/policies — backs the policy-number dropdown.
+export async function fetchPolicies(): Promise<Policy[]> {
+  const res = await fetch(`${API_BASE_URL}/api/policies`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new ApiError(`Couldn't load policies (${res.status}).`);
+  }
+  return res.json();
+}
 
 // backend/api's claims-list-by-policy-number endpoint (spec follow-up dependency,
 // .claude/specs/generic/claimant-portal-ui.md#follow-up-dependencies — not built yet).
