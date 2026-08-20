@@ -1,3 +1,4 @@
+import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import multer from "multer";
 import { pool } from "../db";
@@ -6,13 +7,37 @@ import { BUCKET, minioClient, publicUrl } from "../storage";
 
 export const claimsRouter = Router();
 
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
 // Documents upload to MinIO (generic/object-storage-provisioning.md) — buffers
 // held in memory just long enough to hand off to minioClient.putObject, never
 // written to local disk.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_FILE_SIZE_BYTES },
 });
+
+// multer's errors (e.g. LIMIT_FILE_SIZE) are passed to Express's `next(err)`,
+// not thrown into the route handler's try/catch — without this wrapper they
+// fall through to Express's default error handler, which returns a bare 500
+// with no JSON body the frontend can read a message out of.
+function uploadDocuments(req: Request, res: Response, next: NextFunction) {
+  upload.array("documents")(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res
+          .status(400)
+          .json({ message: `Each file must be ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB or smaller.` });
+      }
+      return res.status(400).json({ message: err.message });
+    }
+    if (err) {
+      console.error("Document upload failed:", err);
+      return res.status(500).json({ message: "Uploading the documents failed." });
+    }
+    next();
+  });
+}
 
 // GET /api/claims — all claims, or /api/claims?policyNumber=... to scope to one
 // policy (Follow-up dependency #1 in .claude/specs/generic/claimant-portal-ui.md).
@@ -50,7 +75,7 @@ claimsRouter.get("/:id", async (req, res) => {
 // POST /api/claims — SPEC.md §5/§7 (BUILD-PLAN.md feature #3). Zeebe process
 // kickoff (BUILD-PLAN.md feature #4) isn't wired up yet — this only writes the
 // claims/claim_documents/audit_log rows for now.
-claimsRouter.post("/", upload.array("documents"), async (req, res) => {
+claimsRouter.post("/", uploadDocuments, async (req, res) => {
   const { policyNumber, claimType, claimantName, claimantEmail, incidentDate, incidentDescription, claimAmount } =
     req.body;
 

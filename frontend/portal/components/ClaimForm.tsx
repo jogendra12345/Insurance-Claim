@@ -17,6 +17,7 @@ const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
 
 const ACCEPTED_DOCUMENT_HINT =
   "Accepted: medical bills, discharge summaries, prescriptions (PDF, JPG, PNG — up to 10MB each)";
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 type FieldErrors = Partial<Record<keyof Omit<NewClaimInput, "documents">, string>>;
 
@@ -268,7 +269,15 @@ export function ClaimForm() {
               multiple
               accept=".pdf,.jpg,.jpeg,.png"
               onChange={(e) => {
-                setDocuments(Array.from(e.target.files ?? []));
+                const selected = Array.from(e.target.files ?? []);
+                const tooLarge = selected.find((f) => f.size > MAX_FILE_SIZE_BYTES);
+                if (tooLarge) {
+                  setDocumentError(`"${tooLarge.name}" is over the 10MB limit — choose a smaller file.`);
+                  setDocuments([]);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                  return;
+                }
+                setDocuments(selected);
                 setDocumentError(null);
               }}
               style={{ ...inputStyle, padding: "0.5rem" }}
