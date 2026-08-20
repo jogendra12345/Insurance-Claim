@@ -126,6 +126,7 @@ export function ClaimForm() {
         <input
           value={policyNumber}
           onChange={(e) => setPolicyNumber(e.target.value)}
+          placeholder="e.g. POL-100234"
           style={inputStyle}
         />
       </Field>
@@ -141,7 +142,12 @@ export function ClaimForm() {
       </Field>
 
       <Field label="Your name" error={fieldErrors.claimantName}>
-        <input value={claimantName} onChange={(e) => setClaimantName(e.target.value)} style={inputStyle} />
+        <input
+          value={claimantName}
+          onChange={(e) => setClaimantName(e.target.value)}
+          placeholder="Jane Doe"
+          style={inputStyle}
+        />
       </Field>
 
       <Field label="Email" error={fieldErrors.claimantEmail}>
@@ -149,6 +155,7 @@ export function ClaimForm() {
           type="email"
           value={claimantEmail}
           onChange={(e) => setClaimantEmail(e.target.value)}
+          placeholder="jane.doe@example.com"
           style={inputStyle}
         />
       </Field>
@@ -168,6 +175,7 @@ export function ClaimForm() {
           value={incidentDescription}
           onChange={(e) => setIncidentDescription(e.target.value)}
           rows={4}
+          placeholder="Briefly describe what happened, when, and where."
           style={{ ...inputStyle, resize: "vertical" }}
         />
       </Field>
@@ -179,6 +187,7 @@ export function ClaimForm() {
           step="0.01"
           value={claimAmount}
           onChange={(e) => setClaimAmount(e.target.value)}
+          placeholder="0.00"
           style={inputStyle}
         />
       </Field>
