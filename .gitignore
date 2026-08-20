@@ -24,5 +24,3 @@ dist/
 *.tsbuildinfo
 frontend/portal/.env.local
 backend/api/.env
-backend/api/uploads/*
-!backend/api/uploads/.gitkeep

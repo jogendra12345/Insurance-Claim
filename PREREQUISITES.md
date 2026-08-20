@@ -17,6 +17,7 @@ Everything needed to run and continue building this project.
 | Camunda 8 Self-Managed | 8.9.16 (orchestration), 8.9.7 (connectors) | The workflow engine — Zeebe + Operate + Tasklist, running locally via Docker Compose (lightweight config, H2 storage) |
 | Camunda Desktop Modeler | 5.50.1 | Draws and deploys BPMN process diagrams and DMN decision tables |
 | PostgreSQL | 16 (Docker, `postgres:16-alpine`) | Claim records database (`claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) — separate from Camunda's own storage, run via the root `docker-compose.yaml` |
+| MinIO | `minio/minio` (Docker) | S3-compatible object storage for uploaded claim documents (`SPEC.md` §6), run via the same root `docker-compose.yaml` — see `.claude/specs/generic/object-storage-provisioning.md` |
 | Git | — | Version control, pushed to [github.com/jogendra12345/Insurance-Claim](https://github.com/jogendra12345/Insurance-Claim) |
 | Node.js / TypeScript | — | Backend API + job worker language (decided, `SPEC.md` §6); `backend/package.json` already scaffolded |
 
@@ -52,6 +53,14 @@ docker compose down       # stop (keeps data)
 ```
 
 Migrations live under `backend/db/migrations/`; apply them with `cd backend && npm run migrate` (see `.claude/specs/db/database-setup.md` and `SPEC.md` §8 for schema and tooling details).
+
+## Running local object storage
+
+MinIO runs from the same root `docker-compose.yaml` as Postgres — `docker compose up -d` starts both. No manual bucket setup needed: `backend/api` creates the `claim-documents` bucket (public-read) itself on startup if it doesn't already exist.
+
+- Console: http://localhost:9001
+- S3 API endpoint: http://localhost:9000
+- Login: whatever `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` are set to in `.env` (defaults in `.env.example`)
 
 ## Still needed (not yet decided/installed)
 

@@ -1,21 +1,16 @@
 import { Router } from "express";
 import multer from "multer";
-import path from "node:path";
 import { pool } from "../db";
 import { serializeClaim } from "../serializers";
+import { BUCKET, minioClient, publicUrl } from "../storage";
 
 export const claimsRouter = Router();
 
-// Documents are saved to local disk for now (served back under /uploads) —
-// SPEC.md §6 specs S3-compatible object storage (local MinIO for dev), which
-// isn't provisioned yet (BUILD-PLAN.md finding #7). Swap this out for a real
-// MinIO upload once that's set up; the claim_documents.file_url column and
-// everything downstream of it doesn't need to change shape to do so.
+// Documents upload to MinIO (generic/object-storage-provisioning.md) — buffers
+// held in memory just long enough to hand off to minioClient.putObject, never
+// written to local disk.
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, _file, cb) => cb(null, path.join(__dirname, "..", "..", "uploads")),
-    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
@@ -105,9 +100,13 @@ claimsRouter.post("/", upload.array("documents"), async (req, res) => {
     const claim = claimResult.rows[0];
 
     for (const file of files) {
+      const objectKey = `${Date.now()}-${file.originalname}`;
+      await minioClient.putObject(BUCKET, objectKey, file.buffer, file.size, {
+        "Content-Type": file.mimetype,
+      });
       await client.query(
         `INSERT INTO claim_documents (claim_id, file_url) VALUES ($1, $2)`,
-        [claim.id, `/uploads/${file.filename}`]
+        [claim.id, publicUrl(objectKey)]
       );
     }
 
