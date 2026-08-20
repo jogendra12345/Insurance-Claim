@@ -18,6 +18,7 @@ Everything needed to run and continue building this project.
 | Camunda Desktop Modeler | 5.50.1 | Draws and deploys BPMN process diagrams and DMN decision tables |
 | PostgreSQL | 16 (Docker, `postgres:16-alpine`) | Claim records database (`claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) — separate from Camunda's own storage, run via the root `docker-compose.yaml` |
 | Git | — | Version control, pushed to [github.com/jogendra12345/Insurance-Claim](https://github.com/jogendra12345/Insurance-Claim) |
+| Node.js / TypeScript | — | Backend API + job worker language (decided, `SPEC.md` §6); `backend/package.json` already scaffolded |
 
 ## Where to get them (if reinstalling)
 
@@ -54,7 +55,6 @@ Migrations live under `backend/db/migrations/`; apply them with `cd backend && n
 
 ## Still needed (not yet decided/installed)
 
-- **Backend language** for the service task workers (validate claim, extract evidence, score risk, etc.) — Java, Node.js, or Python
 - **Claude API key** — for the AI-assisted steps (document extraction, risk scoring, denial letter drafting)
 - **Notification service** credentials — e.g. SendGrid or Twilio, for the customer notification step
 - **Payment gateway** credentials — e.g. Stripe or ACH, for the payout step
