@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ApiError, createPolicy, deletePolicy, fetchPolicies } from "@/lib/api";
 import type { NewPolicyInput, Policy, PolicyStatus } from "@/lib/types";
 import { EmptyState } from "@/components/EmptyState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -35,6 +36,7 @@ export default function PoliciesPage() {
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Policy | null>(null);
 
   function load() {
     setState("loading");
@@ -76,15 +78,18 @@ export default function PoliciesPage() {
     }
   }
 
-  async function handleDelete(policy: Policy) {
-    if (!confirm(`Delete policy ${policy.policyNumber}? This can't be undone.`)) return;
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const policy = pendingDelete;
     setDeletingId(policy.id);
     setDeleteError(null);
     try {
       await deletePolicy(policy.id);
       setPolicies((prev) => prev.filter((p) => p.id !== policy.id));
+      setPendingDelete(null);
     } catch (err) {
       setDeleteError(err instanceof ApiError ? err.message : "Deleting the policy failed.");
+      setPendingDelete(null);
     } finally {
       setDeletingId(null);
     }
@@ -205,10 +210,7 @@ export default function PoliciesPage() {
       )}
 
       {state === "loading" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "0.85rem" }} aria-busy="true">
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={{ height: "108px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", animation: "pulse 1.4s ease-in-out infinite" }} />
-          ))}
+        <div style={{ height: "260px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", animation: "pulse 1.4s ease-in-out infinite" }} aria-busy="true">
           <style>{`@media (prefers-reduced-motion: no-preference) { @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } } }`}</style>
         </div>
       )}
@@ -224,67 +226,129 @@ export default function PoliciesPage() {
       )}
 
       {state === "loaded" && policies.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "0.85rem" }}>
-          {policies.map((policy) => {
-            const tone = STATUS_TONE[policy.status];
-            return (
-              <div
-                key={policy.id}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--surface)",
-                  boxShadow: "var(--shadow-card)",
-                  padding: "1rem 1.25rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.5rem",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
-                  <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{policy.policyNumber}</span>
-                  <span
-                    style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 600,
-                      padding: "0.15em 0.6em",
-                      borderRadius: "999px",
-                      background: tone.bg,
-                      color: tone.fg,
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {policy.status}
-                  </span>
-                </div>
-                <span style={{ fontSize: "0.88rem", color: "var(--text-muted)" }}>{policy.policyholderName}</span>
-                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                  {new Date(policy.effectiveDate).toLocaleDateString()} – {new Date(policy.expiryDate).toLocaleDateString()}
-                </span>
-                <button
-                  onClick={() => handleDelete(policy)}
-                  disabled={deletingId === policy.id}
-                  className="transition"
-                  style={{
-                    alignSelf: "flex-start",
-                    marginTop: "0.25rem",
-                    border: "none",
-                    background: "none",
-                    color: "var(--danger-fg)",
-                    fontSize: "0.82rem",
-                    fontWeight: 600,
-                    cursor: deletingId === policy.id ? "default" : "pointer",
-                    padding: 0,
-                  }}
-                >
-                  {deletingId === policy.id ? "Deleting…" : "Delete"}
-                </button>
-              </div>
-            );
-          })}
+        <div
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+            boxShadow: "var(--shadow-card)",
+            overflowX: "auto",
+          }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <Th>Policy number</Th>
+                <Th>Policyholder</Th>
+                <Th>Status</Th>
+                <Th>Effective</Th>
+                <Th>Expiry</Th>
+                <Th align="right">
+                  <span style={{ visibility: "hidden" }}>Delete</span>
+                </Th>
+              </tr>
+            </thead>
+            <tbody>
+              {policies.map((policy) => {
+                const tone = STATUS_TONE[policy.status];
+                return (
+                  <tr key={policy.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <Td>
+                      <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{policy.policyNumber}</span>
+                    </Td>
+                    <Td>{policy.policyholderName}</Td>
+                    <Td>
+                      <span
+                        style={{
+                          fontSize: "0.72rem",
+                          fontWeight: 600,
+                          padding: "0.15em 0.6em",
+                          borderRadius: "999px",
+                          background: tone.bg,
+                          color: tone.fg,
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {policy.status}
+                      </span>
+                    </Td>
+                    <Td muted>{new Date(policy.effectiveDate).toLocaleDateString()}</Td>
+                    <Td muted>{new Date(policy.expiryDate).toLocaleDateString()}</Td>
+                    <Td align="right">
+                      <button
+                        onClick={() => setPendingDelete(policy)}
+                        disabled={deletingId === policy.id}
+                        aria-label={`Delete policy ${policy.policyNumber}`}
+                        className="transition"
+                        style={{
+                          border: "none",
+                          background: "var(--surface-2)",
+                          color: "var(--text-muted)",
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "50%",
+                          cursor: deletingId === policy.id ? "default" : "pointer",
+                          fontSize: "0.9rem",
+                          lineHeight: 1,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete this policy?"
+        body={
+          pendingDelete
+            ? `${pendingDelete.policyNumber} (${pendingDelete.policyholderName}) will be permanently deleted. This can't be undone. If any claim still references it, the delete will be blocked.`
+            : ""
+        }
+        confirmLabel="Delete policy"
+        busy={deletingId === pendingDelete?.id}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </main>
+  );
+}
+
+function Th({ children, align }: { children: React.ReactNode; align?: "right" }) {
+  return (
+    <th
+      style={{
+        textAlign: align ?? "left",
+        padding: "0.75rem 1rem",
+        fontSize: "0.75rem",
+        fontWeight: 600,
+        color: "var(--text-muted)",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, align, muted }: { children: React.ReactNode; align?: "right"; muted?: boolean }) {
+  return (
+    <td
+      style={{
+        textAlign: align ?? "left",
+        padding: "0.75rem 1rem",
+        color: muted ? "var(--text-muted)" : "var(--text)",
+      }}
+    >
+      {children}
+    </td>
   );
 }
 

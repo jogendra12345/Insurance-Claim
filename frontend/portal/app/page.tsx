@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, fetchActiveClaimsByPolicy, fetchAllClaims } from "@/lib/api";
 import { ACTIVE_STATUSES, type Claim } from "@/lib/types";
-import { ClaimCard } from "@/components/ClaimCard";
+import { ClaimTable } from "@/components/ClaimTable";
 import { EmptyState } from "@/components/EmptyState";
 import { PolicySelect } from "@/components/PolicySelect";
 
@@ -120,10 +120,7 @@ export default function HomePage() {
       </div>
 
       {state === "loading" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "0.85rem" }} aria-busy="true">
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={{ height: "128px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", animation: "pulse 1.4s ease-in-out infinite" }} />
-          ))}
+        <div style={{ height: "260px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", animation: "pulse 1.4s ease-in-out infinite" }} aria-busy="true">
           <style>{`@media (prefers-reduced-motion: no-preference) { @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } } }`}</style>
         </div>
       )}
@@ -138,13 +135,7 @@ export default function HomePage() {
         <EmptyState title="No claims yet" body="Nothing's been submitted yet — submit a claim to see it here." />
       )}
 
-      {state === "loaded" && claims.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "0.85rem" }}>
-          {claims.map((claim) => (
-            <ClaimCard key={claim.id} claim={claim} />
-          ))}
-        </div>
-      )}
+      {state === "loaded" && claims.length > 0 && <ClaimTable claims={claims} />}
     </main>
   );
 }
