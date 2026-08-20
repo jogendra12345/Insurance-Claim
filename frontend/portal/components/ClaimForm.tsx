@@ -36,6 +36,18 @@ export function ClaimForm() {
   const [claimAmount, setClaimAmount] = useState("");
   const [documents, setDocuments] = useState<File[]>([]);
 
+  function removeDocument(index: number) {
+    const next = documents.filter((_, i) => i !== index);
+    setDocuments(next);
+    // Keep the native input's FileList in sync so a later selection doesn't
+    // resurrect a file the user just removed.
+    if (fileInputRef.current) {
+      const dataTransfer = new DataTransfer();
+      next.forEach((file) => dataTransfer.items.add(file));
+      fileInputRef.current.files = dataTransfer.files;
+    }
+  }
+
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -203,9 +215,40 @@ export function ClaimForm() {
           style={{ ...inputStyle, padding: "0.5rem" }}
         />
         {documents.length > 0 && (
-          <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-            {documents.map((f) => (
-              <li key={f.name}>{f.name}</li>
+          <ul style={{ margin: "0.5rem 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+            {documents.map((f, i) => (
+              <li
+                key={`${f.name}-${f.lastModified}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.75rem",
+                  padding: "0.35rem 0.6rem",
+                  borderRadius: "6px",
+                  background: "var(--surface-muted)",
+                  fontSize: "0.85rem",
+                }}
+              >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeDocument(i)}
+                  aria-label={`Remove ${f.name}`}
+                  style={{
+                    flexShrink: 0,
+                    border: "none",
+                    background: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: "1rem",
+                    lineHeight: 1,
+                    padding: "0.1rem 0.3rem",
+                  }}
+                >
+                  ✕
+                </button>
+              </li>
             ))}
           </ul>
         )}
