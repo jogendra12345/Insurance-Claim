@@ -127,11 +127,24 @@ Reviewers (browser) — Camunda Tasklist at localhost:8080/tasklist
 ## 9. Data model (Postgres)
 
 ```
+policies
+  id                uuid PK
+  policy_number     text NOT NULL UNIQUE
+  carrier_id        uuid NOT NULL        -- the insurer that issued this policy
+  insurance_type    text NOT NULL DEFAULT 'health'
+  policyholder_name text NOT NULL
+  status            text NOT NULL        -- active | lapsed | cancelled
+  effective_date    date NOT NULL
+  expiry_date       date NOT NULL
+  created_at        timestamptz NOT NULL DEFAULT now()
+  updated_at        timestamptz NOT NULL DEFAULT now()
+
 claims
   id                    uuid PK
   carrier_id            uuid NOT NULL        -- the insurer this claim belongs to (MGA/TPA multi-carrier support)
   insurance_type        text NOT NULL DEFAULT 'health'  -- health today; vehicle/property/travel later (§3)
-  policy_number         text NOT NULL
+  policy_number         text NOT NULL        -- as submitted by the claimant/API; not guaranteed to match a policies row
+  policy_id             uuid NULL FK → policies.id  -- set once validate-claim resolves a real policy match
   claim_type            text NOT NULL        -- sub-category within insurance_type
                                               --   health: outpatient | inpatient | pharmacy | dental | maternity | other
   claimant_name         text NOT NULL
@@ -188,7 +201,7 @@ Raw SQL migration files, no ORM. Applied via `backend/db/run-migrations.sh` (psq
 Started by the backend API when a claim is submitted, with initial variables `claimId`, `carrierId`, `insuranceType`, `policyNumber`, `claimType`, `claimAmount`. The process itself is insurance-type-agnostic (§3) — only the workers and the DMN table it calls vary by `insuranceType`.
 
 1. **Start Event** — Claim Submitted
-2. **Service Task** `validate-claim` — required fields + policy status, using the config for this claim's `insuranceType` (policy lookup mocked in v1)
+2. **Service Task** `validate-claim` — required fields + policy status, using the config for this claim's `insuranceType`; looks up `policies` by `policyNumber` and `carrierId`, sets `claims.policy_id` on match
 3. **Exclusive Gateway** `Validation Passed?`
    - No → **User Task** `Validation Exception Review` (candidate group `triage-team`) — resolves data issues or rejects the claim
    - Yes (default) → step 4
@@ -237,7 +250,7 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 
 | Job type | Input variables | Does | Output variables |
 |---|---|---|---|
-| `validate-claim` | `insuranceType`, `policyNumber`, `claimAmount`, `incidentDate` | Required-field + policy-status check, using the insurance-type config (§3) for which fields are required; policy lookup **mocked**, always active | `validationPassed` (bool) |
+| `validate-claim` | `insuranceType`, `carrierId`, `policyNumber`, `claimAmount`, `incidentDate` | Required-field check using the insurance-type config (§3) for which fields are required; looks up `policies` by `policyNumber` + `carrierId` and checks `status = 'active'` and `incidentDate` within `[effective_date, expiry_date]`; sets `claims.policy_id` on a match | `validationPassed` (bool), `policyId` (uuid, nullable) |
 | `extract-evidence` | `claimId`, `insuranceType` | Loads `claim_documents`, calls Claude (using the type's prompt template) to extract structured data per document and produce a reviewer-facing case summary; writes `case_summary` and `extracted_data` | `caseSummary` (string) |
 | `detect-fraud-indicators` | `claimId`, `insuranceType`, `caseSummary` | Calls Claude to flag specific fraud indicators against evidence + claimant history; writes `claim_fraud_indicators` rows | `fraudIndicatorCount` (number) |
 | `score-risk` | `claimId`, `claimAmount`, `fraudIndicatorCount`, `caseSummary` | Calls Claude to produce a single 0–100 risk score with reasoning | `riskScore` (number) |
