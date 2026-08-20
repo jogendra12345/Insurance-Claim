@@ -17,11 +17,25 @@ const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
 
 type LoadState = "loading" | "loaded" | "error";
 
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"];
+
+function fileNameFromUrl(url: string): string {
+  const decoded = decodeURIComponent(url.split("/").pop() ?? url);
+  // Uploaded object keys are prefixed "<timestamp>-<originalname>" — strip that for display.
+  return decoded.replace(/^\d+-/, "");
+}
+
+function isImage(url: string): boolean {
+  const lower = url.toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
 export default function ClaimDetailPage() {
   const params = useParams<{ id: string }>();
   const [claim, setClaim] = useState<Claim | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [documentsVisible, setDocumentsVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,9 +130,123 @@ export default function ClaimDetailPage() {
               {claim.caseSummary ?? "Not yet available — an automated review is still in progress."}
             </p>
           </div>
+
+          <div
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              background: "var(--surface)",
+              boxShadow: "var(--shadow-card)",
+              padding: "1.25rem 1.5rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.75rem",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                Documents ({claim.documents?.length ?? 0})
+              </span>
+              {claim.documents && claim.documents.length > 0 && (
+                <button
+                  onClick={() => setDocumentsVisible((v) => !v)}
+                  aria-label={documentsVisible ? "Hide documents" : "Show documents"}
+                  aria-pressed={documentsVisible}
+                  className="transition"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    border: "1px solid var(--border)",
+                    background: documentsVisible ? "var(--primary-soft)" : "var(--surface)",
+                    color: documentsVisible ? "var(--primary)" : "var(--text-muted)",
+                    borderRadius: "999px",
+                    padding: "0.3rem 0.75rem",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  <EyeIcon open={documentsVisible} />
+                  {documentsVisible ? "Hide" : "View"}
+                </button>
+              )}
+            </div>
+
+            {(!claim.documents || claim.documents.length === 0) && (
+              <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-muted)" }}>No documents attached.</p>
+            )}
+
+            {documentsVisible && claim.documents && claim.documents.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {claim.documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "0.75rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <a
+                      href={doc.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: "0.85rem", fontWeight: 600, wordBreak: "break-all" }}
+                    >
+                      {fileNameFromUrl(doc.fileUrl)}
+                    </a>
+                    {isImage(doc.fileUrl) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={doc.fileUrl}
+                        alt={fileNameFromUrl(doc.fileUrl)}
+                        style={{ maxWidth: "100%", maxHeight: "320px", borderRadius: "var(--radius-sm)", objectFit: "contain" }}
+                      />
+                    ) : (
+                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                        Preview not available for this file type — open the link above.
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </main>
+  );
+}
+
+function EyeIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {open ? (
+        <>
+          <path
+            d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+        </>
+      ) : (
+        <>
+          <path
+            d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.24 4.24M6.6 6.7C4 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.7-1.2M9.5 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-2.2 3.1"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+    </svg>
   );
 }
 

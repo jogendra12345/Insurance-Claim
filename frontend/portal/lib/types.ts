@@ -39,6 +39,16 @@ export interface Claim {
   processInstanceKey: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Only present on the GET /api/claims/:id (detail) response. */
+  documents?: ClaimDocument[];
+}
+
+export interface ClaimDocument {
+  id: string;
+  claimId: string;
+  fileUrl: string;
+  documentType: string | null;
+  createdAt: string;
 }
 
 export const ACTIVE_STATUSES: ClaimStatus[] = [

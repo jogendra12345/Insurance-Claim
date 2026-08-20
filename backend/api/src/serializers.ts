@@ -26,3 +26,14 @@ export function serializeClaim(row: any) {
     updatedAt: row.updated_at,
   };
 }
+
+// Maps a `claim_documents` row (SPEC.md §9) to camelCase.
+export function serializeClaimDocument(row: any) {
+  return {
+    id: row.id,
+    claimId: row.claim_id,
+    fileUrl: row.file_url,
+    documentType: row.document_type,
+    createdAt: row.created_at,
+  };
+}

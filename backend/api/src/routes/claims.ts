@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import multer from "multer";
 import { pool } from "../db";
-import { serializeClaim } from "../serializers";
+import { serializeClaim, serializeClaimDocument } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
 
 export const claimsRouter = Router();
@@ -58,14 +58,22 @@ claimsRouter.get("/", async (req, res) => {
   }
 });
 
-// GET /api/claims/:id — SPEC.md §7's single-claim status endpoint.
+// GET /api/claims/:id — SPEC.md §7's single-claim status endpoint. Includes
+// this claim's documents so the claim detail page can offer a view toggle.
 claimsRouter.get("/:id", async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM claims WHERE id = $1`, [req.params.id]);
-    if (result.rowCount === 0) {
+    const claimResult = await pool.query(`SELECT * FROM claims WHERE id = $1`, [req.params.id]);
+    if (claimResult.rowCount === 0) {
       return res.status(404).json({ message: "Claim not found." });
     }
-    res.json(serializeClaim(result.rows[0]));
+    const documentsResult = await pool.query(
+      `SELECT * FROM claim_documents WHERE claim_id = $1 ORDER BY created_at`,
+      [req.params.id]
+    );
+    res.json({
+      ...serializeClaim(claimResult.rows[0]),
+      documents: documentsResult.rows.map(serializeClaimDocument),
+    });
   } catch (err) {
     console.error("GET /api/claims/:id failed:", err);
     res.status(500).json({ message: "Couldn't load that claim." });
