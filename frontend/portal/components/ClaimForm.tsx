@@ -40,6 +40,7 @@ export function ClaimForm() {
   const [documents, setDocuments] = useState<File[]>([]);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
@@ -74,7 +75,18 @@ export function ClaimForm() {
     return errors;
   }
 
+  function validateDocuments(): string | null {
+    return documents.length === 0 ? "Attach at least one supporting document to continue." : null;
+  }
+
   function goNext() {
+    if (step === 2) {
+      const docError = validateDocuments();
+      setDocumentError(docError);
+      if (docError) return;
+      setStep((s) => Math.min(s + 1, STEPS.length - 1));
+      return;
+    }
     const errors = validateStep(step);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -90,10 +102,12 @@ export function ClaimForm() {
     e.preventDefault();
     const stepZeroErrors = validateStep(0);
     const stepOneErrors = validateStep(1);
+    const docError = validateDocuments();
     const errors = { ...stepZeroErrors, ...stepOneErrors };
-    if (Object.keys(errors).length > 0) {
+    if (Object.keys(errors).length > 0 || docError) {
       setFieldErrors(errors);
-      setStep(Object.keys(stepZeroErrors).length > 0 ? 0 : 1);
+      setDocumentError(docError);
+      setStep(Object.keys(stepZeroErrors).length > 0 ? 0 : Object.keys(stepOneErrors).length > 0 ? 1 : 2);
       return;
     }
 
@@ -247,13 +261,16 @@ export function ClaimForm() {
         )}
 
         {step === 2 && (
-          <Field label="Documents" hint={ACCEPTED_DOCUMENT_HINT}>
+          <Field label="Documents (at least one required)" hint={ACCEPTED_DOCUMENT_HINT} error={documentError ?? undefined}>
             <input
               ref={fileInputRef}
               type="file"
               multiple
               accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(e) => setDocuments(Array.from(e.target.files ?? []))}
+              onChange={(e) => {
+                setDocuments(Array.from(e.target.files ?? []));
+                setDocumentError(null);
+              }}
               style={{ ...inputStyle, padding: "0.5rem" }}
             />
             {documents.length > 0 && (

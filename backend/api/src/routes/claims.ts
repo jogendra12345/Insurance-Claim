@@ -63,6 +63,11 @@ claimsRouter.post("/", upload.array("documents"), async (req, res) => {
     return res.status(400).json({ message: "Missing required claim fields." });
   }
 
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  if (files.length === 0) {
+    return res.status(400).json({ message: "At least one supporting document is required." });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -99,7 +104,6 @@ claimsRouter.post("/", upload.array("documents"), async (req, res) => {
     );
     const claim = claimResult.rows[0];
 
-    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     for (const file of files) {
       await client.query(
         `INSERT INTO claim_documents (claim_id, file_url) VALUES ($1, $2)`,
