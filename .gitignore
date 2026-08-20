@@ -16,3 +16,8 @@ camunda-docker/connector-secrets.txt
 # OS/editor cruft
 .DS_Store
 Thumbs.db
+
+# Node dependencies / build output
+node_modules/
+.next/
+frontend/portal/.env.local
