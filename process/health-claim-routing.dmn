@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:camunda="http://camunda.org/schema/1.0/dmn" id="Definitions_health_claim_routing" name="health-claim-routing" namespace="http://camunda.org/schema/1.0/dmn" exporter="ClaimFlow AI" exporterVersion="1.0">
+  <decision id="health-claim-routing-decision" name="Health Claim Routing Decision">
+    <extensionElements>
+      <biodi:bounds xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" x="160" y="90" width="180" height="80" />
+    </extensionElements>
+    <decisionTable id="DecisionTable_health_claim_routing" hitPolicy="FIRST">
+      <input id="Input_fraudIndicatorCount" label="Fraud Indicators">
+        <inputExpression id="InputExpression_fraudIndicatorCount" typeRef="number">
+          <text>fraudIndicatorCount</text>
+        </inputExpression>
+      </input>
+      <input id="Input_riskScore" label="Risk Score">
+        <inputExpression id="InputExpression_riskScore" typeRef="number">
+          <text>riskScore</text>
+        </inputExpression>
+      </input>
+      <input id="Input_claimAmount" label="Claim Amount">
+        <inputExpression id="InputExpression_claimAmount" typeRef="number">
+          <text>claimAmount</text>
+        </inputExpression>
+      </input>
+      <input id="Input_claimType" label="Claim Type">
+        <inputExpression id="InputExpression_claimType" typeRef="string">
+          <text>claimType</text>
+        </inputExpression>
+      </input>
+      <output id="Output_assignedRole" label="Assigned Role" name="assignedRole" typeRef="string" />
+      <rule id="Rule_investigator">
+        <inputEntry id="InputEntry_investigator_fraud">
+          <text>&gt;= 1</text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigator_risk">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigator_amount">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigator_type">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_investigator">
+          <text>"investigator"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_legal">
+        <inputEntry id="InputEntry_legal_fraud">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_legal_risk">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_legal_amount">
+          <text>&gt; 50000</text>
+        </inputEntry>
+        <inputEntry id="InputEntry_legal_type">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_legal">
+          <text>"legal"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_adjuster_risk">
+        <inputEntry id="InputEntry_adjusterRisk_fraud">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterRisk_risk">
+          <text>&gt;= 40</text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterRisk_amount">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterRisk_type">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_adjusterRisk">
+          <text>"adjuster"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_adjuster_amount">
+        <inputEntry id="InputEntry_adjusterAmount_fraud">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterAmount_risk">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterAmount_amount">
+          <text>&gt; 5000</text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterAmount_type">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_adjusterAmount">
+          <text>"adjuster"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_auto">
+        <inputEntry id="InputEntry_auto_fraud">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_auto_risk">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_auto_amount">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_auto_type">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_auto">
+          <text>"auto"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_health_claim_routing">
+      <dmndi:DMNShape id="DMNShape_health_claim_routing_decision" dmnElementRef="health-claim-routing-decision">
+        <dc:Bounds x="160" y="90" width="180" height="80" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

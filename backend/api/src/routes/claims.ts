@@ -4,6 +4,7 @@ import multer from "multer";
 import { pool } from "../db";
 import { serializeClaim, serializeClaimDocument } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
+import { CLAIM_CASE_PROCESS_ID, zeebeClient } from "../zeebe";
 
 export const claimsRouter = Router();
 
@@ -80,9 +81,9 @@ claimsRouter.get("/:id", async (req, res) => {
   }
 });
 
-// POST /api/claims — SPEC.md §5/§7 (BUILD-PLAN.md feature #3). Zeebe process
-// kickoff (BUILD-PLAN.md feature #4) isn't wired up yet — this only writes the
-// claims/claim_documents/audit_log rows for now.
+// POST /api/claims — SPEC.md §5/§7 (BUILD-PLAN.md feature #3), plus Zeebe
+// process kickoff (BUILD-PLAN.md feature #4 —
+// .claude/specs/generic/process-orchestration-kickoff.md).
 claimsRouter.post("/", uploadDocuments, async (req, res) => {
   const { policyNumber, claimType, claimantName, claimantEmail, incidentDate, incidentDescription, claimAmount } =
     req.body;
@@ -151,6 +152,41 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    // Process kickoff happens after commit, outside the DB transaction: the
+    // claim/document rows are the durable record of submission regardless of
+    // whether Zeebe is reachable. A failure here leaves a claim with a NULL
+    // process_instance_key — a visible, queryable gap (WHERE
+    // process_instance_key IS NULL), not a silent one; see "Failure handling"
+    // in .claude/specs/generic/process-orchestration-kickoff.md.
+    try {
+      const { processInstanceKey } = await zeebeClient.createProcessInstance({
+        bpmnProcessId: CLAIM_CASE_PROCESS_ID,
+        variables: {
+          claimId: claim.id,
+          carrierId: claim.carrier_id,
+          insuranceType: claim.insurance_type,
+          policyNumber: claim.policy_number,
+          claimType: claim.claim_type,
+          claimAmount: claim.claim_amount,
+        },
+      });
+
+      await pool.query(`UPDATE claims SET process_instance_key = $1 WHERE id = $2`, [
+        processInstanceKey,
+        claim.id,
+      ]);
+      claim.process_instance_key = processInstanceKey;
+
+      await pool.query(
+        `INSERT INTO audit_log (claim_id, actor_type, actor_id, action, detail)
+         VALUES ($1, 'system', 'backend/api', 'process-started', $2)`,
+        [claim.id, JSON.stringify({ processInstanceKey })]
+      );
+    } catch (zeebeErr) {
+      console.error(`Starting the process instance for claim ${claim.id} failed:`, zeebeErr);
+    }
+
     res.status(201).json(serializeClaim(claim));
   } catch (err) {
     await client.query("ROLLBACK");
