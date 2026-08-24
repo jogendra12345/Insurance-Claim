@@ -1,6 +1,11 @@
 # generic/fnol_form_ui_update
 
-**Status:** Draft
+**Status:** Locked
+
+> Locked 2026-08-24. Open Questions resolved:
+> 1. **One new step vs. two:** keep the single "Diagnosis, Procedure & Provider" step, as designed — shorter wizard over lighter-per-step.
+> 2. **NPI formatting mask:** no visual chunking — plain 10-digit string input, no separators.
+> 3. **`GET /api/claims/:id` response shape:** the joined `providers` row comes back nested as `provider: { npi, taxId, facilityName, facilityAddress } | null` on the claim object — same shape family as the existing `documents` array on the detail response, not flattened `provider*` keys.
 
 Companion to `.claude/specs/db/fnol_extended_fields.md` — that spec adds the new `providers` table and new `claims` columns this one collects from the claimant. Field names below are chosen to match that spec's column names exactly (camelCased, same convention `NewClaimInput` already uses for `claimAmount` → `claim_amount`, etc.) so the request body `ClaimForm` sends lines up one-to-one with what `POST /api/claims` will insert. If the db spec's column names change before lock, this spec's field names must change with them.
 

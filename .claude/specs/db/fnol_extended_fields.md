@@ -1,6 +1,11 @@
 # DB: fnol_extended_fields
 
-**Status:** Draft
+**Status:** Locked
+
+> Locked 2026-08-24. Open Questions resolved:
+> 1. **`claim_amount` vs. `total_billed_amount`:** `claim_amount` stays authoritative for everything already wired to it (BPMN kickoff, `validate-claim`'s coverage check, `score-risk`, `trigger-settlement`, the DMN legal threshold). `total_billed_amount` is stored as informational context only in this pass — **not** added to any worker's input variables. Wiring it into `score-risk`/`detect-fraud-indicators` as a fraud/anomaly signal is explicitly deferred to a future `worker`-type spec, not done here.
+> 2. **Find-or-create-by-NPI collision:** on a match, **reuse the existing `providers` row as-is** — a newly submitted `facility_name`/`facility_address`/`tax_id` for an NPI already on file is discarded, not written. Chosen over overwrite-on-conflict because letting one claimant's typed data silently rewrite another claimant's already-established provider record is the riskier default; reject-on-mismatch was also considered but adds a failure mode with no clear recovery path for the claimant. `providers.updated_at` therefore never changes after insert in this pass — revisit if a real provider-data-correction workflow is needed later.
+> 3. **`service_date_to`:** resolved by the companion UI spec — shown/required only for `inpatient`/`maternity` claim types; the app sets it equal to `service_date_from` otherwise, so it's effectively never NULL in practice.
 
 Extends FNOL (First Notice of Loss / claim intake) capture with the standard health-claim fields currently missing from `claims`: diagnosis code (ICD-10), procedure code (CPT/HCPCS), provider NPI, provider tax ID, facility name/address, date(s) of service, total billed amount, coordination-of-benefits flag, and claimant attestation timestamp. Companion spec `.claude/specs/generic/fnol_form_ui_update.md` covers the matching `ClaimForm` changes — field names must match exactly between the two.
 
