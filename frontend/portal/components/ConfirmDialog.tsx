@@ -44,6 +44,7 @@ export function ConfirmDialog({
     <div
       role="presentation"
       onClick={onCancel}
+      className="animate-fade-in"
       style={{
         position: "fixed",
         inset: 0,
@@ -60,13 +61,14 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         onClick={(e) => e.stopPropagation()}
+        className="animate-scale-in"
         style={{
           width: "100%",
           maxWidth: "380px",
           background: "var(--surface)",
           border: "1px solid var(--border)",
           borderRadius: "var(--radius-lg)",
-          boxShadow: "0 12px 40px rgba(20, 18, 14, 0.25)",
+          boxShadow: "var(--shadow-modal)",
           padding: "1.5rem",
           display: "flex",
           flexDirection: "column",
@@ -80,7 +82,7 @@ export function ConfirmDialog({
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", marginTop: "0.5rem" }}>
           <button
             onClick={onCancel}
-            className="transition"
+            className="transition btn-press"
             style={{
               padding: "0.55rem 1rem",
               borderRadius: "var(--radius-sm)",
@@ -97,7 +99,7 @@ export function ConfirmDialog({
             ref={confirmRef}
             onClick={onConfirm}
             disabled={busy}
-            className="transition"
+            className="transition btn-press"
             style={{
               padding: "0.55rem 1rem",
               borderRadius: "var(--radius-sm)",

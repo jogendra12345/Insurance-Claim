@@ -118,22 +118,26 @@ export default function PoliciesPage() {
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "1rem", flexWrap: "wrap" }}>
+      <header
+        className="animate-fade-in-up"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "1rem", flexWrap: "wrap" }}
+      >
         <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
           <h1 style={{ margin: 0, fontSize: "1.9rem" }}>Policies</h1>
           <p style={{ margin: 0, color: "var(--text-muted)" }}>{policies.length} on file.</p>
         </div>
         <button
           onClick={() => setShowAddForm((v) => !v)}
-          className="transition"
+          className="transition btn-press"
           style={{
             padding: "0.55rem 1.1rem",
             borderRadius: "var(--radius-sm)",
             border: "none",
-            background: "var(--primary)",
+            background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
             color: "var(--primary-contrast)",
             fontWeight: 600,
             cursor: "pointer",
+            boxShadow: "0 2px 10px var(--primary-glow)",
           }}
         >
           {showAddForm ? "Close" : "+ Add policy"}
@@ -143,6 +147,7 @@ export default function PoliciesPage() {
       {showAddForm && (
         <form
           onSubmit={handleAddPolicy}
+          className="animate-scale-in"
           style={{
             border: "1px solid var(--border)",
             borderRadius: "var(--radius-md)",
@@ -223,7 +228,7 @@ export default function PoliciesPage() {
           <button
             type="submit"
             disabled={saving}
-            className="transition"
+            className="transition btn-press"
             style={{
               padding: "0.65rem 1.1rem",
               borderRadius: "var(--radius-sm)",
@@ -247,19 +252,15 @@ export default function PoliciesPage() {
       )}
 
       {deleteError && (
-        <div role="alert" style={{ padding: "0.85rem 1rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}>
+        <div role="alert" className="animate-fade-in-up" style={{ padding: "0.85rem 1rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}>
           {deleteError}
         </div>
       )}
 
-      {state === "loading" && (
-        <div style={{ height: "260px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", animation: "pulse 1.4s ease-in-out infinite" }} aria-busy="true">
-          <style>{`@media (prefers-reduced-motion: no-preference) { @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } } }`}</style>
-        </div>
-      )}
+      {state === "loading" && <div className="skeleton" style={{ height: "260px" }} aria-busy="true" />}
 
       {state === "error" && (
-        <div role="alert" style={{ padding: "1rem 1.25rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}>
+        <div role="alert" className="animate-fade-in-up" style={{ padding: "1rem 1.25rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}>
           {error}
         </div>
       )}
@@ -270,6 +271,7 @@ export default function PoliciesPage() {
 
       {state === "loaded" && policies.length > 0 && (
         <div
+          className="animate-fade-in-up"
           style={{
             border: "1px solid var(--border)",
             borderRadius: "var(--radius-md)",
@@ -293,11 +295,11 @@ export default function PoliciesPage() {
                 </Th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="stagger-list">
               {policies.map((policy) => {
                 const tone = STATUS_TONE[policy.status];
                 return (
-                  <tr key={policy.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <tr key={policy.id} className="row-hover transition" style={{ borderBottom: "1px solid var(--border)" }}>
                     <Td>
                       <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{policy.policyNumber}</span>
                     </Td>
@@ -326,7 +328,7 @@ export default function PoliciesPage() {
                         onClick={() => setPendingDelete(policy)}
                         disabled={deletingId === policy.id}
                         aria-label={`Delete policy ${policy.policyNumber}`}
-                        className="transition"
+                        className="transition btn-press"
                         style={{
                           border: "none",
                           background: "var(--surface-2)",

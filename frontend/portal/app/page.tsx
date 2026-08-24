@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, fetchActiveClaimsByPolicy, fetchAllClaims } from "@/lib/api";
 import { ACTIVE_STATUSES, type Claim } from "@/lib/types";
 import { ClaimTable } from "@/components/ClaimTable";
@@ -40,36 +40,50 @@ export default function HomePage() {
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "2rem" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "1rem", flexWrap: "wrap" }}>
+      <header
+        className="animate-fade-in-up"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "1rem", flexWrap: "wrap" }}
+      >
         <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
           <h1 style={{ margin: 0, fontSize: "1.9rem" }}>Claims</h1>
           <p style={{ margin: 0, color: "var(--text-muted)" }}>Every claim submitted through the portal.</p>
         </div>
         <a
           href="/claims/new"
-          className="transition"
+          className="transition btn-press"
           style={{
             padding: "0.55rem 1.1rem",
             borderRadius: "var(--radius-sm)",
             border: "none",
-            background: "var(--primary)",
+            background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
             color: "var(--primary-contrast)",
             fontWeight: 600,
             textDecoration: "none",
+            boxShadow: "0 2px 10px var(--primary-glow)",
           }}
         >
           Submit a Claim
         </a>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.85rem" }}>
-        <StatCard label="Total claims" value={String(totalClaims)} />
-        <StatCard label="Active claims" value={String(activeClaims)} />
+      <div
+        className="stagger-list"
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.85rem" }}
+      >
+        <StatCard label="Total claims" value={totalClaims} icon="📄" />
+        <StatCard label="Active claims" value={activeClaims} icon="⏳" />
         <StatCard
           label="Total claimed value"
-          value={totalValue.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+          value={totalValue}
+          format={(n) => n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+          icon="💰"
         />
-        <StatCard label="Needs attention" value={String(needsAttention)} tone={needsAttention > 0 ? "attention" : undefined} />
+        <StatCard
+          label="Needs attention"
+          value={needsAttention}
+          icon="⚠"
+          tone={needsAttention > 0 ? "attention" : undefined}
+        />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
@@ -105,7 +119,7 @@ export default function HomePage() {
         <button
           onClick={() => void load(policyFilter)}
           disabled={state === "loading"}
-          className="transition"
+          className="transition btn-press"
           style={{
             padding: "0.45rem 0.85rem",
             borderRadius: "var(--radius-sm)",
@@ -119,14 +133,14 @@ export default function HomePage() {
         </button>
       </div>
 
-      {state === "loading" && (
-        <div style={{ height: "260px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", animation: "pulse 1.4s ease-in-out infinite" }} aria-busy="true">
-          <style>{`@media (prefers-reduced-motion: no-preference) { @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } } }`}</style>
-        </div>
-      )}
+      {state === "loading" && <div className="skeleton" style={{ height: "260px" }} aria-busy="true" />}
 
       {state === "error" && (
-        <div role="alert" style={{ padding: "1rem 1.25rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}>
+        <div
+          role="alert"
+          className="animate-fade-in-up"
+          style={{ padding: "1rem 1.25rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}
+        >
           {error}
         </div>
       )}
@@ -140,9 +154,54 @@ export default function HomePage() {
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: string; tone?: "attention" }) {
+/** Animates from 0 to `target` over ~600ms whenever `target` changes. Respects reduced-motion. */
+function useCountUp(target: number, durationMs = 600) {
+  const [value, setValue] = useState(0);
+  const fromRef = useRef(0);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setValue(target);
+      return;
+    }
+    const from = fromRef.current;
+    const start = performance.now();
+    let frame: number;
+    function tick(now: number) {
+      const progress = Math.min((now - start) / durationMs, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(from + (target - from) * eased);
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = target;
+      }
+    }
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  return value;
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  format = (n: number) => String(Math.round(n)),
+  tone,
+}: {
+  label: string;
+  value: number;
+  icon: string;
+  format?: (n: number) => string;
+  tone?: "attention";
+}) {
+  const animated = useCountUp(value);
   return (
     <div
+      className="card-lift transition"
       style={{
         border: "1px solid var(--border)",
         borderRadius: "var(--radius-md)",
@@ -154,7 +213,19 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
         gap: "0.25rem",
       }}
     >
-      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>
+      <span
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          fontSize: "0.75rem",
+          color: "var(--text-muted)",
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          fontWeight: 600,
+        }}
+      >
+        <span aria-hidden="true" style={{ fontSize: "0.95rem" }}>{icon}</span>
         {label}
       </span>
       <span
@@ -162,10 +233,10 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
           fontFamily: "var(--font-display)",
           fontSize: "1.6rem",
           fontWeight: 600,
-          color: tone === "attention" && value !== "0" ? "var(--status-attention-fg)" : "var(--text)",
+          color: tone === "attention" && value !== 0 ? "var(--status-attention-fg)" : "var(--text)",
         }}
       >
-        {value}
+        {format(animated)}
       </span>
     </div>
   );

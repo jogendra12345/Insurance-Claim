@@ -139,6 +139,7 @@ export function ClaimForm() {
   if (confirmedId) {
     return (
       <div
+        className="animate-scale-in"
         style={{
           padding: "1.75rem",
           borderRadius: "var(--radius-lg)",
@@ -150,6 +151,9 @@ export function ClaimForm() {
           gap: "0.75rem",
         }}
       >
+        <span aria-hidden="true" className="animate-pop" style={{ fontSize: "1.8rem", lineHeight: 1 }}>
+          ✓
+        </span>
         <h2 style={{ margin: 0, fontSize: "1.25rem", fontFamily: "var(--font-display)" }}>Claim submitted</h2>
         <p style={{ margin: 0, color: "var(--text)" }}>
           Reference: <strong style={{ fontVariantNumeric: "tabular-nums" }}>{confirmedId}</strong>
@@ -159,7 +163,7 @@ export function ClaimForm() {
         </p>
         <button
           onClick={() => router.push("/")}
-          className="transition"
+          className="transition btn-press"
           style={{
             alignSelf: "flex-start",
             padding: "0.55rem 1.1rem",
@@ -186,6 +190,7 @@ export function ClaimForm() {
         style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
         noValidate
       >
+      <div key={step} className="animate-fade-in-up" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
         {step === 0 && (
           <>
             <Field label="Policy number" error={fieldErrors.policyNumber}>
@@ -349,10 +354,12 @@ export function ClaimForm() {
             documentCount={documents.length}
           />
         )}
+      </div>
 
         {submitError && (
           <div
             role="alert"
+            className="animate-fade-in-up"
             style={{
               padding: "0.85rem 1rem",
               borderRadius: "var(--radius-sm)",
@@ -370,7 +377,7 @@ export function ClaimForm() {
             type="button"
             onClick={goBack}
             disabled={step === 0}
-            className="transition"
+            className="transition btn-press"
             style={{
               padding: "0.7rem 1.2rem",
               borderRadius: "var(--radius-sm)",
@@ -389,15 +396,16 @@ export function ClaimForm() {
             <button
               type="button"
               onClick={goNext}
-              className="transition"
+              className="transition btn-press"
               style={{
                 padding: "0.7rem 1.4rem",
                 borderRadius: "var(--radius-sm)",
                 border: "none",
-                background: "var(--primary)",
+                background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
                 color: "var(--primary-contrast)",
                 fontWeight: 600,
                 cursor: "pointer",
+                boxShadow: "0 2px 10px var(--primary-glow)",
               }}
             >
               Continue
@@ -406,12 +414,12 @@ export function ClaimForm() {
             <button
               type="submit"
               disabled={submitting}
-              className="transition"
+              className="transition btn-press"
               style={{
                 padding: "0.7rem 1.4rem",
                 borderRadius: "var(--radius-sm)",
                 border: "none",
-                background: "var(--primary)",
+                background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
                 color: "var(--primary-contrast)",
                 fontWeight: 600,
                 fontSize: "1rem",
@@ -437,6 +445,7 @@ function Stepper({ current }: { current: number }) {
         return (
           <li key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: i < STEPS.length - 1 ? 1 : undefined }}>
             <span
+              className="transition"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -449,6 +458,7 @@ function Stepper({ current }: { current: number }) {
                 flexShrink: 0,
                 background: done || active ? "var(--primary)" : "var(--surface-2)",
                 color: done || active ? "var(--primary-contrast)" : "var(--text-muted)",
+                transform: active ? "scale(1.15)" : "scale(1)",
               }}
               aria-hidden="true"
             >

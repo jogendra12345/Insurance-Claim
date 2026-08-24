@@ -33,6 +33,7 @@ export function ClaimTable({ claims }: { claims: Claim[] }) {
 
   return (
     <div
+      className="animate-fade-in-up"
       style={{
         border: "1px solid var(--border)",
         borderRadius: "var(--radius-md)",
@@ -51,7 +52,7 @@ export function ClaimTable({ claims }: { claims: Claim[] }) {
             <Th align="right">Filed</Th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="stagger-list">
           {claims.map((claim) => {
             const meta = STATUS_META[claim.status];
             const goTo = () => router.push(`/claims/${claim.id}`);
@@ -64,7 +65,7 @@ export function ClaimTable({ claims }: { claims: Claim[] }) {
                 }}
                 role="link"
                 tabIndex={0}
-                className="transition"
+                className="transition row-hover"
                 style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
               >
                 <Td>

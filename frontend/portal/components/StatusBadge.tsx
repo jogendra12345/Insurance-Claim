@@ -18,8 +18,10 @@ export const STATUS_META: Record<
 
 export function StatusBadge({ status }: { status: ClaimStatus }) {
   const meta = STATUS_META[status];
+  const inProgress = meta.stage === 2;
   return (
     <span
+      className="animate-pop"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -33,7 +35,9 @@ export function StatusBadge({ status }: { status: ClaimStatus }) {
         whiteSpace: "nowrap",
       }}
     >
-      <span aria-hidden="true">{meta.glyph}</span>
+      <span aria-hidden="true" className={inProgress ? "pulse-dot" : undefined}>
+        {meta.glyph}
+      </span>
       {meta.label}
     </span>
   );

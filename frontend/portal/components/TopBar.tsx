@@ -11,7 +11,17 @@ export function TopBar() {
   const pathname = usePathname();
 
   return (
-    <header style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+    <header
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 30,
+        borderBottom: "1px solid var(--border)",
+        background: "color-mix(in srgb, var(--surface) 88%, transparent)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+      }}
+    >
       <div
         style={{
           maxWidth: "1040px",
@@ -22,14 +32,18 @@ export function TopBar() {
           gap: "2rem",
         }}
       >
-        <a href="/" style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "1rem 0", textDecoration: "none" }}>
+        <a
+          href="/"
+          className="transition"
+          style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "1rem 0", textDecoration: "none" }}
+        >
           <span
             aria-hidden="true"
             style={{
               width: "28px",
               height: "28px",
               borderRadius: "8px",
-              background: "var(--primary)",
+              background: "linear-gradient(135deg, var(--primary), var(--accent))",
               color: "var(--primary-contrast)",
               display: "inline-flex",
               alignItems: "center",
@@ -37,6 +51,7 @@ export function TopBar() {
               fontFamily: "var(--font-display)",
               fontWeight: 700,
               fontSize: "0.95rem",
+              boxShadow: "0 2px 8px var(--primary-glow)",
             }}
           >
             C

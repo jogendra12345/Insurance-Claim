@@ -59,24 +59,20 @@ export default function ClaimDetailPage() {
 
   return (
     <main style={{ maxWidth: "680px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
-      <a href="/" style={{ fontSize: "0.85rem", color: "var(--text-muted)", textDecoration: "none" }}>
+      <a href="/" className="transition" style={{ fontSize: "0.85rem", color: "var(--text-muted)", textDecoration: "none" }}>
         ← Back to claims
       </a>
 
-      {state === "loading" && (
-        <div style={{ marginTop: "1.5rem", height: "280px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", animation: "pulse 1.4s ease-in-out infinite" }} aria-busy="true">
-          <style>{`@media (prefers-reduced-motion: no-preference) { @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } } }`}</style>
-        </div>
-      )}
+      {state === "loading" && <div className="skeleton" style={{ marginTop: "1.5rem", height: "280px" }} aria-busy="true" />}
 
       {state === "error" && (
-        <div role="alert" style={{ marginTop: "1.5rem", padding: "1rem 1.25rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}>
+        <div role="alert" className="animate-fade-in-up" style={{ marginTop: "1.5rem", padding: "1rem 1.25rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)" }}>
           {error}
         </div>
       )}
 
       {state === "loaded" && claim && (
-        <div style={{ marginTop: "1.25rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <div className="animate-fade-in-up stagger-list" style={{ marginTop: "1.25rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
               <h1 style={{ margin: 0, fontSize: "1.6rem" }}>{CLAIM_TYPE_LABEL[claim.claimType]} claim</h1>
@@ -152,7 +148,7 @@ export default function ClaimDetailPage() {
                   onClick={() => setDocumentsVisible((v) => !v)}
                   aria-label={documentsVisible ? "Hide documents" : "Show documents"}
                   aria-pressed={documentsVisible}
-                  className="transition"
+                  className="transition btn-press"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -178,7 +174,7 @@ export default function ClaimDetailPage() {
             )}
 
             {documentsVisible && claim.documents && claim.documents.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div className="stagger-list" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                 {claim.documents.map((doc) => (
                   <div
                     key={doc.id}
