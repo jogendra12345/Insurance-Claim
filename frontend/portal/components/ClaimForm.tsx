@@ -20,6 +20,13 @@ const ACCEPTED_DOCUMENT_HINT =
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
 
+// FNOL extended-field formats — .claude/specs/db/fnol_extended_fields.md,
+// .claude/specs/generic/fnol_form_ui_update.md. Mirrored server-side in
+// backend/api/src/routes/claims.ts.
+const ICD10_PATTERN = /^[A-TV-Z][0-9][0-9AB](\.[0-9A-Z]{1,4})?$/i;
+const CPT_OR_HCPCS_PATTERN = /^(\d{5}|[A-Z]\d{4})$/i;
+const MULTI_DAY_CLAIM_TYPES: ClaimType[] = ["inpatient", "maternity"];
+
 function fileKey(f: File) {
   return `${f.name}-${f.size}-${f.lastModified}`;
 }
@@ -36,7 +43,7 @@ type FieldErrors = Partial<Record<keyof Omit<NewClaimInput, "documents">, string
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-const STEPS = ["Policy", "About the incident", "Documents", "Review"] as const;
+const STEPS = ["Policy", "About the incident", "Diagnosis, Procedure & Provider", "Documents", "Review"] as const;
 
 export function ClaimForm() {
   const router = useRouter();
@@ -55,11 +62,25 @@ export function ClaimForm() {
   const [coverageAmount, setCoverageAmount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const [diagnosisCode, setDiagnosisCode] = useState("");
+  const [procedureCode, setProcedureCode] = useState("");
+  const [providerNpi, setProviderNpi] = useState("");
+  const [providerTaxId, setProviderTaxId] = useState("");
+  const [facilityName, setFacilityName] = useState("");
+  const [facilityAddress, setFacilityAddress] = useState("");
+  const [serviceDateFrom, setServiceDateFrom] = useState("");
+  const [serviceDateTo, setServiceDateTo] = useState("");
+  const [totalBilledAmount, setTotalBilledAmount] = useState("");
+  const [coordinationOfBenefits, setCoordinationOfBenefits] = useState<boolean | null>(null);
+  const [attested, setAttested] = useState(false);
+
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
+
+  const showServiceDateTo = MULTI_DAY_CLAIM_TYPES.includes(claimType);
 
   function syncFileInput(next: File[]) {
     if (fileInputRef.current) {
@@ -121,6 +142,38 @@ export function ClaimForm() {
         errors.claimAmount = `Requested claim amount must be less than or equal to the policy's coverage amount (${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}).`;
       }
     }
+    if (target === 2) {
+      if (!diagnosisCode.trim()) errors.diagnosisCode = "Diagnosis code is required.";
+      else if (!ICD10_PATTERN.test(diagnosisCode.trim())) errors.diagnosisCode = "Enter a valid ICD-10 code (e.g. E11.9).";
+
+      if (!procedureCode.trim()) errors.procedureCode = "Procedure code is required.";
+      else if (!CPT_OR_HCPCS_PATTERN.test(procedureCode.trim()))
+        errors.procedureCode = "Enter a valid CPT (5 digits) or HCPCS (letter + 4 digits) code.";
+
+      if (!serviceDateFrom) errors.serviceDateFrom = "Service date is required.";
+      else if (serviceDateFrom > todayIso()) errors.serviceDateFrom = "Service date can't be in the future.";
+
+      if (showServiceDateTo) {
+        if (!serviceDateTo) errors.serviceDateTo = "End date of service is required for this claim type.";
+        else if (serviceDateFrom && serviceDateTo < serviceDateFrom) errors.serviceDateTo = "End date can't be before the start date.";
+      }
+
+      const billed = Number(totalBilledAmount);
+      if (!totalBilledAmount || Number.isNaN(billed) || billed <= 0) {
+        errors.totalBilledAmount = "Enter a total billed amount greater than 0.";
+      }
+
+      if (coordinationOfBenefits === null) {
+        errors.coordinationOfBenefits = "Please answer whether you have other coverage.";
+      }
+
+      if (!providerNpi.trim()) errors.providerNpi = "Provider NPI is required.";
+      else if (!/^[0-9]{10}$/.test(providerNpi.trim())) errors.providerNpi = "NPI must be exactly 10 digits.";
+
+      if (!providerTaxId.trim()) errors.providerTaxId = "Provider tax ID is required.";
+      if (!facilityName.trim()) errors.facilityName = "Facility name is required.";
+      if (!facilityAddress.trim()) errors.facilityAddress = "Facility address is required.";
+    }
     return errors;
   }
 
@@ -129,7 +182,7 @@ export function ClaimForm() {
   }
 
   function goNext() {
-    if (step === 2) {
+    if (step === 3) {
       const docError = validateDocuments();
       setDocumentError(docError);
       if (docError) return;
@@ -151,12 +204,25 @@ export function ClaimForm() {
     e.preventDefault();
     const stepZeroErrors = validateStep(0);
     const stepOneErrors = validateStep(1);
+    const stepTwoErrors = validateStep(2);
     const docError = validateDocuments();
-    const errors = { ...stepZeroErrors, ...stepOneErrors };
+    const errors = { ...stepZeroErrors, ...stepOneErrors, ...stepTwoErrors };
     if (Object.keys(errors).length > 0 || docError) {
       setFieldErrors(errors);
       setDocumentError(docError);
-      setStep(Object.keys(stepZeroErrors).length > 0 ? 0 : Object.keys(stepOneErrors).length > 0 ? 1 : 2);
+      setStep(
+        Object.keys(stepZeroErrors).length > 0
+          ? 0
+          : Object.keys(stepOneErrors).length > 0
+            ? 1
+            : Object.keys(stepTwoErrors).length > 0
+              ? 2
+              : 3
+      );
+      return;
+    }
+    if (!attested) {
+      setSubmitError("You must attest that the information provided is accurate before submitting.");
       return;
     }
 
@@ -171,6 +237,17 @@ export function ClaimForm() {
         incidentDate,
         incidentDescription: incidentDescription.trim(),
         claimAmount: Number(claimAmount),
+        diagnosisCode: diagnosisCode.trim().toUpperCase(),
+        procedureCode: procedureCode.trim().toUpperCase(),
+        providerNpi: providerNpi.trim(),
+        providerTaxId: providerTaxId.trim(),
+        facilityName: facilityName.trim(),
+        facilityAddress: facilityAddress.trim(),
+        serviceDateFrom,
+        serviceDateTo: showServiceDateTo ? serviceDateTo : serviceDateFrom,
+        totalBilledAmount: Number(totalBilledAmount),
+        coordinationOfBenefits: coordinationOfBenefits === true,
+        attested,
         documents,
       });
       setConfirmedId(claim.id);
@@ -326,6 +403,138 @@ export function ClaimForm() {
         )}
 
         {step === 2 && (
+          <>
+            <Field label="Diagnosis code (ICD-10)" error={fieldErrors.diagnosisCode}>
+              <input
+                value={diagnosisCode}
+                onChange={(e) => setDiagnosisCode(e.target.value)}
+                onBlur={() => setDiagnosisCode((v) => v.trim().toUpperCase())}
+                placeholder="E11.9"
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Procedure code (CPT/HCPCS)" error={fieldErrors.procedureCode}>
+              <input
+                value={procedureCode}
+                onChange={(e) => setProcedureCode(e.target.value)}
+                onBlur={() => setProcedureCode((v) => v.trim().toUpperCase())}
+                placeholder="99213"
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Date of service" error={fieldErrors.serviceDateFrom}>
+              <input
+                type="date"
+                value={serviceDateFrom}
+                max={todayIso()}
+                onChange={(e) => setServiceDateFrom(e.target.value)}
+                style={inputStyle}
+              />
+            </Field>
+
+            {showServiceDateTo && (
+              <Field label="Date of service (through)" error={fieldErrors.serviceDateTo}>
+                <input
+                  type="date"
+                  value={serviceDateTo}
+                  min={serviceDateFrom || undefined}
+                  max={todayIso()}
+                  onChange={(e) => setServiceDateTo(e.target.value)}
+                  style={inputStyle}
+                />
+              </Field>
+            )}
+
+            <Field
+              label="Total billed amount (USD)"
+              error={fieldErrors.totalBilledAmount}
+              hint="The full amount the provider billed for this visit — separate from what you're requesting above."
+            >
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={totalBilledAmount}
+                onChange={(e) => setTotalBilledAmount(e.target.value)}
+                placeholder="0.00"
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Do you have other health insurance coverage that might also pay for this claim?" error={fieldErrors.coordinationOfBenefits}>
+              <div style={{ display: "flex", gap: "0.6rem" }}>
+                {(["Yes", "No"] as const).map((label) => {
+                  const value = label === "Yes";
+                  const active = coordinationOfBenefits === value;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setCoordinationOfBenefits(value)}
+                      className="transition btn-press"
+                      style={{
+                        flex: 1,
+                        padding: "0.6rem",
+                        borderRadius: "var(--radius-sm)",
+                        border: `1px solid ${active ? "var(--primary)" : "var(--border)"}`,
+                        background: active ? "var(--primary-soft)" : "var(--surface)",
+                        color: active ? "var(--primary)" : "var(--text)",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+
+            <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "0.25rem" }}>Provider / facility</div>
+
+            <Field label="Provider NPI" error={fieldErrors.providerNpi}>
+              <input
+                value={providerNpi}
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(e) => setProviderNpi(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="1234567890"
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Provider tax ID" error={fieldErrors.providerTaxId}>
+              <input
+                value={providerTaxId}
+                onChange={(e) => setProviderTaxId(e.target.value)}
+                placeholder="12-3456789"
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Facility name" error={fieldErrors.facilityName}>
+              <input
+                value={facilityName}
+                onChange={(e) => setFacilityName(e.target.value)}
+                placeholder="Riverside Medical Center"
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Facility address" error={fieldErrors.facilityAddress}>
+              <input
+                value={facilityAddress}
+                onChange={(e) => setFacilityAddress(e.target.value)}
+                placeholder="123 Main St, Springfield"
+                style={inputStyle}
+              />
+            </Field>
+          </>
+        )}
+
+        {step === 3 && (
           <Field label="Documents (at least one required)" hint={ACCEPTED_DOCUMENT_HINT} error={documentError ?? undefined}>
             <div
               role="button"
@@ -438,7 +647,7 @@ export function ClaimForm() {
           </Field>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <ReviewSummary
             policyNumber={policyNumber}
             claimType={CLAIM_TYPES.find((t) => t.value === claimType)?.label ?? claimType}
@@ -447,8 +656,41 @@ export function ClaimForm() {
             incidentDate={incidentDate}
             incidentDescription={incidentDescription}
             claimAmount={claimAmount}
+            diagnosisCode={diagnosisCode}
+            procedureCode={procedureCode}
+            serviceDateFrom={serviceDateFrom}
+            serviceDateTo={showServiceDateTo ? serviceDateTo : null}
+            totalBilledAmount={totalBilledAmount}
+            coordinationOfBenefits={coordinationOfBenefits}
+            facilityName={facilityName}
+            providerNpi={providerNpi}
             documentCount={documents.length}
           />
+        )}
+
+        {step === 4 && (
+          <label
+            className="transition"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.6rem",
+              padding: "0.85rem 1rem",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--border)",
+              background: "var(--surface-2)",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={attested}
+              onChange={(e) => setAttested(e.target.checked)}
+              style={{ marginTop: "0.15rem" }}
+            />
+            <span>I attest that the information provided in this claim is true and accurate to the best of my knowledge.</span>
+          </label>
         )}
       </div>
 
@@ -509,7 +751,7 @@ export function ClaimForm() {
           ) : (
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !attested}
               className="transition btn-press"
               style={{
                 padding: "0.7rem 1.4rem",
@@ -519,8 +761,8 @@ export function ClaimForm() {
                 color: "var(--primary-contrast)",
                 fontWeight: 600,
                 fontSize: "1rem",
-                cursor: submitting ? "default" : "pointer",
-                opacity: submitting ? 0.7 : 1,
+                cursor: submitting || !attested ? "default" : "pointer",
+                opacity: submitting || !attested ? 0.7 : 1,
               }}
             >
               {submitting ? "Submitting…" : "Submit claim"}
@@ -586,6 +828,14 @@ function ReviewSummary({
   incidentDate,
   incidentDescription,
   claimAmount,
+  diagnosisCode,
+  procedureCode,
+  serviceDateFrom,
+  serviceDateTo,
+  totalBilledAmount,
+  coordinationOfBenefits,
+  facilityName,
+  providerNpi,
   documentCount,
 }: {
   policyNumber: string;
@@ -595,8 +845,23 @@ function ReviewSummary({
   incidentDate: string;
   incidentDescription: string;
   claimAmount: string;
+  diagnosisCode: string;
+  procedureCode: string;
+  serviceDateFrom: string;
+  serviceDateTo: string | null;
+  totalBilledAmount: string;
+  coordinationOfBenefits: boolean | null;
+  facilityName: string;
+  providerNpi: string;
   documentCount: number;
 }) {
+  const serviceDates =
+    serviceDateFrom && serviceDateTo && serviceDateTo !== serviceDateFrom
+      ? `${new Date(serviceDateFrom).toLocaleDateString()} – ${new Date(serviceDateTo).toLocaleDateString()}`
+      : serviceDateFrom
+        ? new Date(serviceDateFrom).toLocaleDateString()
+        : "—";
+
   const rows: [string, string][] = [
     ["Policy number", policyNumber],
     ["Claim type", claimType],
@@ -610,6 +875,17 @@ function ReviewSummary({
         ? Number(claimAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
         : "—",
     ],
+    ["Diagnosis code", diagnosisCode || "—"],
+    ["Procedure code", procedureCode || "—"],
+    ["Date(s) of service", serviceDates],
+    [
+      "Total billed amount",
+      totalBilledAmount
+        ? Number(totalBilledAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
+        : "—",
+    ],
+    ["Other coverage (COB)", coordinationOfBenefits === null ? "—" : coordinationOfBenefits ? "Yes" : "No"],
+    ["Provider", facilityName ? `${facilityName} (NPI ${providerNpi})` : "—"],
     ["Documents", documentCount > 0 ? `${documentCount} attached` : "None attached"],
   ];
 

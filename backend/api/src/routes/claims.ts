@@ -42,16 +42,23 @@ function uploadDocuments(req: Request, res: Response, next: NextFunction) {
 
 // GET /api/claims — all claims, or /api/claims?policyNumber=... to scope to one
 // policy (Follow-up dependency #1 in .claude/specs/generic/claimant-portal-ui.md).
+const CLAIM_SELECT_WITH_PROVIDER = `
+  SELECT claims.*, p.npi AS provider_npi, p.tax_id AS provider_tax_id,
+         p.facility_name AS provider_facility_name, p.facility_address AS provider_facility_address
+  FROM claims
+  LEFT JOIN providers p ON p.id = claims.provider_id
+`;
+
 claimsRouter.get("/", async (req, res) => {
   const policyNumber = req.query.policyNumber;
 
   try {
     const result =
       typeof policyNumber === "string" && policyNumber.trim()
-        ? await pool.query(`SELECT * FROM claims WHERE policy_number = $1 ORDER BY created_at DESC`, [
+        ? await pool.query(`${CLAIM_SELECT_WITH_PROVIDER} WHERE claims.policy_number = $1 ORDER BY claims.created_at DESC`, [
             policyNumber.trim(),
           ])
-        : await pool.query(`SELECT * FROM claims ORDER BY created_at DESC`);
+        : await pool.query(`${CLAIM_SELECT_WITH_PROVIDER} ORDER BY claims.created_at DESC`);
     res.json(result.rows.map(serializeClaim));
   } catch (err) {
     console.error("GET /api/claims failed:", err);
@@ -63,7 +70,7 @@ claimsRouter.get("/", async (req, res) => {
 // this claim's documents so the claim detail page can offer a view toggle.
 claimsRouter.get("/:id", async (req, res) => {
   try {
-    const claimResult = await pool.query(`SELECT * FROM claims WHERE id = $1`, [req.params.id]);
+    const claimResult = await pool.query(`${CLAIM_SELECT_WITH_PROVIDER} WHERE claims.id = $1`, [req.params.id]);
     if (claimResult.rowCount === 0) {
       return res.status(404).json({ message: "Claim not found." });
     }
@@ -81,15 +88,75 @@ claimsRouter.get("/:id", async (req, res) => {
   }
 });
 
+// FNOL extended-field formats — .claude/specs/db/fnol_extended_fields.md.
+// Same shapes the client validates; re-checked here since the client-side
+// check is trivially bypassable.
+const ICD10_PATTERN = /^[A-TV-Z][0-9][0-9AB](\.[0-9A-Z]{1,4})?$/i;
+const CPT_OR_HCPCS_PATTERN = /^(\d{5}|[A-Z]\d{4})$/i;
+const NPI_PATTERN = /^[0-9]{10}$/;
+
 // POST /api/claims — SPEC.md §5/§7 (BUILD-PLAN.md feature #3), plus Zeebe
 // process kickoff (BUILD-PLAN.md feature #4 —
-// .claude/specs/generic/process-orchestration-kickoff.md).
+// .claude/specs/generic/process-orchestration-kickoff.md), plus the FNOL
+// extended fields (.claude/specs/db/fnol_extended_fields.md,
+// .claude/specs/generic/fnol_form_ui_update.md).
 claimsRouter.post("/", uploadDocuments, async (req, res) => {
-  const { policyNumber, claimType, claimantName, claimantEmail, incidentDate, incidentDescription, claimAmount } =
-    req.body;
+  const {
+    policyNumber,
+    claimType,
+    claimantName,
+    claimantEmail,
+    incidentDate,
+    incidentDescription,
+    claimAmount,
+    diagnosisCode,
+    procedureCode,
+    providerNpi,
+    providerTaxId,
+    facilityName,
+    facilityAddress,
+    serviceDateFrom,
+    serviceDateTo,
+    totalBilledAmount,
+    coordinationOfBenefits,
+    attested,
+  } = req.body;
 
-  if (!policyNumber || !claimType || !claimantName || !claimantEmail || !incidentDate || !incidentDescription || !claimAmount) {
+  if (
+    !policyNumber ||
+    !claimType ||
+    !claimantName ||
+    !claimantEmail ||
+    !incidentDate ||
+    !incidentDescription ||
+    !claimAmount ||
+    !diagnosisCode ||
+    !procedureCode ||
+    !providerNpi ||
+    !providerTaxId ||
+    !facilityName ||
+    !facilityAddress ||
+    !serviceDateFrom ||
+    !totalBilledAmount ||
+    coordinationOfBenefits === undefined ||
+    coordinationOfBenefits === ""
+  ) {
     return res.status(400).json({ message: "Missing required claim fields." });
+  }
+  if (attested !== "true") {
+    return res.status(400).json({ message: "You must attest that the information provided is accurate to submit a claim." });
+  }
+  if (!ICD10_PATTERN.test(diagnosisCode)) {
+    return res.status(400).json({ message: "Diagnosis code must be a valid ICD-10 code (e.g. E11.9)." });
+  }
+  if (!CPT_OR_HCPCS_PATTERN.test(procedureCode)) {
+    return res.status(400).json({ message: "Procedure code must be a valid CPT (5 digits) or HCPCS (letter + 4 digits) code." });
+  }
+  if (!NPI_PATTERN.test(providerNpi)) {
+    return res.status(400).json({ message: "Provider NPI must be exactly 10 digits." });
+  }
+  if (Number.isNaN(Number(totalBilledAmount)) || Number(totalBilledAmount) <= 0) {
+    return res.status(400).json({ message: "Total billed amount must be greater than 0." });
   }
 
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
@@ -118,12 +185,29 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
       });
     }
 
+    // Find-or-create the provider by NPI. Per the locked db spec: on a
+    // match, reuse the existing row as-is — a newly submitted
+    // facility/tax-id for an NPI already on file is discarded, not written.
+    const existingProvider = await client.query(`SELECT * FROM providers WHERE npi = $1`, [providerNpi]);
+    const providerRow =
+      existingProvider.rowCount && existingProvider.rowCount > 0
+        ? existingProvider.rows[0]
+        : (
+            await client.query(
+              `INSERT INTO providers (npi, tax_id, facility_name, facility_address) VALUES ($1, $2, $3, $4) RETURNING *`,
+              [providerNpi, providerTaxId, facilityName, facilityAddress]
+            )
+          ).rows[0];
+    const providerId = providerRow.id;
+
     const claimResult = await client.query(
       `INSERT INTO claims (
          carrier_id, insurance_type, policy_number, policy_id, claim_type,
          claimant_name, claimant_email, incident_date, incident_description,
-         claim_amount, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'submitted')
+         claim_amount, status, provider_id, diagnosis_code, procedure_code,
+         service_date_from, service_date_to, total_billed_amount,
+         coordination_of_benefits, attestation_signed_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'submitted', $11, $12, $13, $14, $15, $16, $17, now())
        RETURNING *`,
       [
         policy.carrier_id,
@@ -136,9 +220,23 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
         incidentDate,
         incidentDescription,
         claimAmount,
+        providerId,
+        diagnosisCode,
+        procedureCode,
+        serviceDateFrom,
+        serviceDateTo || serviceDateFrom,
+        totalBilledAmount,
+        coordinationOfBenefits === "true",
       ]
     );
     const claim = claimResult.rows[0];
+    // serializeClaim reads these joined-style column names — attach them
+    // here so the POST response matches what GET returns, without a second
+    // round-trip query.
+    claim.provider_npi = providerRow.npi;
+    claim.provider_tax_id = providerRow.tax_id;
+    claim.provider_facility_name = providerRow.facility_name;
+    claim.provider_facility_address = providerRow.facility_address;
 
     for (const file of files) {
       const objectKey = `${Date.now()}-${file.originalname}`;

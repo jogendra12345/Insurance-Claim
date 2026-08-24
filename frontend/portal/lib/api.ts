@@ -90,6 +90,17 @@ export async function submitClaim(input: NewClaimInput): Promise<Claim> {
   body.set("incidentDate", input.incidentDate);
   body.set("incidentDescription", input.incidentDescription);
   body.set("claimAmount", String(input.claimAmount));
+  body.set("diagnosisCode", input.diagnosisCode);
+  body.set("procedureCode", input.procedureCode);
+  body.set("providerNpi", input.providerNpi);
+  body.set("providerTaxId", input.providerTaxId);
+  body.set("facilityName", input.facilityName);
+  body.set("facilityAddress", input.facilityAddress);
+  body.set("serviceDateFrom", input.serviceDateFrom);
+  body.set("serviceDateTo", input.serviceDateTo);
+  body.set("totalBilledAmount", String(input.totalBilledAmount));
+  body.set("coordinationOfBenefits", String(input.coordinationOfBenefits));
+  body.set("attested", String(input.attested));
   for (const file of input.documents) {
     body.append("documents", file);
   }

@@ -37,10 +37,25 @@ export interface Claim {
   decision: Decision | null;
   denialReason: string | null;
   processInstanceKey: string | null;
+  diagnosisCode: string;
+  procedureCode: string;
+  serviceDateFrom: string;
+  serviceDateTo: string | null;
+  totalBilledAmount: number;
+  coordinationOfBenefits: boolean;
+  attestationSignedAt: string;
+  provider: ClaimProvider | null;
   createdAt: string;
   updatedAt: string;
   /** Only present on the GET /api/claims/:id (detail) response. */
   documents?: ClaimDocument[];
+}
+
+export interface ClaimProvider {
+  npi: string;
+  taxId: string;
+  facilityName: string;
+  facilityAddress: string;
 }
 
 export interface ClaimDocument {
@@ -92,5 +107,16 @@ export interface NewClaimInput {
   incidentDate: string;
   incidentDescription: string;
   claimAmount: number;
+  diagnosisCode: string;
+  procedureCode: string;
+  providerNpi: string;
+  providerTaxId: string;
+  facilityName: string;
+  facilityAddress: string;
+  serviceDateFrom: string;
+  serviceDateTo: string;
+  totalBilledAmount: number;
+  coordinationOfBenefits: boolean;
+  attested: boolean;
   documents: File[];
 }

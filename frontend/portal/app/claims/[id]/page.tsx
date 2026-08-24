@@ -107,6 +107,28 @@ export default function ClaimDetailPage() {
               label="Requested claim amount"
               value={claim.claimAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}
             />
+            <DetailRow label="Diagnosis code" value={claim.diagnosisCode} />
+            <DetailRow label="Procedure code" value={claim.procedureCode} />
+            <DetailRow
+              label="Date(s) of service"
+              value={
+                claim.serviceDateTo && claim.serviceDateTo !== claim.serviceDateFrom
+                  ? `${new Date(claim.serviceDateFrom).toLocaleDateString()} – ${new Date(claim.serviceDateTo).toLocaleDateString()}`
+                  : new Date(claim.serviceDateFrom).toLocaleDateString()
+              }
+            />
+            <DetailRow
+              label="Total billed amount"
+              value={claim.totalBilledAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}
+            />
+            <DetailRow label="Other coverage (COB)" value={claim.coordinationOfBenefits ? "Yes" : "No"} />
+            {claim.provider && (
+              <DetailRow
+                label="Provider"
+                value={`${claim.provider.facilityName} (NPI ${claim.provider.npi}, Tax ID ${claim.provider.taxId})`}
+              />
+            )}
+            <DetailRow label="Attested" value={new Date(claim.attestationSignedAt).toLocaleString()} />
             {claim.confirmedRole && <DetailRow label="Handled by" value={claim.confirmedRole} />}
             {claim.riskScore !== null && <DetailRow label="Risk score" value={String(claim.riskScore)} />}
             {claim.fraudIndicatorCount > 0 && (

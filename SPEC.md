@@ -163,8 +163,25 @@ claims
   decision              text NULL            -- approve | deny | moreInfo
   denial_reason         text NULL
   process_instance_key  text NULL            -- Zeebe process instance key
+  provider_id            uuid NOT NULL FK → providers.id  -- resolved synchronously at intake, find-or-create by NPI (§ "FNOL extended fields" below)
+  diagnosis_code         text NOT NULL        -- ICD-10, e.g. E11.9
+  procedure_code         text NOT NULL        -- CPT (5 digits) or HCPCS Level II (letter + 4 digits)
+  service_date_from      date NOT NULL
+  service_date_to        date NULL            -- NULL/omitted for a single-day visit; UI sets it equal to service_date_from for claim types other than inpatient/maternity
+  total_billed_amount    numeric NOT NULL     -- gross provider-billed amount; separate from claim_amount, not wired into any worker (see below)
+  coordination_of_benefits boolean NOT NULL DEFAULT false  -- does the claimant have other coverage
+  attestation_signed_at  timestamptz NOT NULL -- set server-side at submission time, not client-typed
   created_at            timestamptz NOT NULL DEFAULT now()
   updated_at            timestamptz NOT NULL DEFAULT now()
+
+providers
+  id                uuid PK
+  npi               text NOT NULL UNIQUE  -- exactly 10 digits
+  tax_id            text NOT NULL
+  facility_name     text NOT NULL
+  facility_address  text NOT NULL
+  created_at        timestamptz NOT NULL DEFAULT now()
+  updated_at        timestamptz NOT NULL DEFAULT now()
 
 claim_documents
   id             uuid PK
@@ -193,6 +210,10 @@ audit_log
 ```
 
 Every job worker and every user-task completion handler writes at least one `audit_log` row — see §13.
+
+### FNOL extended fields
+
+`claims`' diagnosis/procedure code, provider (`providers`, via `provider_id`), service date(s), `total_billed_amount`, `coordination_of_benefits`, and `attestation_signed_at` were added per `.claude/specs/db/fnol_extended_fields.md` and `.claude/specs/generic/fnol_form_ui_update.md` (both Locked 2026-08-24) — captured directly on `ClaimForm` at intake, not derived from documents (`extract-evidence` isn't built yet). `providers` is a separate table, not flattened onto `claims`: the same NPI recurs across many claims, so it's keyed by `npi` (unique) and reused via find-or-create in `POST /api/claims` — on a collision, the existing row wins and newly submitted facility/tax-id details are discarded, never overwritten. `total_billed_amount` is stored but intentionally **not** wired into `validate-claim`, `score-risk`, the DMN routing table, or `trigger-settlement` — `claim_amount` stays the sole authoritative figure for routing/coverage/payout; `total_billed_amount` is informational context only until a future spec decides how a billed-vs-claimed gap should factor into risk scoring.
 
 ### Migration tooling
 
