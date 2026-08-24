@@ -71,6 +71,9 @@ export interface Policy {
   expiryDate: string;
   premiumAmount: number;
   coverageAmount: number;
+  deductibleAmount: number;
+  copayAmount: number;
+  coinsuranceRate: number;
   createdAt: string;
 }
 
@@ -82,6 +85,9 @@ export interface NewPolicyInput {
   expiryDate: string;
   premiumAmount: string;
   coverageAmount: string;
+  deductibleAmount: string;
+  copayAmount: string;
+  coinsuranceRate: string;
 }
 
 export interface NewClaimInput {

@@ -15,6 +15,9 @@ function serializePolicy(row: any) {
     expiryDate: row.expiry_date,
     premiumAmount: Number(row.premium_amount),
     coverageAmount: Number(row.coverage_amount),
+    deductibleAmount: Number(row.deductible_amount),
+    copayAmount: Number(row.copay_amount),
+    coinsuranceRate: Number(row.coinsurance_rate),
     createdAt: row.created_at,
   };
 }
@@ -38,8 +41,19 @@ policiesRouter.get("/", async (_req, res) => {
 // concept exposed yet, per SPEC.md §14's tenant-isolation future work) — a
 // fresh id is generated server-side per new policy.
 policiesRouter.post("/", async (req, res) => {
-  const { policyNumber, policyholderName, insuranceType, status, effectiveDate, expiryDate, premiumAmount, coverageAmount } =
-    req.body;
+  const {
+    policyNumber,
+    policyholderName,
+    insuranceType,
+    status,
+    effectiveDate,
+    expiryDate,
+    premiumAmount,
+    coverageAmount,
+    deductibleAmount,
+    copayAmount,
+    coinsuranceRate,
+  } = req.body;
 
   if (
     !policyNumber ||
@@ -50,7 +64,13 @@ policiesRouter.post("/", async (req, res) => {
     premiumAmount === undefined ||
     premiumAmount === "" ||
     coverageAmount === undefined ||
-    coverageAmount === ""
+    coverageAmount === "" ||
+    deductibleAmount === undefined ||
+    deductibleAmount === "" ||
+    copayAmount === undefined ||
+    copayAmount === "" ||
+    coinsuranceRate === undefined ||
+    coinsuranceRate === ""
   ) {
     return res.status(400).json({ message: "Missing required policy fields." });
   }
@@ -59,19 +79,44 @@ policiesRouter.post("/", async (req, res) => {
   }
   const premium = Number(premiumAmount);
   const coverage = Number(coverageAmount);
+  const deductible = Number(deductibleAmount);
+  const copay = Number(copayAmount);
+  const coinsurance = Number(coinsuranceRate);
   if (Number.isNaN(premium) || premium < 0) {
     return res.status(400).json({ message: "Premium amount must be 0 or greater." });
   }
   if (Number.isNaN(coverage) || coverage <= 0) {
     return res.status(400).json({ message: "Coverage amount must be greater than 0." });
   }
+  if (Number.isNaN(deductible) || deductible < 0) {
+    return res.status(400).json({ message: "Deductible amount must be 0 or greater." });
+  }
+  if (Number.isNaN(copay) || copay < 0) {
+    return res.status(400).json({ message: "Copay amount must be 0 or greater." });
+  }
+  if (Number.isNaN(coinsurance) || coinsurance < 0 || coinsurance > 1) {
+    return res.status(400).json({ message: "Coinsurance rate must be between 0 and 1." });
+  }
 
   try {
     const result = await pool.query(
-      `INSERT INTO policies (policy_number, carrier_id, insurance_type, policyholder_name, status, effective_date, expiry_date, premium_amount, coverage_amount)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO policies (policy_number, carrier_id, insurance_type, policyholder_name, status, effective_date, expiry_date, premium_amount, coverage_amount, deductible_amount, copay_amount, coinsurance_rate)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
-      [policyNumber, randomUUID(), insuranceType || "health", policyholderName, status, effectiveDate, expiryDate, premium, coverage]
+      [
+        policyNumber,
+        randomUUID(),
+        insuranceType || "health",
+        policyholderName,
+        status,
+        effectiveDate,
+        expiryDate,
+        premium,
+        coverage,
+        deductible,
+        copay,
+        coinsurance,
+      ]
     );
     res.status(201).json(serializePolicy(result.rows[0]));
   } catch (err: any) {

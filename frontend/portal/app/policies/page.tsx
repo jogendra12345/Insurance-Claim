@@ -24,6 +24,9 @@ const emptyForm: NewPolicyInput = {
   expiryDate: "",
   premiumAmount: "",
   coverageAmount: "",
+  deductibleAmount: "",
+  copayAmount: "",
+  coinsuranceRate: "",
 };
 
 const currency = (n: number) => n.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -66,7 +69,10 @@ export default function PoliciesPage() {
       !form.effectiveDate ||
       !form.expiryDate ||
       !form.premiumAmount ||
-      !form.coverageAmount
+      !form.coverageAmount ||
+      !form.deductibleAmount ||
+      !form.copayAmount ||
+      !form.coinsuranceRate
     ) {
       setFormError("Fill in every field.");
       return;
@@ -77,12 +83,27 @@ export default function PoliciesPage() {
     }
     const premium = Number(form.premiumAmount);
     const coverage = Number(form.coverageAmount);
+    const deductible = Number(form.deductibleAmount);
+    const copay = Number(form.copayAmount);
+    const coinsurance = Number(form.coinsuranceRate);
     if (Number.isNaN(premium) || premium < 0) {
       setFormError("Premium amount must be 0 or greater.");
       return;
     }
     if (Number.isNaN(coverage) || coverage <= 0) {
       setFormError("Coverage amount must be greater than 0.");
+      return;
+    }
+    if (Number.isNaN(deductible) || deductible < 0) {
+      setFormError("Deductible amount must be 0 or greater.");
+      return;
+    }
+    if (Number.isNaN(copay) || copay < 0) {
+      setFormError("Copay amount must be 0 or greater.");
+      return;
+    }
+    if (Number.isNaN(coinsurance) || coinsurance < 0 || coinsurance > 1) {
+      setFormError("Coinsurance rate must be between 0 and 1.");
       return;
     }
     setSaving(true);
@@ -225,6 +246,40 @@ export default function PoliciesPage() {
               style={inputStyle}
             />
           </FormField>
+          <FormField label="Deductible (USD)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.deductibleAmount}
+              onChange={(e) => setForm((f) => ({ ...f, deductibleAmount: e.target.value }))}
+              placeholder="500.00"
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="Copay (USD)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.copayAmount}
+              onChange={(e) => setForm((f) => ({ ...f, copayAmount: e.target.value }))}
+              placeholder="25.00"
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="Coinsurance rate (0–1)">
+            <input
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              value={form.coinsuranceRate}
+              onChange={(e) => setForm((f) => ({ ...f, coinsuranceRate: e.target.value }))}
+              placeholder="0.20"
+              style={inputStyle}
+            />
+          </FormField>
           <button
             type="submit"
             disabled={saving}
@@ -290,6 +345,9 @@ export default function PoliciesPage() {
                 <Th>Expiry</Th>
                 <Th align="right">Premium</Th>
                 <Th align="right">Coverage</Th>
+                <Th align="right">Deductible</Th>
+                <Th align="right">Copay</Th>
+                <Th align="right">Coinsurance</Th>
                 <Th align="right">
                   <span style={{ visibility: "hidden" }}>Delete</span>
                 </Th>
@@ -323,6 +381,9 @@ export default function PoliciesPage() {
                     <Td muted>{new Date(policy.expiryDate).toLocaleDateString()}</Td>
                     <Td align="right">{currency(policy.premiumAmount)}</Td>
                     <Td align="right">{currency(policy.coverageAmount)}</Td>
+                    <Td align="right">{currency(policy.deductibleAmount)}</Td>
+                    <Td align="right">{currency(policy.copayAmount)}</Td>
+                    <Td align="right">{Math.round(policy.coinsuranceRate * 100)}%</Td>
                     <Td align="right">
                       <button
                         onClick={() => setPendingDelete(policy)}
