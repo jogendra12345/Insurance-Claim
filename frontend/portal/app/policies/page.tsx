@@ -22,7 +22,11 @@ const emptyForm: NewPolicyInput = {
   status: "active",
   effectiveDate: todayIso(),
   expiryDate: "",
+  premiumAmount: "",
+  coverageAmount: "",
 };
+
+const currency = (n: number) => n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
 export default function PoliciesPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -56,12 +60,29 @@ export default function PoliciesPage() {
 
   async function handleAddPolicy(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.policyNumber.trim() || !form.policyholderName.trim() || !form.effectiveDate || !form.expiryDate) {
+    if (
+      !form.policyNumber.trim() ||
+      !form.policyholderName.trim() ||
+      !form.effectiveDate ||
+      !form.expiryDate ||
+      !form.premiumAmount ||
+      !form.coverageAmount
+    ) {
       setFormError("Fill in every field.");
       return;
     }
     if (form.expiryDate < form.effectiveDate) {
       setFormError("Expiry date must be after the effective date.");
+      return;
+    }
+    const premium = Number(form.premiumAmount);
+    const coverage = Number(form.coverageAmount);
+    if (Number.isNaN(premium) || premium < 0) {
+      setFormError("Premium amount must be 0 or greater.");
+      return;
+    }
+    if (Number.isNaN(coverage) || coverage <= 0) {
+      setFormError("Coverage amount must be greater than 0.");
       return;
     }
     setSaving(true);
@@ -177,6 +198,28 @@ export default function PoliciesPage() {
               style={inputStyle}
             />
           </FormField>
+          <FormField label="Premium amount (USD)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.premiumAmount}
+              onChange={(e) => setForm((f) => ({ ...f, premiumAmount: e.target.value }))}
+              placeholder="0.00"
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="Coverage amount (USD)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.coverageAmount}
+              onChange={(e) => setForm((f) => ({ ...f, coverageAmount: e.target.value }))}
+              placeholder="0.00"
+              style={inputStyle}
+            />
+          </FormField>
           <button
             type="submit"
             disabled={saving}
@@ -243,6 +286,8 @@ export default function PoliciesPage() {
                 <Th>Status</Th>
                 <Th>Effective</Th>
                 <Th>Expiry</Th>
+                <Th align="right">Premium</Th>
+                <Th align="right">Coverage</Th>
                 <Th align="right">
                   <span style={{ visibility: "hidden" }}>Delete</span>
                 </Th>
@@ -274,6 +319,8 @@ export default function PoliciesPage() {
                     </Td>
                     <Td muted>{new Date(policy.effectiveDate).toLocaleDateString()}</Td>
                     <Td muted>{new Date(policy.expiryDate).toLocaleDateString()}</Td>
+                    <Td align="right">{currency(policy.premiumAmount)}</Td>
+                    <Td align="right">{currency(policy.coverageAmount)}</Td>
                     <Td align="right">
                       <button
                         onClick={() => setPendingDelete(policy)}

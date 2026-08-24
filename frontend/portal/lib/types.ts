@@ -69,6 +69,8 @@ export interface Policy {
   status: PolicyStatus;
   effectiveDate: string;
   expiryDate: string;
+  premiumAmount: number;
+  coverageAmount: number;
   createdAt: string;
 }
 
@@ -78,6 +80,8 @@ export interface NewPolicyInput {
   status: PolicyStatus;
   effectiveDate: string;
   expiryDate: string;
+  premiumAmount: string;
+  coverageAmount: string;
 }
 
 export interface NewClaimInput {

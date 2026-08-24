@@ -136,6 +136,8 @@ policies
   status            text NOT NULL        -- active | lapsed | cancelled
   effective_date    date NOT NULL
   expiry_date       date NOT NULL
+  premium_amount    numeric NOT NULL     -- >= 0
+  coverage_amount   numeric NOT NULL     -- > 0; a claim against this policy must stay under it
   created_at        timestamptz NOT NULL DEFAULT now()
   updated_at        timestamptz NOT NULL DEFAULT now()
 
@@ -151,7 +153,7 @@ claims
   claimant_email        text NOT NULL
   incident_date         date NOT NULL
   incident_description  text NOT NULL
-  claim_amount          numeric NOT NULL
+  claim_amount          numeric NOT NULL     -- must be < the matched policy's coverage_amount; enforced at intake (POST /api/claims) and client-side (ClaimForm), ahead of the validate-claim worker's own checks
   status                text NOT NULL        -- submitted | validating | triage | in_review | approved | denied | awaiting_info
   case_summary          text NULL            -- AI-generated summary for reviewers
   risk_score            numeric NULL         -- 0-100

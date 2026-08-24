@@ -102,7 +102,7 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     await client.query("BEGIN");
 
     const policyResult = await client.query(
-      `SELECT id, carrier_id, insurance_type FROM policies WHERE policy_number = $1`,
+      `SELECT id, carrier_id, insurance_type, coverage_amount FROM policies WHERE policy_number = $1`,
       [policyNumber]
     );
     if (policyResult.rowCount === 0) {
@@ -110,6 +110,13 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
       return res.status(400).json({ message: `No policy found for ${policyNumber}.` });
     }
     const policy = policyResult.rows[0];
+
+    if (Number(claimAmount) >= Number(policy.coverage_amount)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: `Claim amount must be less than the policy's coverage amount (${Number(policy.coverage_amount).toLocaleString()}).`,
+      });
+    }
 
     const claimResult = await client.query(
       `INSERT INTO claims (

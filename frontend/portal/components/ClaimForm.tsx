@@ -39,6 +39,7 @@ export function ClaimForm() {
   const [incidentDescription, setIncidentDescription] = useState("");
   const [claimAmount, setClaimAmount] = useState("");
   const [documents, setDocuments] = useState<File[]>([]);
+  const [coverageAmount, setCoverageAmount] = useState<number | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [documentError, setDocumentError] = useState<string | null>(null);
@@ -71,6 +72,8 @@ export function ClaimForm() {
       const amount = Number(claimAmount);
       if (!claimAmount || Number.isNaN(amount) || amount <= 0) {
         errors.claimAmount = "Enter a claim amount greater than 0.";
+      } else if (coverageAmount !== null && amount >= coverageAmount) {
+        errors.claimAmount = `Claim amount must be less than the policy's coverage amount (${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}).`;
       }
     }
     return errors;
@@ -189,7 +192,10 @@ export function ClaimForm() {
               <PolicySelect
                 value={policyNumber}
                 onChange={setPolicyNumber}
-                onPolicySelect={(policy) => setClaimantName(policy?.policyholderName ?? "")}
+                onPolicySelect={(policy) => {
+                  setClaimantName(policy?.policyholderName ?? "");
+                  setCoverageAmount(policy?.coverageAmount ?? null);
+                }}
                 style={inputStyle}
               />
             </Field>
@@ -247,7 +253,15 @@ export function ClaimForm() {
               />
             </Field>
 
-            <Field label="Claim amount (USD)" error={fieldErrors.claimAmount}>
+            <Field
+              label="Claim amount (USD)"
+              error={fieldErrors.claimAmount}
+              hint={
+                coverageAmount !== null
+                  ? `Must be less than this policy's coverage amount: ${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}`
+                  : undefined
+              }
+            >
               <input
                 type="number"
                 min="0"

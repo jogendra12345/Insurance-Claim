@@ -13,6 +13,8 @@ function serializePolicy(row: any) {
     status: row.status,
     effectiveDate: row.effective_date,
     expiryDate: row.expiry_date,
+    premiumAmount: Number(row.premium_amount),
+    coverageAmount: Number(row.coverage_amount),
     createdAt: row.created_at,
   };
 }
@@ -36,21 +38,40 @@ policiesRouter.get("/", async (_req, res) => {
 // concept exposed yet, per SPEC.md §14's tenant-isolation future work) — a
 // fresh id is generated server-side per new policy.
 policiesRouter.post("/", async (req, res) => {
-  const { policyNumber, policyholderName, insuranceType, status, effectiveDate, expiryDate } = req.body;
+  const { policyNumber, policyholderName, insuranceType, status, effectiveDate, expiryDate, premiumAmount, coverageAmount } =
+    req.body;
 
-  if (!policyNumber || !policyholderName || !status || !effectiveDate || !expiryDate) {
+  if (
+    !policyNumber ||
+    !policyholderName ||
+    !status ||
+    !effectiveDate ||
+    !expiryDate ||
+    premiumAmount === undefined ||
+    premiumAmount === "" ||
+    coverageAmount === undefined ||
+    coverageAmount === ""
+  ) {
     return res.status(400).json({ message: "Missing required policy fields." });
   }
   if (!["active", "lapsed", "cancelled"].includes(status)) {
     return res.status(400).json({ message: "status must be active, lapsed, or cancelled." });
   }
+  const premium = Number(premiumAmount);
+  const coverage = Number(coverageAmount);
+  if (Number.isNaN(premium) || premium < 0) {
+    return res.status(400).json({ message: "Premium amount must be 0 or greater." });
+  }
+  if (Number.isNaN(coverage) || coverage <= 0) {
+    return res.status(400).json({ message: "Coverage amount must be greater than 0." });
+  }
 
   try {
     const result = await pool.query(
-      `INSERT INTO policies (policy_number, carrier_id, insurance_type, policyholder_name, status, effective_date, expiry_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO policies (policy_number, carrier_id, insurance_type, policyholder_name, status, effective_date, expiry_date, premium_amount, coverage_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [policyNumber, randomUUID(), insuranceType || "health", policyholderName, status, effectiveDate, expiryDate]
+      [policyNumber, randomUUID(), insuranceType || "health", policyholderName, status, effectiveDate, expiryDate, premium, coverage]
     );
     res.status(201).json(serializePolicy(result.rows[0]));
   } catch (err: any) {
