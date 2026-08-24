@@ -202,14 +202,14 @@ Every job worker and every user-task completion handler writes at least one `aud
 `claims.claim_amount` isn't free-form: the portal computes an assigned amount and the claimant may accept it or reduce it, but never enter more. Simulates real claim adjudication's sequence — allowed amount → deductible → copay → coinsurance split — capped at the policy's `coverage_amount`:
 
 ```
-allowed        = TYPICAL_BILLED_BY_CLAIM_TYPE[claimType]   -- fixed baseline per claim_type, see below
+allowed         = policy.coverage_amount * TYPICAL_COST_PCT_OF_COVERAGE[claimType]  -- see below
 afterDeductible = max(0, allowed - policy.deductible_amount)
 afterCopay      = max(0, afterDeductible - policy.copay_amount)
 planPays        = afterCopay * (1 - policy.coinsurance_rate)
 assignedAmount  = min(planPays, policy.coverage_amount)
 ```
 
-`TYPICAL_BILLED_BY_CLAIM_TYPE` (USD, health claim types): `outpatient` 1200, `inpatient` 15000, `pharmacy` 300, `dental` 800, `maternity` 8000, `other` 1000. This stands in for a real fee schedule / extracted bill total — neither exists yet since `extract-evidence` (§12) isn't built. Revisit once that worker can read an actual billed amount off the uploaded documents.
+`TYPICAL_COST_PCT_OF_COVERAGE` (share of *this policy's* `coverage_amount`, health claim types): `outpatient` 4%, `inpatient` 30%, `pharmacy` 3%, `dental` 3%, `maternity` 20%, `other` 3%. Expressed as a percentage of coverage rather than a flat dollar figure so the assigned amount scales with the policy (a $120,000-coverage policy assigns a bigger amount than a $25,000 one for the same claim type) instead of being dominated by a fixed baseline unrelated to the policy's actual size — this stands in for a real fee schedule / extracted bill total, neither of which exists yet since `extract-evidence` (§12) isn't built. Revisit once that worker can read an actual billed amount off the uploaded documents.
 
 Implemented twice by necessity — `backend/api/src/claimAmount.ts` (authoritative; re-checked server-side in `POST /api/claims` since the client-side cap is trivially bypassable) and `frontend/portal/lib/claimAmount.ts` (drives the `ClaimForm` UI). Keep both in sync by hand.
 
