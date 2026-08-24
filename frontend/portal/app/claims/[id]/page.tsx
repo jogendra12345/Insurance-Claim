@@ -30,6 +30,10 @@ function isImage(url: string): boolean {
   return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
+function isPdf(url: string): boolean {
+  return url.toLowerCase().endsWith(".pdf");
+}
+
 export default function ClaimDetailPage() {
   const params = useParams<{ id: string }>();
   const [claim, setClaim] = useState<Claim | null>(null);
@@ -201,6 +205,18 @@ export default function ClaimDetailPage() {
                         src={doc.fileUrl}
                         alt={fileNameFromUrl(doc.fileUrl)}
                         style={{ maxWidth: "100%", maxHeight: "320px", borderRadius: "var(--radius-sm)", objectFit: "contain" }}
+                      />
+                    ) : isPdf(doc.fileUrl) ? (
+                      <iframe
+                        src={doc.fileUrl}
+                        title={fileNameFromUrl(doc.fileUrl)}
+                        style={{
+                          width: "100%",
+                          height: "420px",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-sm)",
+                          background: "var(--surface-2)",
+                        }}
                       />
                     ) : (
                       <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
