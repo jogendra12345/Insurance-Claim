@@ -14,6 +14,18 @@ const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
   other: "Other",
 };
 
+const ROLE_LABEL: Record<NonNullable<Claim["confirmedRole"]>, string> = {
+  adjuster: "Adjuster",
+  investigator: "Investigator",
+  legal: "Legal",
+  auto: "Auto-approved",
+};
+
+/** Short, stable reference shown in the list — the full uuid is still the title/href target. */
+function shortClaimId(id: string) {
+  return `#${id.slice(0, 8)}`;
+}
+
 function ProgressStepper({ stage, status }: { stage: 1 | 2 | 3; status: Claim["status"] }) {
   const isBad = status === "denied";
   return (
@@ -45,11 +57,13 @@ export function ClaimTable({ claims }: { claims: Claim[] }) {
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--border)" }}>
+            <Th>Claim ID</Th>
             <Th>Claim</Th>
             <Th>Status</Th>
             <Th>Progress</Th>
+            <Th>Assigned to</Th>
             <Th align="right">Amount</Th>
-            <Th align="right">Filed</Th>
+            <Th align="right">Submitted</Th>
           </tr>
         </thead>
         <tbody className="stagger-list">
@@ -68,6 +82,11 @@ export function ClaimTable({ claims }: { claims: Claim[] }) {
                 className="transition row-hover"
                 style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
               >
+                <Td muted>
+                  <span title={claim.id} style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>
+                    {shortClaimId(claim.id)}
+                  </span>
+                </Td>
                 <Td>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
                     <span style={{ fontWeight: 600 }}>{CLAIM_TYPE_LABEL[claim.claimType]}</span>
@@ -81,6 +100,9 @@ export function ClaimTable({ claims }: { claims: Claim[] }) {
                 </Td>
                 <Td>
                   <ProgressStepper stage={meta.stage} status={claim.status} />
+                </Td>
+                <Td muted={!(claim.confirmedRole ?? claim.assignedRole)}>
+                  {claim.confirmedRole ?? claim.assignedRole ? ROLE_LABEL[claim.confirmedRole ?? claim.assignedRole!] : "Not yet assigned"}
                 </Td>
                 <Td align="right">
                   <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
