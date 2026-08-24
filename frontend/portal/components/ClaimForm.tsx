@@ -18,6 +18,19 @@ const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
 const ACCEPTED_DOCUMENT_HINT =
   "Accepted: medical bills, discharge summaries, prescriptions (PDF, JPG, PNG — up to 10MB each)";
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
+
+function fileKey(f: File) {
+  return `${f.name}-${f.size}-${f.lastModified}`;
+}
+
+function fileIcon(f: File) {
+  return f.name.toLowerCase().endsWith(".pdf") ? "📄" : "🖼️";
+}
+
+function formatFileSize(bytes: number) {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type FieldErrors = Partial<Record<keyof Omit<NewClaimInput, "documents">, string>>;
 
@@ -40,6 +53,7 @@ export function ClaimForm() {
   const [claimAmount, setClaimAmount] = useState("");
   const [documents, setDocuments] = useState<File[]>([]);
   const [coverageAmount, setCoverageAmount] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [documentError, setDocumentError] = useState<string | null>(null);
@@ -47,14 +61,45 @@ export function ClaimForm() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
 
-  function removeDocument(index: number) {
-    const next = documents.filter((_, i) => i !== index);
-    setDocuments(next);
+  function syncFileInput(next: File[]) {
     if (fileInputRef.current) {
       const dataTransfer = new DataTransfer();
       next.forEach((file) => dataTransfer.items.add(file));
       fileInputRef.current.files = dataTransfer.files;
     }
+  }
+
+  function removeDocument(index: number) {
+    const next = documents.filter((_, i) => i !== index);
+    setDocuments(next);
+    syncFileInput(next);
+  }
+
+  /** Adds newly picked/dropped files to the existing selection (dedupes, size-checks, and filters to accepted types). */
+  function addFiles(incoming: File[]) {
+    const existingKeys = new Set(documents.map(fileKey));
+    const accepted: File[] = [];
+    let rejection: string | null = null;
+
+    for (const f of incoming) {
+      if (existingKeys.has(fileKey(f))) continue;
+      const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+      if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+        rejection = `"${f.name}" isn't a supported file type — only PDF, JPG, and PNG are accepted.`;
+        continue;
+      }
+      if (f.size > MAX_FILE_SIZE_BYTES) {
+        rejection = `"${f.name}" is over the 10MB limit — choose a smaller file.`;
+        continue;
+      }
+      existingKeys.add(fileKey(f));
+      accepted.push(f);
+    }
+
+    const next = [...documents, ...accepted];
+    setDocuments(next);
+    syncFileInput(next);
+    setDocumentError(rejection);
   }
 
   function validateStep(target: number): FieldErrors {
@@ -282,46 +327,97 @@ export function ClaimForm() {
 
         {step === 2 && (
           <Field label="Documents (at least one required)" hint={ACCEPTED_DOCUMENT_HINT} error={documentError ?? undefined}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(e) => {
-                const selected = Array.from(e.target.files ?? []);
-                const tooLarge = selected.find((f) => f.size > MAX_FILE_SIZE_BYTES);
-                if (tooLarge) {
-                  setDocumentError(`"${tooLarge.name}" is over the 10MB limit — choose a smaller file.`);
-                  setDocuments([]);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                  return;
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
                 }
-                setDocuments(selected);
-                setDocumentError(null);
               }}
-              style={{ ...inputStyle, padding: "0.5rem" }}
-            />
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                addFiles(Array.from(e.dataTransfer.files ?? []));
+              }}
+              className="transition"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.4rem",
+                padding: "2rem 1rem",
+                textAlign: "center",
+                borderRadius: "var(--radius-md)",
+                border: `2px dashed ${isDragging ? "var(--primary)" : "var(--border)"}`,
+                background: isDragging ? "var(--primary-soft)" : "var(--surface-2)",
+                cursor: "pointer",
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: "1.6rem" }}>
+                📎
+              </span>
+              <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>
+                {isDragging ? "Drop to add" : "Drag files here, or click to browse"}
+              </span>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>PDF, JPG, or PNG — up to 10MB each</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => {
+                  addFiles(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+                style={{ display: "none" }}
+              />
+            </div>
+
+            <span style={{ fontSize: "0.76rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.3em" }}>
+              🔒 Stored securely and only used to process this claim.
+            </span>
+
             {documents.length > 0 && (
-              <ul style={{ margin: "0.5rem 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              <ul className="stagger-list" style={{ margin: "0.25rem 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                 {documents.map((f, i) => (
                   <li
-                    key={`${f.name}-${f.lastModified}`}
+                    key={fileKey(f)}
+                    className="animate-fade-in-up"
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
                       gap: "0.75rem",
-                      padding: "0.35rem 0.6rem",
+                      padding: "0.4rem 0.6rem",
                       borderRadius: "var(--radius-sm)",
                       background: "var(--surface-2)",
                       fontSize: "0.85rem",
                     }}
                   >
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", overflow: "hidden" }}>
+                      <span aria-hidden="true">{fileIcon(f)}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                      <span style={{ flexShrink: 0, color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                        {formatFileSize(f.size)}
+                      </span>
+                      <span aria-hidden="true" className="animate-pop" style={{ flexShrink: 0, color: "var(--status-good-fg)" }}>
+                        ✓
+                      </span>
+                    </span>
                     <button
                       type="button"
                       onClick={() => removeDocument(i)}
                       aria-label={`Remove ${f.name}`}
+                      className="btn-press"
                       style={{
                         flexShrink: 0,
                         border: "none",

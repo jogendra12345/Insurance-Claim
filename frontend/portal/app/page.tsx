@@ -9,11 +9,19 @@ import { PolicySelect } from "@/components/PolicySelect";
 
 type LoadState = "loading" | "loaded" | "error";
 
+type StatFilter = "active" | "attention" | null;
+
+const STAT_FILTER_LABEL: Record<Exclude<StatFilter, null>, string> = {
+  active: "Active claims",
+  attention: "Needs attention",
+};
+
 export default function HomePage() {
   const [policyFilter, setPolicyFilter] = useState("");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [statFilter, setStatFilter] = useState<StatFilter>(null);
 
   const load = useCallback(async (policyNumber: string) => {
     setState("loading");
@@ -37,6 +45,13 @@ export default function HomePage() {
   const activeClaims = claims.filter((c) => ACTIVE_STATUSES.includes(c.status)).length;
   const totalValue = claims.reduce((sum, c) => sum + c.claimAmount, 0);
   const needsAttention = claims.filter((c) => c.status === "awaiting_info").length;
+
+  const visibleClaims =
+    statFilter === "active"
+      ? claims.filter((c) => ACTIVE_STATUSES.includes(c.status))
+      : statFilter === "attention"
+        ? claims.filter((c) => c.status === "awaiting_info")
+        : claims;
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "2rem" }}>
@@ -70,8 +85,14 @@ export default function HomePage() {
         className="stagger-list"
         style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.85rem" }}
       >
-        <StatCard label="Total claims" value={totalClaims} icon="📄" />
-        <StatCard label="Active claims" value={activeClaims} icon="⏳" />
+        <StatCard label="Total claims" value={totalClaims} icon="📄" active={statFilter === null} onClick={() => setStatFilter(null)} />
+        <StatCard
+          label="Active claims"
+          value={activeClaims}
+          icon="⏳"
+          active={statFilter === "active"}
+          onClick={() => setStatFilter((f) => (f === "active" ? null : "active"))}
+        />
         <StatCard
           label="Total claimed value"
           value={totalValue}
@@ -83,8 +104,25 @@ export default function HomePage() {
           value={needsAttention}
           icon="⚠"
           tone={needsAttention > 0 ? "attention" : undefined}
+          active={statFilter === "attention"}
+          onClick={() => setStatFilter((f) => (f === "attention" ? null : "attention"))}
         />
       </div>
+
+      {statFilter && (
+        <div className="animate-fade-in-up" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+            Showing: <strong style={{ color: "var(--text)" }}>{STAT_FILTER_LABEL[statFilter]}</strong>
+          </span>
+          <button
+            onClick={() => setStatFilter(null)}
+            className="transition"
+            style={{ border: "none", background: "none", color: "var(--primary)", fontSize: "0.82rem", cursor: "pointer", fontWeight: 600 }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flex: "1 1 260px" }}>
@@ -149,7 +187,14 @@ export default function HomePage() {
         <EmptyState title="No claims yet" body="Nothing's been submitted yet — submit a claim to see it here." />
       )}
 
-      {state === "loaded" && claims.length > 0 && <ClaimTable claims={claims} />}
+      {state === "loaded" && claims.length > 0 && visibleClaims.length === 0 && (
+        <EmptyState
+          title="Nothing matches this filter"
+          body={`No claims are currently "${statFilter ? STAT_FILTER_LABEL[statFilter] : ""}".`}
+        />
+      )}
+
+      {state === "loaded" && visibleClaims.length > 0 && <ClaimTable claims={visibleClaims} />}
     </main>
   );
 }
@@ -191,26 +236,37 @@ function StatCard({
   icon,
   format = (n: number) => String(Math.round(n)),
   tone,
+  onClick,
+  active,
 }: {
   label: string;
   value: number;
   icon: string;
   format?: (n: number) => string;
   tone?: "attention";
+  onClick?: () => void;
+  active?: boolean;
 }) {
   const animated = useCountUp(value);
+  const Wrapper = onClick ? "button" : "div";
   return (
-    <div
+    <Wrapper
+      onClick={onClick}
+      title={onClick ? `Filter claims: ${label}` : undefined}
       className="card-lift transition"
       style={{
-        border: "1px solid var(--border)",
+        border: `1px solid ${active ? "var(--primary)" : "var(--border)"}`,
         borderRadius: "var(--radius-md)",
-        background: "var(--surface)",
+        background: active ? "var(--primary-soft)" : "var(--surface)",
         boxShadow: "var(--shadow-card)",
         padding: "0.9rem 1.1rem",
         display: "flex",
         flexDirection: "column",
         gap: "0.25rem",
+        width: "100%",
+        textAlign: "left",
+        font: "inherit",
+        cursor: onClick ? "pointer" : "default",
       }}
     >
       <span
@@ -238,6 +294,6 @@ function StatCard({
       >
         {format(animated)}
       </span>
-    </div>
+    </Wrapper>
   );
 }
