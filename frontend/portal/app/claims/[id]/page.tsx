@@ -104,7 +104,7 @@ export default function ClaimDetailPage() {
             <DetailRow label="Incident date" value={new Date(claim.incidentDate).toLocaleDateString()} />
             <DetailRow label="What happened" value={claim.incidentDescription} />
             <DetailRow
-              label="Claim amount"
+              label="Requested claim amount"
               value={claim.claimAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}
             />
             {claim.confirmedRole && <DetailRow label="Handled by" value={claim.confirmedRole} />}

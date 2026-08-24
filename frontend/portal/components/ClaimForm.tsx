@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, submitClaim } from "@/lib/api";
-import type { ClaimType, NewClaimInput, Policy } from "@/lib/types";
-import { calculateAssignedClaimAmount } from "@/lib/claimAmount";
+import type { ClaimType, NewClaimInput } from "@/lib/types";
 import { PolicySelect } from "./PolicySelect";
 
 const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
@@ -53,28 +52,8 @@ export function ClaimForm() {
   const [incidentDescription, setIncidentDescription] = useState("");
   const [claimAmount, setClaimAmount] = useState("");
   const [documents, setDocuments] = useState<File[]>([]);
-  const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
+  const [coverageAmount, setCoverageAmount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-
-  // The ceiling the claimant may submit for — simulated adjudication
-  // (lib/claimAmount.ts), re-derived whenever the policy or claim type
-  // changes. Server-side re-checked in POST /api/claims since this is
-  // client-side only.
-  const assignedAmount = useMemo(
-    () => (selectedPolicy ? calculateAssignedClaimAmount(claimType, selectedPolicy) : null),
-    [selectedPolicy, claimType]
-  );
-
-  // Defaults the amount to the freshly (re)computed assigned amount — "accept
-  // it" is the starting point; the claimant edits downward from there. Only
-  // resets when the assigned amount itself changes (new policy/claim type),
-  // not on every keystroke, so a manual reduction sticks.
-  useEffect(() => {
-    if (assignedAmount !== null) {
-      setClaimAmount(String(assignedAmount));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignedAmount]);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [documentError, setDocumentError] = useState<string | null>(null);
@@ -136,12 +115,10 @@ export function ClaimForm() {
       else if (incidentDate > todayIso()) errors.incidentDate = "Incident date can't be in the future.";
       if (!incidentDescription.trim()) errors.incidentDescription = "Please describe what happened.";
       const amount = Number(claimAmount);
-      if (assignedAmount !== null && assignedAmount <= 0) {
-        errors.claimAmount = "Nothing is payable for this claim type — the typical cost is fully absorbed by this policy's deductible and copay.";
-      } else if (!claimAmount || Number.isNaN(amount) || amount <= 0) {
-        errors.claimAmount = "Enter a claim amount greater than 0.";
-      } else if (assignedAmount !== null && amount > assignedAmount) {
-        errors.claimAmount = `Claim amount can't exceed the assigned amount (${assignedAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}).`;
+      if (!claimAmount || Number.isNaN(amount) || amount <= 0) {
+        errors.claimAmount = "Enter a requested claim amount greater than 0.";
+      } else if (coverageAmount !== null && amount > coverageAmount) {
+        errors.claimAmount = `Requested claim amount must be less than or equal to the policy's coverage amount (${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}).`;
       }
     }
     return errors;
@@ -267,7 +244,7 @@ export function ClaimForm() {
                 onChange={setPolicyNumber}
                 onPolicySelect={(policy) => {
                   setClaimantName(policy?.policyholderName ?? "");
-                  setSelectedPolicy(policy ?? null);
+                  setCoverageAmount(policy?.coverageAmount ?? null);
                 }}
                 style={inputStyle}
               />
@@ -326,80 +303,24 @@ export function ClaimForm() {
               />
             </Field>
 
-            <Field label="Assigned claim amount" error={fieldErrors.claimAmount}>
-              {assignedAmount !== null ? (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.6rem",
-                    padding: "0.85rem 1rem",
-                    borderRadius: "var(--radius-md)",
-                    border: "1px solid var(--border)",
-                    background: "var(--surface-2)",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem" }}>
-                    <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                      Based on typical {CLAIM_TYPES.find((t) => t.value === claimType)?.label.toLowerCase()} costs,
-                      your policy&apos;s deductible, copay, and coinsurance
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-display)",
-                        fontSize: "1.3rem",
-                        fontWeight: 600,
-                        whiteSpace: "nowrap",
-                        color: assignedAmount > 0 ? "var(--text)" : "var(--status-attention-fg)",
-                      }}
-                    >
-                      {assignedAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}
-                    </span>
-                  </div>
-
-                  {assignedAmount > 0 && (
-                    <>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                        <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                          Amount to claim (accept as-is, or reduce it)
-                        </span>
-                        <input
-                          type="number"
-                          min="0.01"
-                          max={assignedAmount}
-                          step="0.01"
-                          value={claimAmount}
-                          onChange={(e) => setClaimAmount(e.target.value)}
-                          style={inputStyle}
-                        />
-                      </label>
-                      {claimAmount !== String(assignedAmount) && (
-                        <button
-                          type="button"
-                          onClick={() => setClaimAmount(String(assignedAmount))}
-                          className="transition"
-                          style={{
-                            alignSelf: "flex-start",
-                            border: "none",
-                            background: "none",
-                            color: "var(--primary)",
-                            fontSize: "0.8rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            padding: 0,
-                          }}
-                        >
-                          Reset to assigned amount
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              ) : (
-                <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                  Select a policy on the previous step to see your assigned amount.
-                </span>
-              )}
+            <Field
+              label="Requested claim amount (USD)"
+              error={fieldErrors.claimAmount}
+              hint={
+                coverageAmount !== null
+                  ? `Must be less than or equal to this policy's coverage amount: ${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}`
+                  : undefined
+              }
+            >
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={claimAmount}
+                onChange={(e) => setClaimAmount(e.target.value)}
+                placeholder="0.00"
+                style={inputStyle}
+              />
             </Field>
           </>
         )}
@@ -684,7 +605,7 @@ function ReviewSummary({
     ["Incident date", incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"],
     ["What happened", incidentDescription],
     [
-      "Claim amount",
+      "Requested claim amount",
       claimAmount
         ? Number(claimAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
         : "—",

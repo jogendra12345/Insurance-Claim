@@ -5,7 +5,6 @@ import { pool } from "../db";
 import { serializeClaim, serializeClaimDocument } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
 import { CLAIM_CASE_PROCESS_ID, zeebeClient } from "../zeebe";
-import { calculateAssignedClaimAmount, type ClaimType } from "../claimAmount";
 
 export const claimsRouter = Router();
 
@@ -103,8 +102,7 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     await client.query("BEGIN");
 
     const policyResult = await client.query(
-      `SELECT id, carrier_id, insurance_type, coverage_amount, deductible_amount, copay_amount, coinsurance_rate
-       FROM policies WHERE policy_number = $1`,
+      `SELECT id, carrier_id, insurance_type, coverage_amount FROM policies WHERE policy_number = $1`,
       [policyNumber]
     );
     if (policyResult.rowCount === 0) {
@@ -113,25 +111,11 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     }
     const policy = policyResult.rows[0];
 
-    // The ceiling a claimant may submit for — simulated adjudication
-    // (backend/api/src/claimAmount.ts), not a free-form amount. Mirrored
-    // client-side so the form pre-fills/caps to the same figure; re-checked
-    // here since the client-side cap is trivially bypassable.
-    const assignedAmount = calculateAssignedClaimAmount(claimType as ClaimType, {
-      deductibleAmount: Number(policy.deductible_amount),
-      copayAmount: Number(policy.copay_amount),
-      coinsuranceRate: Number(policy.coinsurance_rate),
-      coverageAmount: Number(policy.coverage_amount),
-    });
-    if (Number(claimAmount) > assignedAmount) {
+    if (Number(claimAmount) > Number(policy.coverage_amount)) {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        message: `Claim amount can't exceed the assigned amount for this claim (${assignedAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}).`,
+        message: `Requested claim amount must be less than or equal to the policy's coverage amount (${Number(policy.coverage_amount).toLocaleString()}).`,
       });
-    }
-    if (Number(claimAmount) <= 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Claim amount must be greater than 0." });
     }
 
     const claimResult = await client.query(

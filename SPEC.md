@@ -137,10 +137,7 @@ policies
   effective_date    date NOT NULL
   expiry_date       date NOT NULL
   premium_amount    numeric NOT NULL     -- >= 0
-  coverage_amount   numeric NOT NULL     -- > 0; ceiling on the auto-assigned claim amount (see claims.claim_amount)
-  deductible_amount numeric NOT NULL     -- >= 0; subtracted from the claim type's typical cost before coinsurance
-  copay_amount      numeric NOT NULL     -- >= 0; flat fee subtracted after the deductible
-  coinsurance_rate  numeric NOT NULL     -- 0-1; the patient's share of what's left — plan pays (1 - this)
+  coverage_amount   numeric NOT NULL     -- > 0; a claim against this policy must be <= it
   created_at        timestamptz NOT NULL DEFAULT now()
   updated_at        timestamptz NOT NULL DEFAULT now()
 
@@ -156,7 +153,7 @@ claims
   claimant_email        text NOT NULL
   incident_date         date NOT NULL
   incident_description  text NOT NULL
-  claim_amount          numeric NOT NULL     -- auto-assigned, claimant may only accept or reduce it — never increase past it (see "Auto-assigned claim amount" below); enforced at intake (POST /api/claims) and client-side (ClaimForm), ahead of the validate-claim worker's own checks
+  claim_amount          numeric NOT NULL     -- requested claim amount; must be <= the matched policy's coverage_amount, enforced at intake (POST /api/claims) and client-side (ClaimForm), ahead of the validate-claim worker's own checks
   status                text NOT NULL        -- submitted | validating | triage | in_review | approved | denied | awaiting_info
   case_summary          text NULL            -- AI-generated summary for reviewers
   risk_score            numeric NULL         -- 0-100
@@ -196,22 +193,6 @@ audit_log
 ```
 
 Every job worker and every user-task completion handler writes at least one `audit_log` row — see §13.
-
-### Auto-assigned claim amount
-
-`claims.claim_amount` isn't free-form: the portal computes an assigned amount and the claimant may accept it or reduce it, but never enter more. Simulates real claim adjudication's sequence — allowed amount → deductible → copay → coinsurance split — capped at the policy's `coverage_amount`:
-
-```
-allowed         = policy.coverage_amount * TYPICAL_COST_PCT_OF_COVERAGE[claimType]  -- see below
-afterDeductible = max(0, allowed - policy.deductible_amount)
-afterCopay      = max(0, afterDeductible - policy.copay_amount)
-planPays        = afterCopay * (1 - policy.coinsurance_rate)
-assignedAmount  = min(planPays, policy.coverage_amount)
-```
-
-`TYPICAL_COST_PCT_OF_COVERAGE` (share of *this policy's* `coverage_amount`, health claim types): `outpatient` 4%, `inpatient` 30%, `pharmacy` 3%, `dental` 3%, `maternity` 20%, `other` 3%. Expressed as a percentage of coverage rather than a flat dollar figure so the assigned amount scales with the policy (a $120,000-coverage policy assigns a bigger amount than a $25,000 one for the same claim type) instead of being dominated by a fixed baseline unrelated to the policy's actual size — this stands in for a real fee schedule / extracted bill total, neither of which exists yet since `extract-evidence` (§12) isn't built. Revisit once that worker can read an actual billed amount off the uploaded documents.
-
-Implemented twice by necessity — `backend/api/src/claimAmount.ts` (authoritative; re-checked server-side in `POST /api/claims` since the client-side cap is trivially bypassable) and `frontend/portal/lib/claimAmount.ts` (drives the `ClaimForm` UI). Keep both in sync by hand.
 
 ### Migration tooling
 
