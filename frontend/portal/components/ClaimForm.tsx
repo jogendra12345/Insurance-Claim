@@ -43,14 +43,42 @@ type FieldErrors = Partial<Record<keyof Omit<NewClaimInput, "documents">, string
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-const STEPS = ["Policy", "About the incident", "Diagnosis, Procedure & Provider", "Documents", "Review"] as const;
+// Single-scroll sectioned form — replaces the earlier step-gated wizard.
+// Same field groupings as before, but all visible at once; a sticky nav
+// jumps between sections instead of gating progress behind Continue/Back.
+const SECTIONS = [
+  { id: "policy", label: "Policy" },
+  { id: "incident", label: "About the incident" },
+  { id: "diagnosis", label: "Diagnosis, Procedure & Provider" },
+  { id: "documents", label: "Documents" },
+  { id: "review", label: "Review & submit" },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+const SECTION_FIELD_KEYS: Partial<Record<SectionId, (keyof FieldErrors)[]>> = {
+  policy: ["policyNumber"],
+  incident: ["claimantName", "claimantEmail", "incidentDate", "incidentDescription", "claimAmount"],
+  diagnosis: [
+    "diagnosisCode",
+    "procedureCode",
+    "serviceDateFrom",
+    "serviceDateTo",
+    "totalBilledAmount",
+    "coordinationOfBenefits",
+    "providerNpi",
+    "providerTaxId",
+    "facilityName",
+    "facilityAddress",
+  ],
+};
 
 export function ClaimForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sectionRefs = useRef<Partial<Record<SectionId, HTMLDivElement | null>>>({});
 
-  const [step, setStep] = useState(0);
   const [policyNumber, setPolicyNumber] = useState(searchParams.get("policyNumber") ?? "");
   const [claimType, setClaimType] = useState<ClaimType>("outpatient");
   const [claimantName, setClaimantName] = useState("");
@@ -74,13 +102,18 @@ export function ClaimForm() {
   const [coordinationOfBenefits, setCoordinationOfBenefits] = useState<boolean | null>(null);
   const [attested, setAttested] = useState(false);
 
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
 
   const showServiceDateTo = MULTI_DAY_CLAIM_TYPES.includes(claimType);
+
+  function markTouched(name: string) {
+    setTouched((prev) => (prev.has(name) ? prev : new Set(prev).add(name)));
+  }
 
   function syncFileInput(next: File[]) {
     if (fileInputRef.current) {
@@ -123,106 +156,99 @@ export function ClaimForm() {
     setDocumentError(rejection);
   }
 
-  function validateStep(target: number): FieldErrors {
+  /** Every field's validation in one pass — used for both live inline errors and the final submit-time check. */
+  function validateAll(): FieldErrors {
     const errors: FieldErrors = {};
-    if (target === 0) {
-      if (!policyNumber.trim()) errors.policyNumber = "Choose a policy to continue.";
+
+    if (!policyNumber.trim()) errors.policyNumber = "Choose a policy to continue.";
+
+    if (!claimantName.trim()) errors.claimantName = "Name is required.";
+    if (!claimantEmail.trim()) errors.claimantEmail = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(claimantEmail)) errors.claimantEmail = "Enter a valid email.";
+    if (!incidentDate) errors.incidentDate = "Incident date is required.";
+    else if (incidentDate > todayIso()) errors.incidentDate = "Incident date can't be in the future.";
+    if (!incidentDescription.trim()) errors.incidentDescription = "Please describe what happened.";
+    const amount = Number(claimAmount);
+    if (!claimAmount || Number.isNaN(amount) || amount <= 0) {
+      errors.claimAmount = "Enter a requested claim amount greater than 0.";
+    } else if (coverageAmount !== null && amount > coverageAmount) {
+      errors.claimAmount = `Requested claim amount must be less than or equal to the policy's coverage amount (${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}).`;
     }
-    if (target === 1) {
-      if (!claimantName.trim()) errors.claimantName = "Name is required.";
-      if (!claimantEmail.trim()) errors.claimantEmail = "Email is required.";
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(claimantEmail)) errors.claimantEmail = "Enter a valid email.";
-      if (!incidentDate) errors.incidentDate = "Incident date is required.";
-      else if (incidentDate > todayIso()) errors.incidentDate = "Incident date can't be in the future.";
-      if (!incidentDescription.trim()) errors.incidentDescription = "Please describe what happened.";
-      const amount = Number(claimAmount);
-      if (!claimAmount || Number.isNaN(amount) || amount <= 0) {
-        errors.claimAmount = "Enter a requested claim amount greater than 0.";
-      } else if (coverageAmount !== null && amount > coverageAmount) {
-        errors.claimAmount = `Requested claim amount must be less than or equal to the policy's coverage amount (${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}).`;
-      }
+
+    if (!diagnosisCode.trim()) errors.diagnosisCode = "Diagnosis code is required.";
+    else if (!ICD10_PATTERN.test(diagnosisCode.trim())) errors.diagnosisCode = "Enter a valid ICD-10 code (e.g. E11.9).";
+
+    if (!procedureCode.trim()) errors.procedureCode = "Procedure code is required.";
+    else if (!CPT_OR_HCPCS_PATTERN.test(procedureCode.trim()))
+      errors.procedureCode = "Enter a valid CPT (5 digits) or HCPCS (letter + 4 digits) code.";
+
+    if (!serviceDateFrom) errors.serviceDateFrom = "Service date is required.";
+    else if (serviceDateFrom > todayIso()) errors.serviceDateFrom = "Service date can't be in the future.";
+
+    if (showServiceDateTo) {
+      if (!serviceDateTo) errors.serviceDateTo = "End date of service is required for this claim type.";
+      else if (serviceDateFrom && serviceDateTo < serviceDateFrom) errors.serviceDateTo = "End date can't be before the start date.";
     }
-    if (target === 2) {
-      if (!diagnosisCode.trim()) errors.diagnosisCode = "Diagnosis code is required.";
-      else if (!ICD10_PATTERN.test(diagnosisCode.trim())) errors.diagnosisCode = "Enter a valid ICD-10 code (e.g. E11.9).";
 
-      if (!procedureCode.trim()) errors.procedureCode = "Procedure code is required.";
-      else if (!CPT_OR_HCPCS_PATTERN.test(procedureCode.trim()))
-        errors.procedureCode = "Enter a valid CPT (5 digits) or HCPCS (letter + 4 digits) code.";
-
-      if (!serviceDateFrom) errors.serviceDateFrom = "Service date is required.";
-      else if (serviceDateFrom > todayIso()) errors.serviceDateFrom = "Service date can't be in the future.";
-
-      if (showServiceDateTo) {
-        if (!serviceDateTo) errors.serviceDateTo = "End date of service is required for this claim type.";
-        else if (serviceDateFrom && serviceDateTo < serviceDateFrom) errors.serviceDateTo = "End date can't be before the start date.";
-      }
-
-      const billed = Number(totalBilledAmount);
-      if (!totalBilledAmount || Number.isNaN(billed) || billed <= 0) {
-        errors.totalBilledAmount = "Enter a total billed amount greater than 0.";
-      }
-
-      if (coordinationOfBenefits === null) {
-        errors.coordinationOfBenefits = "Please answer whether you have other coverage.";
-      }
-
-      if (!providerNpi.trim()) errors.providerNpi = "Provider NPI is required.";
-      else if (!/^[0-9]{10}$/.test(providerNpi.trim())) errors.providerNpi = "NPI must be exactly 10 digits.";
-
-      if (!providerTaxId.trim()) errors.providerTaxId = "Provider tax ID is required.";
-      if (!facilityName.trim()) errors.facilityName = "Facility name is required.";
-      if (!facilityAddress.trim()) errors.facilityAddress = "Facility address is required.";
+    const billed = Number(totalBilledAmount);
+    if (!totalBilledAmount || Number.isNaN(billed) || billed <= 0) {
+      errors.totalBilledAmount = "Enter a total billed amount greater than 0.";
     }
+
+    if (coordinationOfBenefits === null) {
+      errors.coordinationOfBenefits = "Please answer whether you have other coverage.";
+    }
+
+    if (!providerNpi.trim()) errors.providerNpi = "Provider NPI is required.";
+    else if (!/^[0-9]{10}$/.test(providerNpi.trim())) errors.providerNpi = "NPI must be exactly 10 digits.";
+
+    if (!providerTaxId.trim()) errors.providerTaxId = "Provider tax ID is required.";
+    if (!facilityName.trim()) errors.facilityName = "Facility name is required.";
+    if (!facilityAddress.trim()) errors.facilityAddress = "Facility address is required.";
+
     return errors;
   }
 
-  function validateDocuments(): string | null {
-    return documents.length === 0 ? "Attach at least one supporting document to continue." : null;
+  const errors = validateAll();
+  const docError = documents.length === 0 ? "Attach at least one supporting document to continue." : null;
+
+  /** Only show a field's error once the claimant has left that field (or after a submit attempt). */
+  function errorFor(name: keyof FieldErrors): string | undefined {
+    return touched.has(name) || attemptedSubmit ? errors[name] : undefined;
   }
 
-  function goNext() {
-    if (step === 3) {
-      const docError = validateDocuments();
-      setDocumentError(docError);
-      if (docError) return;
-      setStep((s) => Math.min(s + 1, STEPS.length - 1));
-      return;
+  function sectionStatus(id: SectionId): "complete" | "error" | "incomplete" {
+    if (id === "documents") {
+      if (documents.length > 0) return "complete";
+      return attemptedSubmit ? "error" : "incomplete";
     }
-    const errors = validateStep(step);
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    if (id === "review") {
+      if (attested) return "complete";
+      return attemptedSubmit ? "error" : "incomplete";
+    }
+    const keys = SECTION_FIELD_KEYS[id] ?? [];
+    const hasError = keys.some((k) => errors[k]);
+    if (!hasError) return "complete";
+    return attemptedSubmit || keys.some((k) => touched.has(k)) ? "error" : "incomplete";
   }
 
-  function goBack() {
-    setFieldErrors({});
-    setStep((s) => Math.max(s - 1, 0));
+  function scrollToSection(id: SectionId) {
+    sectionRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const stepZeroErrors = validateStep(0);
-    const stepOneErrors = validateStep(1);
-    const stepTwoErrors = validateStep(2);
-    const docError = validateDocuments();
-    const errors = { ...stepZeroErrors, ...stepOneErrors, ...stepTwoErrors };
-    if (Object.keys(errors).length > 0 || docError) {
-      setFieldErrors(errors);
-      setDocumentError(docError);
-      setStep(
-        Object.keys(stepZeroErrors).length > 0
-          ? 0
-          : Object.keys(stepOneErrors).length > 0
-            ? 1
-            : Object.keys(stepTwoErrors).length > 0
-              ? 2
-              : 3
-      );
-      return;
-    }
-    if (!attested) {
-      setSubmitError("You must attest that the information provided is accurate before submitting.");
+    const hasFieldErrors = Object.keys(errors).length > 0;
+
+    if (hasFieldErrors || docError || !attested) {
+      setAttemptedSubmit(true);
+      setTouched((prev) => {
+        const next = new Set(prev);
+        Object.keys(errors).forEach((k) => next.add(k));
+        return next;
+      });
+      const firstBadSection = SECTIONS.find((s) => sectionStatus(s.id) === "error") ?? SECTIONS.find((s) => sectionStatus(s.id) !== "complete");
+      if (firstBadSection) scrollToSection(firstBadSection.id);
       return;
     }
 
@@ -304,238 +330,282 @@ export function ClaimForm() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-      <Stepper current={step} />
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <SectionNav onJump={scrollToSection} status={sectionStatus} />
 
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
-        noValidate
-      >
-      <div key={step} className="animate-fade-in-up" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-        {step === 0 && (
-          <>
-            <Field label="Policy number" error={fieldErrors.policyNumber}>
-              <PolicySelect
-                value={policyNumber}
-                onChange={setPolicyNumber}
-                onPolicySelect={(policy) => {
-                  setClaimantName(policy?.policyholderName ?? "");
-                  setCoverageAmount(policy?.coverageAmount ?? null);
-                }}
-                style={inputStyle}
-              />
-            </Field>
+      <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <SectionCard
+          id="policy"
+          index={1}
+          title="Policy"
+          status={sectionStatus("policy")}
+          innerRef={(el) => (sectionRefs.current.policy = el)}
+        >
+          <Field label="Policy number" error={errorFor("policyNumber")}>
+            <PolicySelect
+              value={policyNumber}
+              onChange={(v) => {
+                setPolicyNumber(v);
+                markTouched("policyNumber");
+              }}
+              onPolicySelect={(policy) => {
+                setClaimantName(policy?.policyholderName ?? "");
+                setCoverageAmount(policy?.coverageAmount ?? null);
+              }}
+              style={inputStyle}
+            />
+          </Field>
 
-            <Field label="Claim type">
-              <select value={claimType} onChange={(e) => setClaimType(e.target.value as ClaimType)} style={inputStyle}>
-                {CLAIM_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </>
-        )}
+          <Field label="Claim type">
+            <select value={claimType} onChange={(e) => setClaimType(e.target.value as ClaimType)} style={inputStyle}>
+              {CLAIM_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </SectionCard>
 
-        {step === 1 && (
-          <>
-            <Field label="Your name" error={fieldErrors.claimantName}>
-              <input
-                value={claimantName}
-                onChange={(e) => setClaimantName(e.target.value)}
-                placeholder="Jane Doe"
-                style={inputStyle}
-              />
-            </Field>
+        <SectionCard
+          id="incident"
+          index={2}
+          title="About the incident"
+          status={sectionStatus("incident")}
+          innerRef={(el) => (sectionRefs.current.incident = el)}
+        >
+          <Field label="Your name" error={errorFor("claimantName")}>
+            <input
+              value={claimantName}
+              onChange={(e) => setClaimantName(e.target.value)}
+              onBlur={() => markTouched("claimantName")}
+              placeholder="Jane Doe"
+              style={inputStyle}
+            />
+          </Field>
 
-            <Field label="Email" error={fieldErrors.claimantEmail}>
-              <input
-                type="email"
-                value={claimantEmail}
-                onChange={(e) => setClaimantEmail(e.target.value)}
-                placeholder="jane.doe@example.com"
-                style={inputStyle}
-              />
-            </Field>
+          <Field label="Email" error={errorFor("claimantEmail")}>
+            <input
+              type="email"
+              value={claimantEmail}
+              onChange={(e) => setClaimantEmail(e.target.value)}
+              onBlur={() => markTouched("claimantEmail")}
+              placeholder="jane.doe@example.com"
+              style={inputStyle}
+            />
+          </Field>
 
-            <Field label="Incident date" error={fieldErrors.incidentDate}>
+          <Field label="Incident date" error={errorFor("incidentDate")}>
+            <input
+              type="date"
+              value={incidentDate}
+              max={todayIso()}
+              onChange={(e) => setIncidentDate(e.target.value)}
+              onBlur={() => markTouched("incidentDate")}
+              style={inputStyle}
+            />
+          </Field>
+
+          <Field label="What happened" error={errorFor("incidentDescription")}>
+            <textarea
+              value={incidentDescription}
+              onChange={(e) => setIncidentDescription(e.target.value)}
+              onBlur={() => markTouched("incidentDescription")}
+              rows={4}
+              placeholder="Briefly describe what happened, when, and where."
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+          </Field>
+
+          <Field
+            label="Requested claim amount (USD)"
+            error={errorFor("claimAmount")}
+            hint={
+              coverageAmount !== null
+                ? `Must be less than or equal to this policy's coverage amount: ${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}`
+                : undefined
+            }
+          >
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={claimAmount}
+              onChange={(e) => setClaimAmount(e.target.value)}
+              onBlur={() => markTouched("claimAmount")}
+              placeholder="0.00"
+              style={inputStyle}
+            />
+          </Field>
+        </SectionCard>
+
+        <SectionCard
+          id="diagnosis"
+          index={3}
+          title="Diagnosis, Procedure & Provider"
+          status={sectionStatus("diagnosis")}
+          innerRef={(el) => (sectionRefs.current.diagnosis = el)}
+        >
+          <Field label="Diagnosis code (ICD-10)" error={errorFor("diagnosisCode")}>
+            <input
+              value={diagnosisCode}
+              onChange={(e) => setDiagnosisCode(e.target.value)}
+              onBlur={() => {
+                setDiagnosisCode((v) => v.trim().toUpperCase());
+                markTouched("diagnosisCode");
+              }}
+              placeholder="E11.9"
+              style={inputStyle}
+            />
+          </Field>
+
+          <Field label="Procedure code (CPT/HCPCS)" error={errorFor("procedureCode")}>
+            <input
+              value={procedureCode}
+              onChange={(e) => setProcedureCode(e.target.value)}
+              onBlur={() => {
+                setProcedureCode((v) => v.trim().toUpperCase());
+                markTouched("procedureCode");
+              }}
+              placeholder="99213"
+              style={inputStyle}
+            />
+          </Field>
+
+          <Field label="Date of service" error={errorFor("serviceDateFrom")}>
+            <input
+              type="date"
+              value={serviceDateFrom}
+              max={todayIso()}
+              onChange={(e) => setServiceDateFrom(e.target.value)}
+              onBlur={() => markTouched("serviceDateFrom")}
+              style={inputStyle}
+            />
+          </Field>
+
+          {showServiceDateTo && (
+            <Field label="Date of service (through)" error={errorFor("serviceDateTo")}>
               <input
                 type="date"
-                value={incidentDate}
+                value={serviceDateTo}
+                min={serviceDateFrom || undefined}
                 max={todayIso()}
-                onChange={(e) => setIncidentDate(e.target.value)}
+                onChange={(e) => setServiceDateTo(e.target.value)}
+                onBlur={() => markTouched("serviceDateTo")}
                 style={inputStyle}
               />
             </Field>
+          )}
 
-            <Field label="What happened" error={fieldErrors.incidentDescription}>
-              <textarea
-                value={incidentDescription}
-                onChange={(e) => setIncidentDescription(e.target.value)}
-                rows={4}
-                placeholder="Briefly describe what happened, when, and where."
-                style={{ ...inputStyle, resize: "vertical" }}
-              />
-            </Field>
+          <Field
+            label="Total billed amount (USD)"
+            error={errorFor("totalBilledAmount")}
+            hint="The full amount the provider billed for this visit — separate from what you're requesting above."
+          >
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={totalBilledAmount}
+              onChange={(e) => setTotalBilledAmount(e.target.value)}
+              onBlur={() => markTouched("totalBilledAmount")}
+              placeholder="0.00"
+              style={inputStyle}
+            />
+          </Field>
 
-            <Field
-              label="Requested claim amount (USD)"
-              error={fieldErrors.claimAmount}
-              hint={
-                coverageAmount !== null
-                  ? `Must be less than or equal to this policy's coverage amount: ${coverageAmount.toLocaleString(undefined, { style: "currency", currency: "USD" })}`
-                  : undefined
-              }
-            >
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={claimAmount}
-                onChange={(e) => setClaimAmount(e.target.value)}
-                placeholder="0.00"
-                style={inputStyle}
-              />
-            </Field>
-          </>
-        )}
+          <Field
+            label="Do you have other health insurance coverage that might also pay for this claim?"
+            error={errorFor("coordinationOfBenefits")}
+          >
+            <div style={{ display: "flex", gap: "0.6rem" }}>
+              {(["Yes", "No"] as const).map((label) => {
+                const value = label === "Yes";
+                const active = coordinationOfBenefits === value;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setCoordinationOfBenefits(value);
+                      markTouched("coordinationOfBenefits");
+                    }}
+                    className="transition btn-press"
+                    style={{
+                      flex: 1,
+                      padding: "0.6rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: `1px solid ${active ? "var(--primary)" : "var(--border)"}`,
+                      background: active ? "var(--primary-soft)" : "var(--surface)",
+                      color: active ? "var(--primary)" : "var(--text)",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
 
-        {step === 2 && (
-          <>
-            <Field label="Diagnosis code (ICD-10)" error={fieldErrors.diagnosisCode}>
-              <input
-                value={diagnosisCode}
-                onChange={(e) => setDiagnosisCode(e.target.value)}
-                onBlur={() => setDiagnosisCode((v) => v.trim().toUpperCase())}
-                placeholder="E11.9"
-                style={inputStyle}
-              />
-            </Field>
+          <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "0.25rem" }}>Provider / facility</div>
 
-            <Field label="Procedure code (CPT/HCPCS)" error={fieldErrors.procedureCode}>
-              <input
-                value={procedureCode}
-                onChange={(e) => setProcedureCode(e.target.value)}
-                onBlur={() => setProcedureCode((v) => v.trim().toUpperCase())}
-                placeholder="99213"
-                style={inputStyle}
-              />
-            </Field>
+          <Field label="Provider NPI" error={errorFor("providerNpi")}>
+            <input
+              value={providerNpi}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={(e) => setProviderNpi(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              onBlur={() => markTouched("providerNpi")}
+              placeholder="1234567890"
+              style={inputStyle}
+            />
+          </Field>
 
-            <Field label="Date of service" error={fieldErrors.serviceDateFrom}>
-              <input
-                type="date"
-                value={serviceDateFrom}
-                max={todayIso()}
-                onChange={(e) => setServiceDateFrom(e.target.value)}
-                style={inputStyle}
-              />
-            </Field>
+          <Field label="Provider tax ID" error={errorFor("providerTaxId")}>
+            <input
+              value={providerTaxId}
+              onChange={(e) => setProviderTaxId(e.target.value)}
+              onBlur={() => markTouched("providerTaxId")}
+              placeholder="12-3456789"
+              style={inputStyle}
+            />
+          </Field>
 
-            {showServiceDateTo && (
-              <Field label="Date of service (through)" error={fieldErrors.serviceDateTo}>
-                <input
-                  type="date"
-                  value={serviceDateTo}
-                  min={serviceDateFrom || undefined}
-                  max={todayIso()}
-                  onChange={(e) => setServiceDateTo(e.target.value)}
-                  style={inputStyle}
-                />
-              </Field>
-            )}
+          <Field label="Facility name" error={errorFor("facilityName")}>
+            <input
+              value={facilityName}
+              onChange={(e) => setFacilityName(e.target.value)}
+              onBlur={() => markTouched("facilityName")}
+              placeholder="Riverside Medical Center"
+              style={inputStyle}
+            />
+          </Field>
 
-            <Field
-              label="Total billed amount (USD)"
-              error={fieldErrors.totalBilledAmount}
-              hint="The full amount the provider billed for this visit — separate from what you're requesting above."
-            >
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={totalBilledAmount}
-                onChange={(e) => setTotalBilledAmount(e.target.value)}
-                placeholder="0.00"
-                style={inputStyle}
-              />
-            </Field>
+          <Field label="Facility address" error={errorFor("facilityAddress")}>
+            <input
+              value={facilityAddress}
+              onChange={(e) => setFacilityAddress(e.target.value)}
+              onBlur={() => markTouched("facilityAddress")}
+              placeholder="123 Main St, Springfield"
+              style={inputStyle}
+            />
+          </Field>
+        </SectionCard>
 
-            <Field label="Do you have other health insurance coverage that might also pay for this claim?" error={fieldErrors.coordinationOfBenefits}>
-              <div style={{ display: "flex", gap: "0.6rem" }}>
-                {(["Yes", "No"] as const).map((label) => {
-                  const value = label === "Yes";
-                  const active = coordinationOfBenefits === value;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => setCoordinationOfBenefits(value)}
-                      className="transition btn-press"
-                      style={{
-                        flex: 1,
-                        padding: "0.6rem",
-                        borderRadius: "var(--radius-sm)",
-                        border: `1px solid ${active ? "var(--primary)" : "var(--border)"}`,
-                        background: active ? "var(--primary-soft)" : "var(--surface)",
-                        color: active ? "var(--primary)" : "var(--text)",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </Field>
-
-            <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "0.25rem" }}>Provider / facility</div>
-
-            <Field label="Provider NPI" error={fieldErrors.providerNpi}>
-              <input
-                value={providerNpi}
-                inputMode="numeric"
-                maxLength={10}
-                onChange={(e) => setProviderNpi(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                placeholder="1234567890"
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Provider tax ID" error={fieldErrors.providerTaxId}>
-              <input
-                value={providerTaxId}
-                onChange={(e) => setProviderTaxId(e.target.value)}
-                placeholder="12-3456789"
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Facility name" error={fieldErrors.facilityName}>
-              <input
-                value={facilityName}
-                onChange={(e) => setFacilityName(e.target.value)}
-                placeholder="Riverside Medical Center"
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Facility address" error={fieldErrors.facilityAddress}>
-              <input
-                value={facilityAddress}
-                onChange={(e) => setFacilityAddress(e.target.value)}
-                placeholder="123 Main St, Springfield"
-                style={inputStyle}
-              />
-            </Field>
-          </>
-        )}
-
-        {step === 3 && (
-          <Field label="Documents (at least one required)" hint={ACCEPTED_DOCUMENT_HINT} error={documentError ?? undefined}>
+        <SectionCard
+          id="documents"
+          index={4}
+          title="Documents"
+          status={sectionStatus("documents")}
+          innerRef={(el) => (sectionRefs.current.documents = el)}
+        >
+          <Field
+            label="Documents (at least one required)"
+            hint={ACCEPTED_DOCUMENT_HINT}
+            error={documentError ?? (attemptedSubmit ? docError ?? undefined : undefined)}
+          >
             <div
               role="button"
               tabIndex={0}
@@ -645,9 +715,15 @@ export function ClaimForm() {
               </ul>
             )}
           </Field>
-        )}
+        </SectionCard>
 
-        {step === 4 && (
+        <SectionCard
+          id="review"
+          index={5}
+          title="Review & submit"
+          status={sectionStatus("review")}
+          innerRef={(el) => (sectionRefs.current.review = el)}
+        >
           <ReviewSummary
             policyNumber={policyNumber}
             claimType={CLAIM_TYPES.find((t) => t.value === claimType)?.label ?? claimType}
@@ -666,9 +742,7 @@ export function ClaimForm() {
             providerNpi={providerNpi}
             documentCount={documents.length}
           />
-        )}
 
-        {step === 4 && (
           <label
             className="transition"
             style={{
@@ -677,7 +751,7 @@ export function ClaimForm() {
               gap: "0.6rem",
               padding: "0.85rem 1rem",
               borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--border)",
+              border: `1px solid ${attemptedSubmit && !attested ? "var(--danger-border)" : "var(--border)"}`,
               background: "var(--surface-2)",
               fontSize: "0.85rem",
               cursor: "pointer",
@@ -691,8 +765,12 @@ export function ClaimForm() {
             />
             <span>I attest that the information provided in this claim is true and accurate to the best of my knowledge.</span>
           </label>
-        )}
-      </div>
+          {attemptedSubmit && !attested && (
+            <span style={{ fontSize: "0.78rem", color: "var(--danger-fg)" }} role="alert">
+              Check the box above to submit.
+            </span>
+          )}
+        </SectionCard>
 
         {submitError && (
           <div
@@ -710,113 +788,171 @@ export function ClaimForm() {
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
-          <button
-            type="button"
-            onClick={goBack}
-            disabled={step === 0}
-            className="transition btn-press"
-            style={{
-              padding: "0.7rem 1.2rem",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--border)",
-              background: "var(--surface)",
-              color: step === 0 ? "var(--text-muted)" : "var(--text)",
-              fontWeight: 600,
-              cursor: step === 0 ? "default" : "pointer",
-              visibility: step === 0 ? "hidden" : "visible",
-            }}
-          >
-            Back
-          </button>
-
-          {step < STEPS.length - 1 ? (
-            <button
-              type="button"
-              onClick={goNext}
-              className="transition btn-press"
-              style={{
-                padding: "0.7rem 1.4rem",
-                borderRadius: "var(--radius-sm)",
-                border: "none",
-                background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
-                color: "var(--primary-contrast)",
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 2px 10px var(--primary-glow)",
-              }}
-            >
-              Continue
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={submitting || !attested}
-              className="transition btn-press"
-              style={{
-                padding: "0.7rem 1.4rem",
-                borderRadius: "var(--radius-sm)",
-                border: "none",
-                background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
-                color: "var(--primary-contrast)",
-                fontWeight: 600,
-                fontSize: "1rem",
-                cursor: submitting || !attested ? "default" : "pointer",
-                opacity: submitting || !attested ? 0.7 : 1,
-              }}
-            >
-              {submitting ? "Submitting…" : "Submit claim"}
-            </button>
-          )}
-        </div>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="transition btn-press"
+          style={{
+            alignSelf: "flex-end",
+            padding: "0.75rem 1.6rem",
+            borderRadius: "var(--radius-sm)",
+            border: "none",
+            background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
+            color: "var(--primary-contrast)",
+            fontWeight: 600,
+            fontSize: "1rem",
+            cursor: submitting ? "default" : "pointer",
+            opacity: submitting ? 0.7 : 1,
+            boxShadow: "0 2px 10px var(--primary-glow)",
+          }}
+        >
+          {submitting ? "Submitting…" : "Submit claim"}
+        </button>
       </form>
     </div>
   );
 }
 
-function Stepper({ current }: { current: number }) {
+function SectionNav({
+  onJump,
+  status,
+}: {
+  onJump: (id: SectionId) => void;
+  status: (id: SectionId) => "complete" | "error" | "incomplete";
+}) {
   return (
-    <ol style={{ display: "flex", gap: "0.5rem", padding: 0, margin: 0, listStyle: "none" }}>
-      {STEPS.map((label, i) => {
-        const done = i < current;
-        const active = i === current;
+    <nav
+      aria-label="Form sections"
+      style={{
+        position: "sticky",
+        top: "64px",
+        zIndex: 20,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "0.5rem",
+        padding: "0.6rem",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--border)",
+        background: "color-mix(in srgb, var(--surface) 92%, transparent)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        boxShadow: "var(--shadow-card)",
+      }}
+    >
+      {SECTIONS.map((s, i) => {
+        const st = status(s.id);
+        const tone =
+          st === "complete"
+            ? { bg: "var(--status-good-bg)", fg: "var(--status-good-fg)", glyph: "✓" }
+            : st === "error"
+              ? { bg: "var(--status-bad-bg)", fg: "var(--status-bad-fg)", glyph: "!" }
+              : { bg: "var(--surface-2)", fg: "var(--text-muted)", glyph: String(i + 1) };
         return (
-          <li key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: i < STEPS.length - 1 ? 1 : undefined }}>
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onJump(s.id)}
+            className="transition btn-press"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              padding: "0.4rem 0.75rem",
+              borderRadius: "999px",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              cursor: "pointer",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              color: "var(--text)",
+            }}
+          >
             <span
-              className="transition"
+              aria-hidden="true"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: "24px",
-                height: "24px",
+                width: "18px",
+                height: "18px",
                 borderRadius: "50%",
-                fontSize: "0.78rem",
-                fontWeight: 700,
+                fontSize: "0.7rem",
+                background: tone.bg,
+                color: tone.fg,
                 flexShrink: 0,
-                background: done || active ? "var(--primary)" : "var(--surface-2)",
-                color: done || active ? "var(--primary-contrast)" : "var(--text-muted)",
-                transform: active ? "scale(1.15)" : "scale(1)",
-              }}
-              aria-hidden="true"
-            >
-              {done ? "✓" : i + 1}
-            </span>
-            <span
-              style={{
-                fontSize: "0.82rem",
-                fontWeight: active ? 600 : 500,
-                color: active ? "var(--text)" : "var(--text-muted)",
-                whiteSpace: "nowrap",
               }}
             >
-              {label}
+              {tone.glyph}
             </span>
-            {i < STEPS.length - 1 && <span style={{ flex: 1, height: "1px", background: "var(--border)" }} />}
-          </li>
+            {s.label}
+          </button>
         );
       })}
-    </ol>
+    </nav>
+  );
+}
+
+function SectionCard({
+  id,
+  index,
+  title,
+  status,
+  innerRef,
+  children,
+}: {
+  id: SectionId;
+  index: number;
+  title: string;
+  status: "complete" | "error" | "incomplete";
+  innerRef: (el: HTMLDivElement | null) => void;
+  children: React.ReactNode;
+}) {
+  const tone =
+    status === "complete"
+      ? { bg: "var(--status-good-bg)", fg: "var(--status-good-fg)", glyph: "✓" }
+      : status === "error"
+        ? { bg: "var(--status-bad-bg)", fg: "var(--status-bad-fg)", glyph: "!" }
+        : { bg: "var(--surface-2)", fg: "var(--text-muted)", glyph: String(index) };
+
+  return (
+    <div
+      id={id}
+      ref={innerRef}
+      style={{
+        scrollMarginTop: "120px",
+        border: `1px solid ${status === "error" ? "var(--danger-border)" : "var(--border)"}`,
+        borderRadius: "var(--radius-md)",
+        background: "var(--surface)",
+        boxShadow: "var(--shadow-card)",
+        padding: "1.25rem 1.5rem",
+        display: "flex",
+        flexDirection: "column",
+        gap: "1.1rem",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+        <span
+          aria-hidden="true"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "26px",
+            height: "26px",
+            borderRadius: "50%",
+            fontSize: "0.8rem",
+            fontWeight: 700,
+            flexShrink: 0,
+            background: tone.bg,
+            color: tone.fg,
+          }}
+        >
+          {tone.glyph}
+        </span>
+        <h2 style={{ margin: 0, fontSize: "1.05rem", fontFamily: "var(--font-display)" }}>{title}</h2>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>{children}</div>
+    </div>
   );
 }
 
@@ -863,12 +999,12 @@ function ReviewSummary({
         : "—";
 
   const rows: [string, string][] = [
-    ["Policy number", policyNumber],
+    ["Policy number", policyNumber || "—"],
     ["Claim type", claimType],
-    ["Your name", claimantName],
-    ["Email", claimantEmail],
+    ["Your name", claimantName || "—"],
+    ["Email", claimantEmail || "—"],
     ["Incident date", incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"],
-    ["What happened", incidentDescription],
+    ["What happened", incidentDescription || "—"],
     [
       "Requested claim amount",
       claimAmount
