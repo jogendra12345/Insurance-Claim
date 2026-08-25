@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "./ThemeToggle";
 
 const TABS = [
   { href: "/policies", label: "Policies", match: (path: string) => path.startsWith("/policies") },
@@ -85,6 +86,10 @@ export function TopBar() {
             );
           })}
         </nav>
+
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

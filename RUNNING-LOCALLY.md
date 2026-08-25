@@ -12,11 +12,22 @@ Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 
 Wait until `docker info` succeeds (usually 30-60s after launch).
 
+**Note:** on this machine the `docker compose` plugin subcommand isn't wired
+up (`docker: unknown command: docker compose`). Use the standalone
+`docker-compose` binary instead for every command on this page:
+
+```powershell
+$env:PATH += ";C:\Program Files\Docker\Docker\resources\bin"
+```
+
+(add that to PATH once per shell session, then use `docker-compose` in place
+of `docker compose` below).
+
 ## 2. Start Postgres + MinIO
 
 ```bash
 cd "C:\Users\Ayan\OneDrive\Desktop\Claim Flow AI Files\Insurance-Claim"
-docker compose up -d
+docker-compose up -d
 ```
 
 Starts `claimflow-postgres` (port 5432) and `claimflow-minio` (ports 9000/9001).
@@ -40,6 +51,17 @@ npm run dev
 
 Runs on http://localhost:4000. Requires `backend/api/.env` to exist (copy from
 `backend/api/.env.example` if it's missing).
+
+**Watch out:** if a previous `npm run dev` for this package is still holding
+port 4000 (background dev servers can outlive a `Ctrl+C` or a killed
+terminal), a fresh `npm run dev` throws `EADDRINUSE` and the API never comes
+up — the frontend then fails to load policies/claims with a network error.
+Check for and clear a stale process first:
+
+```powershell
+Get-NetTCPConnection -LocalPort 4000 -ErrorAction SilentlyContinue | Select-Object OwningProcess
+Stop-Process -Id <OwningProcess> -Force
+```
 
 ## 5. Start the frontend
 
@@ -69,7 +91,7 @@ aren't built yet — see `ROADMAP.md`), but if/when needed:
 
 ```bash
 cd camunda-docker
-docker compose up -d
+docker-compose up -d
 ```
 
 Operate/Tasklist at http://localhost:8080, login `demo` / `demo`.
@@ -85,7 +107,9 @@ Operate/Tasklist at http://localhost:8080, login `demo` / `demo`.
 
 ## Shutting down
 
-- Stop the two `npm run dev` processes (Ctrl+C in their terminals).
-- From the repo root: `docker compose down` (keeps data) or
-  `docker compose down -v` (wipes data).
+- Stop the two `npm run dev` processes (Ctrl+C in their terminals). If a
+  terminal was closed without stopping it first, kill it by port instead
+  (see the `EADDRINUSE`/stale-process notes above).
+- From the repo root: `docker-compose down` (keeps data) or
+  `docker-compose down -v` (wipes data).
 - If you started Camunda too: same from `camunda-docker/`.
