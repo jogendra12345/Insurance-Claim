@@ -4,3 +4,4 @@
 import "./validate-claim";
 import "./extract-evidence";
 import "./detect-fraud-indicators";
+import "./score-risk";
