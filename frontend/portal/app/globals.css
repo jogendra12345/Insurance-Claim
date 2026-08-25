@@ -49,46 +49,7 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16140f;
-    --surface: #1e1b16;
-    --surface-2: #26221b;
-    --text: #f1ede4;
-    --text-muted: #a89f8e;
-    --border: #372f24;
-
-    --primary: #7ea3cc;
-    --primary-hover: #9bb9dc;
-    --primary-contrast: #0e1a28;
-    --primary-soft: #1e2c3c;
-
-    --status-neutral-bg: #26221b;
-    --status-neutral-fg: #b7ad99;
-    --status-progress-bg: #1e2c3c;
-    --status-progress-fg: #8fb3da;
-    --status-attention-bg: #332711;
-    --status-attention-fg: #e3b562;
-    --status-good-bg: #17281d;
-    --status-good-fg: #55c081;
-    --status-bad-bg: #34211e;
-    --status-bad-fg: #e2897d;
-
-    --danger-bg: #34211e;
-    --danger-fg: #e2897d;
-    --danger-border: #55352f;
-
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 1px 8px rgba(0, 0, 0, 0.16);
-    --shadow-card-hover: 0 6px 16px rgba(0, 0, 0, 0.32), 0 2px 28px rgba(0, 0, 0, 0.24);
-    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.5);
-
-    --accent: #e3b562;
-    --accent-soft: #332711;
-    --primary-glow: rgba(126, 163, 204, 0.22);
-
-    color-scheme: dark;
-  }
-}
+/* Theme is locked to light — the app does not follow system dark-mode preference. */
 
 * {
   box-sizing: border-box;
