@@ -776,12 +776,12 @@ export function ClaimForm() {
 
 function Stepper({ current }: { current: number }) {
   return (
-    <ol style={{ display: "flex", gap: "0.5rem", padding: 0, margin: 0, listStyle: "none" }}>
+    <ol style={{ display: "flex", alignItems: "center", padding: 0, margin: 0, listStyle: "none" }}>
       {STEPS.map((label, i) => {
         const done = i < current;
         const active = i === current;
         return (
-          <li key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: i < STEPS.length - 1 ? 1 : undefined }}>
+          <li key={label} style={{ display: "flex", alignItems: "center" }}>
             <span
               className="transition"
               style={{
@@ -804,6 +804,7 @@ function Stepper({ current }: { current: number }) {
             </span>
             <span
               style={{
+                marginLeft: "0.5rem",
                 fontSize: "0.82rem",
                 fontWeight: active ? 600 : 500,
                 color: active ? "var(--text)" : "var(--text-muted)",
@@ -812,7 +813,9 @@ function Stepper({ current }: { current: number }) {
             >
               {label}
             </span>
-            {i < STEPS.length - 1 && <span style={{ flex: 1, height: "1px", background: "var(--border)" }} />}
+            {i < STEPS.length - 1 && (
+              <span style={{ width: "2.5rem", flexShrink: 0, height: "1px", background: "var(--border)", margin: "0 0.75rem" }} />
+            )}
           </li>
         );
       })}
