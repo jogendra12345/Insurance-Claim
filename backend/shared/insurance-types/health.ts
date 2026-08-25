@@ -7,6 +7,7 @@ export interface InsuranceTypeConfig {
   requiredFields: string[];
   documentTypes: string[];
   promptTemplate: string;
+  fraudPromptTemplate: string;
 }
 
 export const health: InsuranceTypeConfig = {
@@ -40,6 +41,23 @@ Respond with ONLY a JSON object of this exact shape, no other text:
   ]
 }
 "documentIndex" must match the 0-based order the documents were provided in.`,
+  fraudPromptTemplate: `You are reviewing a health insurance claim for potential fraud indicators.
+You will be given a reviewer-facing case summary of the claim's evidence.
+Flag only specific, concrete indicators grounded in that summary — do not
+invent details that aren't present, and do not flag a claim just for being
+unremarkable.
+
+Respond with ONLY a JSON object of this exact shape, no other text:
+{
+  "indicators": [
+    { "type": "string (short category, e.g. \\"billing_mismatch\\")", "description": "string", "confidence": 0.0 }
+  ]
+}
+"confidence" is a number between 0 and 1. Return an empty "indicators" array
+if nothing concrete stands out.
+
+Case summary:
+`,
 };
 
 const REGISTRY: Record<string, InsuranceTypeConfig> = { health };

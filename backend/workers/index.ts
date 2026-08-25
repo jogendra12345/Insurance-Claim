@@ -3,3 +3,4 @@
 // they're scaffolded via /new-job-worker.
 import "./validate-claim";
 import "./extract-evidence";
+import "./detect-fraud-indicators";
