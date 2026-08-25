@@ -64,6 +64,6 @@ MinIO runs from the same root `docker-compose.yaml` as Postgres — `docker comp
 
 ## Still needed (not yet decided/installed)
 
-- **Claude API key** — for the AI-assisted steps (document extraction, risk scoring, denial letter drafting)
+- ~~Gemini API key~~ — provided 2026-08-25, stored in `backend/workers/.env` (`GEMINI_API_KEY`, gitignored) — for the AI-assisted steps (document extraction, risk scoring, denial letter drafting)
 - **Notification service** credentials — e.g. SendGrid or Twilio, for the customer notification step
 - **Payment gateway** credentials — e.g. Stripe or ACH, for the payout step

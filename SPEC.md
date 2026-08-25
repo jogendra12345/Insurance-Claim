@@ -20,7 +20,7 @@ ClaimFlow AI is a Camunda-orchestrated claims application for insurers that comb
 - A complete, queryable audit trail of every automated and human decision on a claim.
 - Process design is insurance-type-agnostic; health is the only implemented type in v1 (§3).
 - Real Camunda 8 process running locally, deployable as-is to Camunda 8 SaaS later.
-- Real Claude API calls for all AI-assisted steps.
+- Real Gemini API calls for all AI-assisted steps.
 - Role-based review via stock Camunda Tasklist (adjusters / investigators / legal reviewers as candidate groups — no custom review UI in v1).
 
 **Non-goals (v1 — see §14 for future work)**
@@ -37,7 +37,7 @@ ClaimFlow AI is a Camunda-orchestrated claims application for insurers that comb
 v1 builds and ships **health insurance claims only**. The architecture is deliberately designed so a new insurance line can be added later without redesigning the process:
 
 - **The BPMN process is insurance-type-agnostic.** `claim-case-process`'s steps — validate → extract evidence → detect fraud → score risk → route → review → settle — apply to any insurance line. Nothing about the process shape is health-specific.
-- **What varies per type is worker content, not process shape.** `validate-claim`, `extract-evidence`, `detect-fraud-indicators`, and `score-risk` each load a small config keyed by the claim's `insuranceType` (e.g. `backend/shared/insurance-types/health.ts`) — defining required fields, expected document types (for health: medical bills, discharge summaries, prescriptions), and the Claude prompt template for that type. Adding vehicle later means writing one new config module, not touching the BPMN process or any other type's workers.
+- **What varies per type is worker content, not process shape.** `validate-claim`, `extract-evidence`, `detect-fraud-indicators`, and `score-risk` each load a small config keyed by the claim's `insuranceType` (e.g. `backend/shared/insurance-types/health.ts`) — defining required fields, expected document types (for health: medical bills, discharge summaries, prescriptions), and the Gemini prompt template for that type. Adding vehicle later means writing one new config module, not touching the BPMN process or any other type's workers.
 - **DMN routing can vary by type.** The business rule task (§10) selects its decision table dynamically via Zeebe's `decisionIdExpression` — `=insuranceType + "-claim-routing-decision"` — instead of a hardcoded `decisionId`. So `health-claim-routing-decision` and a future `vehicle-claim-routing-decision` can coexist as separate tables with different thresholds, selected at runtime by the claim's type.
 - **`insurance_type` is a first-class column** on `claims` (§9) from v1, even though `health` is the only value in use today.
 
@@ -63,7 +63,7 @@ Frontend — Next.js portal            Backend — Node.js/TypeScript API
    │                    ┌─────────────────────┼───────────────────────┐
    │                    ▼                     ▼                       ▼
    │             AI job workers        DMN routing table      Human review tasks
-   │             (Node/TS + Claude,    (selected per          (Triage → Adjuster /
+   │             (Node/TS + Gemini,    (selected per          (Triage → Adjuster /
    │              insurance-type-       insuranceType,         Investigator / Legal)
    │              aware via config)     v1: health only)              │
    │                    │                                             │
@@ -83,7 +83,7 @@ Reviewers (browser) — Camunda Tasklist at localhost:8080/tasklist
 | Frontend | Next.js (React, TypeScript) |
 | Claim database | PostgreSQL |
 | Document storage | S3-compatible object storage (local MinIO for dev) |
-| AI | Claude API (Anthropic) — evidence extraction, fraud-indicator detection, risk scoring, denial letter drafting |
+| AI | Gemini API (Google Generative Language) — evidence extraction, fraud-indicator detection, risk scoring, denial letter drafting |
 | Settlement | Mocked behind a `SettlementProvider` interface |
 | Notification | Mocked behind a `NotificationProvider` interface |
 
@@ -103,7 +103,7 @@ Reviewers (browser) — Camunda Tasklist at localhost:8080/tasklist
 │       ├── insurance-types/
 │       │   └── health.ts              # required fields, doc types, AI prompts for health claims
 │       ├── zeebe-client.ts
-│       ├── claude-client.ts
+│       ├── gemini-client.ts
 │       └── audit-log.ts
 ├── frontend/
 │   └── portal/                        # claimant-facing submit + status UI
@@ -228,8 +228,8 @@ Started by the backend API when a claim is submitted, with initial variables `cl
 3. **Exclusive Gateway** `Validation Passed?`
    - No → **User Task** `Validation Exception Review` (candidate group `triage-team`) — resolves data issues or rejects the claim
    - Yes (default) → step 4
-4. **Service Task** `extract-evidence` — Claude reads uploaded documents (per the type's expected document list), writes `case_summary` and per-document `extracted_data`
-5. **Service Task** `detect-fraud-indicators` — Claude flags specific fraud indicators against the evidence + claimant history, writes rows to `claim_fraud_indicators`
+4. **Service Task** `extract-evidence` — Gemini reads uploaded documents (per the type's expected document list), writes `case_summary` and per-document `extracted_data`
+5. **Service Task** `detect-fraud-indicators` — Gemini flags specific fraud indicators against the evidence + claimant history, writes rows to `claim_fraud_indicators`
 6. **Service Task** `score-risk` — combines fraud signal + claim complexity into a single `riskScore` (0–100)
 7. **Business Rule Task** — evaluates the DMN decision selected via `decisionIdExpression` for this claim's `insuranceType` (v1: `health-claim-routing-decision`) → sets `assignedRole` (`adjuster` | `investigator` | `legal` | `auto`)
 8. **Exclusive Gateway** `Needs Triage Review?`
@@ -274,11 +274,11 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 | Job type | Input variables | Does | Output variables |
 |---|---|---|---|
 | `validate-claim` | `insuranceType`, `carrierId`, `policyNumber`, `claimAmount`, `incidentDate` | Required-field check using the insurance-type config (§3) for which fields are required; looks up `policies` by `policyNumber` + `carrierId` and checks `status = 'active'` and `incidentDate` within `[effective_date, expiry_date]`; sets `claims.policy_id` on a match | `validationPassed` (bool), `policyId` (uuid, nullable) |
-| `extract-evidence` | `claimId`, `insuranceType` | Loads `claim_documents`, calls Claude (using the type's prompt template) to extract structured data per document and produce a reviewer-facing case summary; writes `case_summary` and `extracted_data` | `caseSummary` (string) |
-| `detect-fraud-indicators` | `claimId`, `insuranceType`, `caseSummary` | Calls Claude to flag specific fraud indicators against evidence + claimant history; writes `claim_fraud_indicators` rows | `fraudIndicatorCount` (number) |
-| `score-risk` | `claimId`, `claimAmount`, `fraudIndicatorCount`, `caseSummary` | Calls Claude to produce a single 0–100 risk score with reasoning | `riskScore` (number) |
+| `extract-evidence` | `claimId`, `insuranceType` | Loads `claim_documents`, calls Gemini (using the type's prompt template) to extract structured data per document and produce a reviewer-facing case summary; writes `case_summary` and `extracted_data` | `caseSummary` (string) |
+| `detect-fraud-indicators` | `claimId`, `insuranceType`, `caseSummary` | Calls Gemini to flag specific fraud indicators against evidence + claimant history; writes `claim_fraud_indicators` rows | `fraudIndicatorCount` (number) |
+| `score-risk` | `claimId`, `claimAmount`, `fraudIndicatorCount`, `caseSummary` | Calls Gemini to produce a single 0–100 risk score with reasoning | `riskScore` (number) |
 | `trigger-settlement` | `claimId`, `claimAmount` | Calls `SettlementProvider.pay()` — **mocked**, always succeeds | `settlementId` (string) |
-| `draft-denial-letter` | `claimId`, `denialReason`, `claimantName` | Calls Claude to draft denial letter text grounded in the stated reason | `denialLetterText` (string) |
+| `draft-denial-letter` | `claimId`, `denialReason`, `claimantName` | Calls Gemini to draft denial letter text grounded in the stated reason | `denialLetterText` (string) |
 | `notify-claimant` | `claimId`, `decision` | Calls `NotificationProvider.send()` — **mocked**, logs instead of sending | `notificationSent` (bool) |
 | `close-case` | `claimId`, `decision` | Writes final `status` to `claims` | — |
 
@@ -286,7 +286,7 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 
 ## 13. Audit trail
 
-Every worker in §12, and every user-task completion, writes one `audit_log` row: `actor_type` (`system` for deterministic steps, `ai` for Claude-backed steps, `human` for Tasklist completions), `actor_id` (worker name or Tasklist user id), `action`, and `detail` (the AI's reasoning, or a human's override reason when `confirmedRole ≠ assignedRole`). This is the durable, queryable case history that Camunda's own process history (visible in Operate) doesn't give you at the business level — see `claim-lifecycle.html` §"Limited reporting" for why that's a platform-level gap, not an oversight here.
+Every worker in §12, and every user-task completion, writes one `audit_log` row: `actor_type` (`system` for deterministic steps, `ai` for Gemini-backed steps, `human` for Tasklist completions), `actor_id` (worker name or Tasklist user id), `action`, and `detail` (the AI's reasoning, or a human's override reason when `confirmedRole ≠ assignedRole`). This is the durable, queryable case history that Camunda's own process history (visible in Operate) doesn't give you at the business level — see `claim-lifecycle.html` §"Limited reporting" for why that's a platform-level gap, not an oversight here.
 
 ## 14. Future work (explicitly out of scope for v1)
 
@@ -310,4 +310,4 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 
 ## 15. Definition of done (v1)
 
-A health insurance claim can be submitted through the frontend, flows through the full BPMN process with real Claude API calls at every AI step, a low-risk/low-value claim auto-approves with no human input, a claim with fraud indicators routes to an investigator, a high-value claim routes to legal, a triage reviewer can override the AI's suggested role, a large approved settlement requires supervisor sign-off, and every step — automated or human — leaves a row in `audit_log` that reconstructs the full case history from intake to resolution. The process, workers, and DMN selection are all insurance-type-parameterized even though only `health` ships in v1.
+A health insurance claim can be submitted through the frontend, flows through the full BPMN process with real Gemini API calls at every AI step, a low-risk/low-value claim auto-approves with no human input, a claim with fraud indicators routes to an investigator, a high-value claim routes to legal, a triage reviewer can override the AI's suggested role, a large approved settlement requires supervisor sign-off, and every step — automated or human — leaves a row in `audit_log` that reconstructs the full case history from intake to resolution. The process, workers, and DMN selection are all insurance-type-parameterized even though only `health` ships in v1.

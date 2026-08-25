@@ -4,5 +4,14 @@
   "private": true,
   "scripts": {
     "migrate": "bash db/run-migrations.sh"
+  },
+  "dependencies": {
+    "@camunda8/sdk": "^8.8.13",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6"
   }
 }
