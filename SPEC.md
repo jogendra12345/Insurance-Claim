@@ -156,12 +156,13 @@ claims
   claim_amount          numeric NOT NULL     -- requested claim amount; must be <= the matched policy's coverage_amount, enforced at intake (POST /api/claims) and client-side (ClaimForm), ahead of the validate-claim worker's own checks
   status                text NOT NULL        -- submitted | validating | triage | in_review | approved | denied | awaiting_info
   case_summary          text NULL            -- AI-generated summary for reviewers
-  risk_score            numeric NULL         -- 0-100
-  fraud_indicator_count integer NOT NULL DEFAULT 0
-  assigned_role         text NULL            -- adjuster | investigator | legal | auto (DMN suggestion)
-  confirmed_role        text NULL            -- role a human actually routed it to, after triage review
-  decision              text NULL            -- approve | deny | moreInfo
-  denial_reason         text NULL
+  risk_score            numeric NULL         -- 0-100; written by score-risk
+  risk_reasoning        text NULL            -- score-risk's 1-3 sentence explanation, surfaced on the claim detail page
+  fraud_indicator_count integer NOT NULL DEFAULT 0  -- written by detect-fraud-indicators; only counts confidence >= 0.5 (§11/§12)
+  assigned_role         text NULL            -- adjuster | investigator | legal | auto (DMN suggestion); written by capture-routing-decision
+  confirmed_role        text NULL            -- role a human actually routed it to, after triage review; written by capture-triage-review
+  decision              text NULL            -- approve | deny | moreInfo; written by capture-review-decision
+  denial_reason         text NULL            -- written by capture-review-decision
   process_instance_key  text NULL            -- Zeebe process instance key
   provider_id            uuid NOT NULL FK → providers.id  -- resolved synchronously at intake, find-or-create by NPI (§ "FNOL extended fields" below)
   diagnosis_code         text NOT NULL        -- ICD-10, e.g. E11.9
@@ -224,48 +225,52 @@ Raw SQL migration files, no ORM. Applied via `backend/db/run-migrations.sh` (psq
 Started by the backend API when a claim is submitted, with initial variables `claimId`, `carrierId`, `insuranceType`, `policyNumber`, `claimType`, `claimAmount`. The process itself is insurance-type-agnostic (§3) — only the workers and the DMN table it calls vary by `insuranceType`.
 
 1. **Start Event** — Claim Submitted
-2. **Service Task** `validate-claim` — required fields + policy status, using the config for this claim's `insuranceType`; looks up `policies` by `policyNumber` and `carrierId`, sets `claims.policy_id` on match
+2. **Service Task** `validate-claim` — required fields + policy status, using the config for this claim's `insuranceType`; looks up `policies` by `policyNumber` and `carrierId`, sets `claims.policy_id` on match, sets `claims.status = 'validating'` on pass, and computes two deterministic red-flag signals for the DMN table below: `daysSincePolicyEffective` and `claimantClaimCountLast12Months`
 3. **Exclusive Gateway** `Validation Passed?`
-   - No → **User Task** `Validation Exception Review` (candidate group `triage-team`) — resolves data issues or rejects the claim
+   - No → **User Task** `Validation Exception Review` (candidate group `triage-team`) — v1 is reject-only (no resolve-and-continue path yet — see §14) → **Service Task** `capture-validation-exception` (sets `claims.status = 'denied'`, writes `audit_log`) → **End Event** "Validation Failed"
    - Yes (default) → step 4
 4. **Service Task** `extract-evidence` — Gemini reads uploaded documents (per the type's expected document list), writes `case_summary` and per-document `extracted_data`
-5. **Service Task** `detect-fraud-indicators` — Gemini flags specific fraud indicators against the evidence + claimant history, writes rows to `claim_fraud_indicators`
-6. **Service Task** `score-risk` — combines fraud signal + claim complexity into a single `riskScore` (0–100)
+5. **Service Task** `detect-fraud-indicators` — Gemini flags specific fraud indicators grounded in the case summary *and* each document's `extracted_data`; writes every indicator to `claim_fraud_indicators`, but only tallies indicators with `confidence >= 0.5` toward `fraudIndicatorCount` (a single low-confidence guess shouldn't be enough to route to investigator)
+6. **Service Task** `score-risk` — combines fraud signal + claim complexity into a single `riskScore` (0–100) with `reasoning`, both written to `claims`
 7. **Business Rule Task** — evaluates the DMN decision selected via `decisionIdExpression` for this claim's `insuranceType` (v1: `health-claim-routing-decision`) → sets `assignedRole` (`adjuster` | `investigator` | `legal` | `auto`)
-8. **Exclusive Gateway** `Needs Triage Review?`
-   - `assignedRole = "auto"` (default) → skip straight to step 10 (auto-approved)
-   - Otherwise → step 9
-9. **User Task** `Triage Review` (candidate group `triage-team`) — reviewer sees the AI's case summary, fraud indicators, risk score, and suggested role; sets `confirmedRole` (may differ from `assignedRole`)
-10. **Exclusive Gateway** `Route by Confirmed Role` → one of three branches, only one taken per instance:
+8. **Service Task** `capture-routing-decision` — writes `claims.assigned_role = assignedRole`, sets `claims.status = 'triage'`, writes `audit_log`
+9. **User Task** `Triage Review` (candidate group `triage-team`) — reviewer sees the AI's case summary, fraud indicators, risk score, and suggested role; sets `confirmedRole` (may differ from `assignedRole`). **Every claim passes through this task — `assignedRole = "auto"` is a suggestion the reviewer accepts or overrides, never a skip** (see §1, §15; this replaced an earlier "auto-bypass" gateway that let low-risk claims skip human review entirely, which contradicted §1's "human confirming every AI-driven routing decision")
+10. **Service Task** `capture-triage-review` — writes `claims.confirmed_role = confirmedRole`, sets `claims.status = 'in_review'`, writes `audit_log` (flags an override when `confirmedRole != assignedRole`)
+11. **Exclusive Gateway** `Route by Confirmed Role` (default: `adjuster`, so an unset/unrecognized `confirmedRole` can't deadlock the instance) → one of three branches, only one taken per instance:
     - `confirmedRole = "adjuster"` → **User Task** `Adjuster Review` (candidate group `adjusters`)
     - `confirmedRole = "investigator"` → **User Task** `Investigator Review` (candidate group `investigators`)
     - `confirmedRole = "legal"` → **User Task** `Legal Review` (candidate group `legal-reviewers`)
     - each sets `decision` (`approve` | `deny` | `moreInfo`) and `denialReason` if denying
-11. **Exclusive Gateway** `Decision`
-    - `approve` (default) → step 12
-    - `decision = "deny"` → step 13
+12. **Service Task** `capture-review-decision` — writes `claims.decision`, `claims.denial_reason`, and maps `claims.status` from the decision (`approve` → `approved`, `deny` → `denied`, `moreInfo` → `awaiting_info`); writes `audit_log`
+13. **Exclusive Gateway** `Decision`
+    - `approve` (default) → step 14
+    - `decision = "deny"` → step 15
     - `decision = "moreInfo"` → **End Event** "Awaiting More Information" (terminal in v1 — see §14)
-12. Approved path: **Exclusive Gateway** `Needs Second Sign-off?` (`claimAmount` over threshold, e.g. 50,000) →
-    - Yes → **User Task** `Supervisor Sign-off` (candidate group `supervisors`) → then settlement
+14. Approved path: **Exclusive Gateway** `Needs Second Sign-off?` (`claimAmount` over threshold, e.g. 50,000) →
+    - Yes → **User Task** `Supervisor Sign-off` (candidate group `supervisors`) → **Service Task** `capture-signoff` (writes `audit_log`; `claims.status` is already `approved` from step 12) → settlement
     - No (default) → straight to settlement
     - Settlement: **Service Task** `trigger-settlement` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Approved"
-13. Denied path: **Service Task** `draft-denial-letter` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Denied"
+15. Denied path: **Service Task** `draft-denial-letter` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Denied"
+
+`close-case`'s documented job (§12) of writing "final `status`" is now a confirming/idempotent write against a status the relevant `capture-*` step already set at decision time, not the sole writer — see §12.
 
 Replaces the earlier draft at `process/insurance-claim.bpmn` — rebuild it in Camunda Modeler as `process/claim-case-process.bpmn` to match this flow before first deploy.
 
 ## 11. DMN — `health-claim-routing-decision`
 
-Table `process/health-claim-routing.dmn`, hit policy FIRST. Inputs: `fraudIndicatorCount`, `riskScore`, `claimAmount`, `claimType`. Output: `assignedRole`.
+Table `process/health-claim-routing.dmn`, hit policy FIRST. Inputs: `fraudIndicatorCount`, `riskScore`, `claimAmount`, `daysSincePolicyEffective`, `claimantClaimCountLast12Months` (the last two computed by `validate-claim`, §10 step 2 — cheap SQL-derived red flags rather than leaving everything to the LLM-based fraud/risk workers to infer from prose). Output: `assignedRole`.
 
-| Fraud Indicators | Risk Score | Claim Amount | Claim Type | → Assigned Role |
-|---|---|---|---|---|
-| ≥ 1 | – | – | – | investigator |
-| – | – | > 50000 | – | legal |
-| – | ≥ 40 | – | – | adjuster |
-| – | – | > 5000 | – | adjuster |
-| – | – | – | – | auto |
+| Fraud Indicators | Risk Score | Claim Amount | Days Since Policy Effective | Claimant Claim Count (12mo) | → Assigned Role |
+|---|---|---|---|---|---|
+| – | – | > 50000 | – | – | legal |
+| ≥ 1 | – | – | – | – | investigator |
+| – | – | – | ≤ 14 | – | investigator |
+| – | – | – | – | ≥ 3 | investigator |
+| – | ≥ 40 | – | – | – | adjuster |
+| – | – | > 5000 | – | – | adjuster |
+| – | – | – | – | – | auto |
 
-`claimType` is carried as an input but unused by any rule yet in v1's health table — reserved for future type-specific legal triggers (e.g., out-of-network disputes for health, liability for vehicle once that type exists). Naming convention for future tables: `<insuranceType>-claim-routing-decision`, selected at runtime per §3. Thresholds are placeholder defaults — tune per carrier once real claim data exists (per-carrier configuration is future work, §14).
+High-dollar exposure (`claimAmount > 50000`) is checked first: `FIRST` hit policy can only pick one row, and a large claim needs legal's eyes regardless of whether fraud/risk also flagged it — under the old fraud-first ordering, a $200k claim with any fraud indicator would only ever reach "investigator," never "legal." `claimType` was carried as an input in an earlier draft but never used by any rule — removed as dead configuration; reintroduce it (e.g. for type-specific legal triggers) if a concrete rule needs it. Naming convention for future tables: `<insuranceType>-claim-routing-decision`, selected at runtime per §3. Thresholds are placeholder defaults — tune per carrier once real claim data exists (per-carrier configuration is future work, §14).
 
 ## 12. Job workers
 
@@ -273,16 +278,21 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 
 | Job type | Input variables | Does | Output variables |
 |---|---|---|---|
-| `validate-claim` | `insuranceType`, `carrierId`, `policyNumber`, `claimAmount`, `incidentDate` | Required-field check using the insurance-type config (§3) for which fields are required; looks up `policies` by `policyNumber` + `carrierId` and checks `status = 'active'` and `incidentDate` within `[effective_date, expiry_date]`; sets `claims.policy_id` on a match | `validationPassed` (bool), `policyId` (uuid, nullable) |
+| `validate-claim` | `insuranceType`, `carrierId`, `policyNumber`, `claimAmount`, `incidentDate` | Required-field check using the insurance-type config (§3) for which fields are required; looks up `policies` by `policyNumber` + `carrierId` and checks `status = 'active'` and `incidentDate` within `[effective_date, expiry_date]`; sets `claims.policy_id` and (on pass) `claims.status = 'validating'`; computes `daysSincePolicyEffective` and the claimant's trailing-12-month claim count for the DMN table (§11) | `validationPassed` (bool), `policyId` (uuid, nullable), `daysSincePolicyEffective` (number, nullable), `claimantClaimCountLast12Months` (number) |
 | `extract-evidence` | `claimId`, `insuranceType` | Loads `claim_documents`, calls Gemini (using the type's prompt template) to extract structured data per document and produce a reviewer-facing case summary; writes `case_summary` and `extracted_data` | `caseSummary` (string) |
-| `detect-fraud-indicators` | `claimId`, `insuranceType`, `caseSummary` | Calls Gemini to flag specific fraud indicators against evidence + claimant history; writes `claim_fraud_indicators` rows | `fraudIndicatorCount` (number) |
-| `score-risk` | `claimId`, `claimAmount`, `fraudIndicatorCount`, `caseSummary` | Calls Gemini to produce a single 0–100 risk score with reasoning | `riskScore` (number) |
+| `detect-fraud-indicators` | `claimId`, `insuranceType`, `caseSummary` | Calls Gemini, grounded in the case summary *and* each document's `extracted_data`, to flag specific fraud indicators; writes every indicator to `claim_fraud_indicators` (all confidences) but only counts `confidence >= 0.5` toward `claims.fraud_indicator_count` / the output below | `fraudIndicatorCount` (number, counted only) |
+| `score-risk` | `claimId`, `claimAmount`, `fraudIndicatorCount`, `caseSummary` | Calls Gemini (temperature 0) to produce a single 0–100 risk score with reasoning; writes `claims.risk_score` and `claims.risk_reasoning` | `riskScore` (number) |
+| `capture-routing-decision` | `claimId`, `assignedRole` | Writes `claims.assigned_role`, sets `claims.status = 'triage'` | — |
+| `capture-triage-review` | `claimId`, `confirmedRole`, `assignedRole` | Writes `claims.confirmed_role`, sets `claims.status = 'in_review'`; `audit_log.detail` flags whether the reviewer overrode the AI's suggestion | — |
+| `capture-review-decision` | `claimId`, `decision`, `denialReason`, `confirmedRole` | Writes `claims.decision`, `claims.denial_reason`; sets `claims.status` from `decision` (`approve→approved`, `deny→denied`, `moreInfo→awaiting_info`) | — |
+| `capture-signoff` | `claimId` | No `claims` columns to set (`status` is already `approved` from `capture-review-decision`) — exists solely to satisfy §13's "every user-task completion writes `audit_log`" rule for Supervisor Sign-off | — |
+| `capture-validation-exception` | `claimId` | Sets `claims.status = 'denied'` (v1's Validation Exception Review is reject-only, §10 step 3); writes `audit_log` | — |
 | `trigger-settlement` | `claimId`, `claimAmount` | Calls `SettlementProvider.pay()` — **mocked**, always succeeds | `settlementId` (string) |
 | `draft-denial-letter` | `claimId`, `denialReason`, `claimantName` | Calls Gemini to draft denial letter text grounded in the stated reason | `denialLetterText` (string) |
 | `notify-claimant` | `claimId`, `decision` | Calls `NotificationProvider.send()` — **mocked**, logs instead of sending | `notificationSent` (bool) |
-| `close-case` | `claimId`, `decision` | Writes final `status` to `claims` | — |
+| `close-case` | `claimId`, `decision` | Writes final `status` to `claims` — by the time this runs, `capture-review-decision` already set the same value; this is a confirming/idempotent write, not the sole one (see §10) | — |
 
-`SettlementProvider` and `NotificationProvider` are TypeScript interfaces with one mock implementation each in v1. `validate-claim`, `extract-evidence`, and `detect-fraud-indicators` are insurance-type aware — each loads `backend/shared/insurance-types/<insuranceType>.ts` (v1: `health.ts` only) rather than hardcoding health-specific logic inline, so a new type is additive.
+`SettlementProvider` and `NotificationProvider` are TypeScript interfaces with one mock implementation each in v1. `validate-claim`, `extract-evidence`, and `detect-fraud-indicators` are insurance-type aware — each loads `backend/shared/insurance-types/<insuranceType>.ts` (v1: `health.ts` only) rather than hardcoding health-specific logic inline, so a new type is additive. The `capture-*` workers are not insurance-type aware — they only move already-computed process variables onto the `claims` row and are the same regardless of `insuranceType`.
 
 ## 13. Audit trail
 
@@ -293,6 +303,7 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 - Additional insurance types (vehicle, property, travel) using the extension points in §3 — a new `insurance-types/<type>.ts` config and a new `<type>-claim-routing-decision` DMN table.
 - Per-carrier tenant isolation: auth scoping by `carrier_id`, per-carrier DMN thresholds, per-carrier branding.
 - Cross-role escalation (e.g., investigator escalates to legal mid-review) instead of single DMN-time routing.
+- Resolve-and-continue path for Validation Exception Review — v1's `Task_ValidationExceptionReview` only rejects; a reviewer can't fix a data issue and let the claim continue into `extract-evidence`.
 - Loop `moreInfo` back to intake instead of ending the process (needs a message event + resubmission API).
 - Error boundary events on service tasks for graceful business-error handling.
 - Real settlement and notification providers.
@@ -310,4 +321,4 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 
 ## 15. Definition of done (v1)
 
-A health insurance claim can be submitted through the frontend, flows through the full BPMN process with real Gemini API calls at every AI step, a low-risk/low-value claim auto-approves with no human input, a claim with fraud indicators routes to an investigator, a high-value claim routes to legal, a triage reviewer can override the AI's suggested role, a large approved settlement requires supervisor sign-off, and every step — automated or human — leaves a row in `audit_log` that reconstructs the full case history from intake to resolution. The process, workers, and DMN selection are all insurance-type-parameterized even though only `health` ships in v1.
+A health insurance claim can be submitted through the frontend, flows through the full BPMN process with real Gemini API calls at every AI step, a low-risk/low-value claim is confirmed by a triage reviewer even when the AI suggests no further specialist review is needed (`assignedRole = "auto"` is a suggestion the triage reviewer can accept or override, never a skip — see §10), a claim with fraud indicators routes to an investigator, a high-value claim routes to legal, a triage reviewer can override the AI's suggested role, a large approved settlement requires supervisor sign-off, and every step — automated or human — leaves a row in `audit_log` that reconstructs the full case history from intake to resolution. The process, workers, and DMN selection are all insurance-type-parameterized even though only `health` ships in v1.

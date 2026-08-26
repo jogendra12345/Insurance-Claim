@@ -5,3 +5,8 @@ import "./validate-claim";
 import "./extract-evidence";
 import "./detect-fraud-indicators";
 import "./score-risk";
+import "./capture-routing-decision";
+import "./capture-triage-review";
+import "./capture-review-decision";
+import "./capture-signoff";
+import "./capture-validation-exception";

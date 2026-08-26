@@ -65,6 +65,13 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       ]);
     }
 
+    // Entering the automated AI-triage phase (extract-evidence through the
+    // DMN routing decision) — capture-routing-decision advances this to
+    // 'triage' once routing is decided (SPEC.md §10).
+    if (validationPassed) {
+      await pool.query(`UPDATE claims SET status = 'validating', updated_at = now() WHERE id = $1`, [claimId]);
+    }
+
     // Red flag: loss reported suspiciously close to the policy's effective date.
     const daysSincePolicyEffective = policy
       ? Math.round(
