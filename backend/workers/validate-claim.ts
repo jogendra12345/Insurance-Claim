@@ -16,6 +16,8 @@ interface ValidateClaimVariables {
 interface ValidateClaimOutput {
   validationPassed: boolean;
   policyId: string | null;
+  duplicatePendingClaim: boolean;
+  duplicateClaimId: string | null;
   // Deterministic fraud-risk signals for the DMN routing table (see
   // process/health-claim-routing.dmn) — cheap SQL-computed red flags rather
   // than leaving everything to the LLM-based fraud/risk workers to infer
@@ -56,7 +58,22 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
     );
     const policy = policyRows[0] as { id: string; effective_date: string } | undefined;
 
-    const validationPassed = missingFields.length === 0 && !!policy;
+    // Duplicate-claim check: a policy shouldn't have two claims in flight at
+    // once — if an earlier claim against the same policy hasn't reached a
+    // final decision yet, this one fails validation and goes to a human via
+    // Validation Exception Review rather than auto-denying (CLAUDE.md: a
+    // human always makes the final approve/deny decision).
+    const { rows: duplicateRows } = policy
+      ? await pool.query(
+          `SELECT id FROM claims
+           WHERE policy_id = $1 AND id != $2 AND status NOT IN ('approved', 'denied')
+           LIMIT 1`,
+          [policy.id, claimId]
+        )
+      : { rows: [] as { id: string }[] };
+    const duplicatePendingClaim = duplicateRows[0] as { id: string } | undefined;
+
+    const validationPassed = missingFields.length === 0 && !!policy && !duplicatePendingClaim;
 
     if (policy) {
       await pool.query(`UPDATE claims SET policy_id = $1, updated_at = now() WHERE id = $2`, [
@@ -96,6 +113,8 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
         validationPassed,
         missingFields,
         policyMatched: !!policy,
+        duplicatePendingClaim: !!duplicatePendingClaim,
+        duplicateClaimId: duplicatePendingClaim?.id ?? null,
         daysSincePolicyEffective,
         claimantClaimCountLast12Months,
       },
@@ -104,6 +123,8 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
     return job.complete({
       validationPassed,
       policyId: policy?.id ?? null,
+      duplicatePendingClaim: !!duplicatePendingClaim,
+      duplicateClaimId: duplicatePendingClaim?.id ?? null,
       daysSincePolicyEffective,
       claimantClaimCountLast12Months,
     });

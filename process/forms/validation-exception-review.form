@@ -1,9 +1,17 @@
 {
   "components": [
     {
-      "text": "## Validation Exception Review\n\nThis claim failed automated validation.\n\nPolicy number submitted: **{{policyNumber}}** · Claim type: **{{claimType}}** · Amount: **{{claimAmount}}**\n\nCheck the Process/History tab for the exact `validated` audit entry (missing fields / policy match failure) before deciding.",
+      "text": "## Validation Exception Review\n\nThis claim failed automated validation.\n\nPolicy number submitted: **{{policyNumber}}** · Claim type: **{{claimType}}** · Amount: **{{claimAmount}}**\n\nCheck the Process/History tab for the exact `validated` audit entry (missing fields / policy match failure / duplicate) before deciding.",
       "type": "text",
       "id": "IntroText"
+    },
+    {
+      "text": "⚠️ **Duplicate claim** — another claim (**{{duplicateClaimId}}**) against this same policy hasn't reached a final decision yet.",
+      "type": "text",
+      "id": "DuplicateClaimWarning",
+      "conditional": {
+        "hide": "=duplicatePendingClaim = false"
+      }
     },
     {
       "label": "Action",
