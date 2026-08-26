@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ApiError, createPolicy, deletePolicy, fetchPolicies } from "@/lib/api";
 import type { NewPolicyInput, Policy, PolicyStatus } from "@/lib/types";
 import { EmptyState } from "@/components/EmptyState";
@@ -8,7 +9,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type LoadState = "loading" | "loaded" | "error";
 
-const STATUS_TONE: Record<PolicyStatus, { bg: string; fg: string }> = {
+export const STATUS_TONE: Record<PolicyStatus, { bg: string; fg: string }> = {
   active: { bg: "var(--status-good-bg)", fg: "var(--status-good-fg)" },
   lapsed: { bg: "var(--status-attention-bg)", fg: "var(--status-attention-fg)" },
   cancelled: { bg: "var(--status-bad-bg)", fg: "var(--status-bad-fg)" },
@@ -29,6 +30,7 @@ const emptyForm: NewPolicyInput = {
 const currency = (n: number) => n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
 export default function PoliciesPage() {
+  const router = useRouter();
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -298,8 +300,19 @@ export default function PoliciesPage() {
             <tbody className="stagger-list">
               {policies.map((policy) => {
                 const tone = STATUS_TONE[policy.status];
+                const goTo = () => router.push(`/policies/${policy.id}`);
                 return (
-                  <tr key={policy.id} className="row-hover transition" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <tr
+                    key={policy.id}
+                    onClick={goTo}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") goTo();
+                    }}
+                    role="link"
+                    tabIndex={0}
+                    className="row-hover transition"
+                    style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
+                  >
                     <Td>
                       <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{policy.policyNumber}</span>
                     </Td>
@@ -325,7 +338,10 @@ export default function PoliciesPage() {
                     <Td align="right">{currency(policy.coverageAmount)}</Td>
                     <Td align="right">
                       <button
-                        onClick={() => setPendingDelete(policy)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingDelete(policy);
+                        }}
                         disabled={deletingId === policy.id}
                         aria-label={`Delete policy ${policy.policyNumber}`}
                         className="transition btn-press"

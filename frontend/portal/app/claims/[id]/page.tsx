@@ -64,9 +64,11 @@ export default function ClaimDetailPage() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [documentsVisible, setDocumentsVisible] = useState(false);
+  const [incidentExpanded, setIncidentExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setIncidentExpanded(false);
     fetchClaim(params.id)
       .then((c) => {
         if (!cancelled) {
@@ -234,7 +236,40 @@ export default function ClaimDetailPage() {
                   <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>
                     What happened
                   </span>
-                  <p style={{ margin: 0, fontSize: "0.88rem" }}>{claim.incidentDescription}</p>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.88rem",
+                      ...(incidentExpanded || claim.incidentDescription.length <= 320
+                        ? {}
+                        : {
+                            display: "-webkit-box",
+                            WebkitBoxOrient: "vertical" as const,
+                            WebkitLineClamp: 5,
+                            overflow: "hidden",
+                          }),
+                    }}
+                  >
+                    {claim.incidentDescription}
+                  </p>
+                  {claim.incidentDescription.length > 320 && (
+                    <button
+                      onClick={() => setIncidentExpanded((v) => !v)}
+                      className="transition no-print"
+                      style={{
+                        alignSelf: "flex-start",
+                        border: "none",
+                        background: "none",
+                        color: "var(--primary)",
+                        fontSize: "0.8rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                    >
+                      {incidentExpanded ? "Show less" : "Show more"}
+                    </button>
+                  )}
                 </div>
               </Section>
 
