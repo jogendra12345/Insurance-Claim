@@ -21,7 +21,7 @@ PG_DB="${POSTGRES_DB:-claimflow}"
 cd "$REPO_ROOT"
 
 psql_exec() {
-  docker compose exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"
+  docker-compose exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"
 }
 
 psql_exec -c "

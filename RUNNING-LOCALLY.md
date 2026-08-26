@@ -42,6 +42,10 @@ npm run migrate
 
 Safe to run every time — already-applied migrations are skipped automatically.
 
+`backend/db/run-migrations.sh` calls `docker-compose` (standalone binary), matching
+the PATH workaround above — if the plugin ever gets wired up on this machine, this
+script won't need to change back.
+
 ## 4. Start the backend API
 
 ```bash

@@ -265,6 +265,45 @@ textarea:focus {
   background-size: 800px 100%;
 }
 
+/* Claim detail page: two-column panel layout, collapses to one column on mobile. */
+.claim-grid {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+/* Stretch each column's last panel to fill leftover height so the two
+   columns bottom out evenly instead of leaving a gap before what follows. */
+.claim-col > *:last-child {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 860px) {
+  .claim-grid {
+    grid-template-columns: 1fr;
+    align-items: initial;
+  }
+
+  .claim-col > *:last-child {
+    flex: initial;
+  }
+}
+
+/* Row list inside a detail panel — divider between rows, none on the first. */
+.detail-rows > * + * {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+@media print {
+  header,
+  .no-print {
+    display: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .skeleton {
     animation: shimmer 1.6s linear infinite;
