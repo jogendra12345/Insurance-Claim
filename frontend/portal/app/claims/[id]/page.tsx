@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ApiError, fetchClaim } from "@/lib/api";
+import { ApiError, fetchClaim, fetchPolicies } from "@/lib/api";
 import type { Claim } from "@/lib/types";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -65,16 +65,29 @@ export default function ClaimDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [documentsVisible, setDocumentsVisible] = useState(false);
   const [incidentExpanded, setIncidentExpanded] = useState(false);
+  const [policyholderName, setPolicyholderName] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setIncidentExpanded(false);
+    setPolicyholderName(null);
     fetchClaim(params.id)
       .then((c) => {
         if (!cancelled) {
           setClaim(c);
           setState("loaded");
         }
+        // No GET /api/policies/:id endpoint exists yet — the list is small
+        // enough in this demo to fetch and match by policyNumber client-side.
+        fetchPolicies()
+          .then((policies) => {
+            if (cancelled) return;
+            const policy = policies.find((p) => p.policyNumber === c.policyNumber);
+            if (policy) setPolicyholderName(policy.policyholderName);
+          })
+          .catch(() => {
+            // Non-critical — the header falls back to the claimant's name.
+          });
       })
       .catch((err) => {
         if (!cancelled) {
@@ -106,10 +119,15 @@ export default function ClaimDetailPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-                <h1 style={{ margin: 0, fontSize: "1.6rem" }}>{CLAIM_TYPE_LABEL[claim.claimType]} claim</h1>
+                <h1 style={{ margin: 0, fontSize: "1.6rem" }}>
+                  {policyholderName ?? claim.claimantName} <span style={{ color: "var(--text-muted)" }}>({claim.policyNumber})</span>
+                </h1>
                 <StatusBadge status={claim.status} />
               </div>
-              <span style={{ fontFamily: MONO_FONT, fontSize: "0.8rem", color: "var(--text-muted)" }}>{claim.id}</span>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                {CLAIM_TYPE_LABEL[claim.claimType]} claim ·{" "}
+                <span style={{ fontFamily: MONO_FONT }}>{claim.id}</span>
+              </span>
             </div>
             <button
               onClick={() => window.print()}
