@@ -4,16 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, createPolicy, deletePolicy, fetchPolicies } from "@/lib/api";
 import type { NewPolicyInput, Policy, PolicyStatus } from "@/lib/types";
+import { STATUS_TONE } from "@/lib/policy-status";
 import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type LoadState = "loading" | "loaded" | "error";
-
-export const STATUS_TONE: Record<PolicyStatus, { bg: string; fg: string }> = {
-  active: { bg: "var(--status-good-bg)", fg: "var(--status-good-fg)" },
-  lapsed: { bg: "var(--status-attention-bg)", fg: "var(--status-attention-fg)" },
-  cancelled: { bg: "var(--status-bad-bg)", fg: "var(--status-bad-fg)" },
-};
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 

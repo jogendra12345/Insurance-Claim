@@ -16,6 +16,7 @@ export function serializeClaim(row: any) {
     status: row.status,
     caseSummary: row.case_summary,
     riskScore: row.risk_score === null ? null : Number(row.risk_score),
+    riskReasoning: row.risk_reasoning,
     fraudIndicatorCount: row.fraud_indicator_count,
     assignedRole: row.assigned_role,
     confirmedRole: row.confirmed_role,
@@ -49,6 +50,18 @@ export function serializeClaimDocument(row: any) {
     claimId: row.claim_id,
     fileUrl: row.file_url,
     documentType: row.document_type,
+    createdAt: row.created_at,
+  };
+}
+
+// Maps a `claim_fraud_indicators` row to camelCase.
+export function serializeFraudIndicator(row: any) {
+  return {
+    id: row.id,
+    claimId: row.claim_id,
+    type: row.type,
+    description: row.description,
+    confidence: row.confidence === null ? null : Number(row.confidence),
     createdAt: row.created_at,
   };
 }

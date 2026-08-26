@@ -20,29 +20,21 @@
           <text>claimAmount</text>
         </inputExpression>
       </input>
-      <input id="Input_claimType" label="Claim Type">
-        <inputExpression id="InputExpression_claimType" typeRef="string">
-          <text>claimType</text>
+      <input id="Input_daysSincePolicyEffective" label="Days Since Policy Effective">
+        <inputExpression id="InputExpression_daysSincePolicyEffective" typeRef="number">
+          <text>daysSincePolicyEffective</text>
+        </inputExpression>
+      </input>
+      <input id="Input_claimantClaimCountLast12Months" label="Claimant Claim Count (12mo)">
+        <inputExpression id="InputExpression_claimantClaimCountLast12Months" typeRef="number">
+          <text>claimantClaimCountLast12Months</text>
         </inputExpression>
       </input>
       <output id="Output_assignedRole" label="Assigned Role" name="assignedRole" typeRef="string" />
-      <rule id="Rule_investigator">
-        <inputEntry id="InputEntry_investigator_fraud">
-          <text>&gt;= 1</text>
-        </inputEntry>
-        <inputEntry id="InputEntry_investigator_risk">
-          <text></text>
-        </inputEntry>
-        <inputEntry id="InputEntry_investigator_amount">
-          <text></text>
-        </inputEntry>
-        <inputEntry id="InputEntry_investigator_type">
-          <text></text>
-        </inputEntry>
-        <outputEntry id="OutputEntry_investigator">
-          <text>"investigator"</text>
-        </outputEntry>
-      </rule>
+      <!-- High-dollar exposure takes priority over everything else: legal
+           needs to see this claim regardless of whether fraud/risk also
+           flagged it (a FIRST hit policy can only pick one row, and
+           high-dollar legal exposure is the more encompassing concern). -->
       <rule id="Rule_legal">
         <inputEntry id="InputEntry_legal_fraud">
           <text></text>
@@ -53,11 +45,78 @@
         <inputEntry id="InputEntry_legal_amount">
           <text>&gt; 50000</text>
         </inputEntry>
-        <inputEntry id="InputEntry_legal_type">
+        <inputEntry id="InputEntry_legal_days">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_legal_claimCount">
           <text></text>
         </inputEntry>
         <outputEntry id="OutputEntry_legal">
           <text>"legal"</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_investigator_fraud">
+        <inputEntry id="InputEntry_investigatorFraud_fraud">
+          <text>&gt;= 1</text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFraud_risk">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFraud_amount">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFraud_days">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFraud_claimCount">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_investigatorFraud">
+          <text>"investigator"</text>
+        </outputEntry>
+      </rule>
+      <!-- Red flag: loss reported suspiciously close to the policy's
+           effective date. -->
+      <rule id="Rule_investigator_earlyClaim">
+        <inputEntry id="InputEntry_investigatorEarly_fraud">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorEarly_risk">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorEarly_amount">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorEarly_days">
+          <text>&lt;= 14</text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorEarly_claimCount">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_investigatorEarly">
+          <text>"investigator"</text>
+        </outputEntry>
+      </rule>
+      <!-- Red flag: claimant has filed several claims in the trailing 12
+           months. -->
+      <rule id="Rule_investigator_frequency">
+        <inputEntry id="InputEntry_investigatorFreq_fraud">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFreq_risk">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFreq_amount">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFreq_days">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_investigatorFreq_claimCount">
+          <text>&gt;= 3</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_investigatorFreq">
+          <text>"investigator"</text>
         </outputEntry>
       </rule>
       <rule id="Rule_adjuster_risk">
@@ -70,7 +129,10 @@
         <inputEntry id="InputEntry_adjusterRisk_amount">
           <text></text>
         </inputEntry>
-        <inputEntry id="InputEntry_adjusterRisk_type">
+        <inputEntry id="InputEntry_adjusterRisk_days">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterRisk_claimCount">
           <text></text>
         </inputEntry>
         <outputEntry id="OutputEntry_adjusterRisk">
@@ -87,7 +149,10 @@
         <inputEntry id="InputEntry_adjusterAmount_amount">
           <text>&gt; 5000</text>
         </inputEntry>
-        <inputEntry id="InputEntry_adjusterAmount_type">
+        <inputEntry id="InputEntry_adjusterAmount_days">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_adjusterAmount_claimCount">
           <text></text>
         </inputEntry>
         <outputEntry id="OutputEntry_adjusterAmount">
@@ -104,7 +169,10 @@
         <inputEntry id="InputEntry_auto_amount">
           <text></text>
         </inputEntry>
-        <inputEntry id="InputEntry_auto_type">
+        <inputEntry id="InputEntry_auto_days">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="InputEntry_auto_claimCount">
           <text></text>
         </inputEntry>
         <outputEntry id="OutputEntry_auto">

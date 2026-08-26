@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import multer from "multer";
 import { pool } from "../db";
-import { serializeClaim, serializeClaimDocument } from "../serializers";
+import { serializeClaim, serializeClaimDocument, serializeFraudIndicator } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
 import { CLAIM_CASE_PROCESS_ID, zeebeClient } from "../zeebe";
 
@@ -78,9 +78,14 @@ claimsRouter.get("/:id", async (req, res) => {
       `SELECT * FROM claim_documents WHERE claim_id = $1 ORDER BY created_at`,
       [req.params.id]
     );
+    const fraudIndicatorsResult = await pool.query(
+      `SELECT * FROM claim_fraud_indicators WHERE claim_id = $1 ORDER BY confidence DESC`,
+      [req.params.id]
+    );
     res.json({
       ...serializeClaim(claimResult.rows[0]),
       documents: documentsResult.rows.map(serializeClaimDocument),
+      fraudIndicators: fraudIndicatorsResult.rows.map(serializeFraudIndicator),
     });
   } catch (err) {
     console.error("GET /api/claims/:id failed:", err);
@@ -273,7 +278,11 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
           insuranceType: claim.insurance_type,
           policyNumber: claim.policy_number,
           claimType: claim.claim_type,
-          claimAmount: claim.claim_amount,
+          // pg returns `numeric` columns as strings to avoid float precision
+          // loss — cast explicitly so FEEL comparisons in the DMN table and
+          // BPMN gateway conditions (`claimAmount > 50000`) get a number,
+          // not a string (a string there fails with NOT_COMPARABLE).
+          claimAmount: Number(claim.claim_amount),
         },
       });
 

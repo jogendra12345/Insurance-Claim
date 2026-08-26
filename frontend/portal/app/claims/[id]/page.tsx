@@ -163,28 +163,33 @@ export default function ClaimDetailPage() {
                 <p style={{ margin: 0, fontSize: "0.9rem", color: claim.caseSummary ? "var(--text)" : "var(--text-muted)" }}>
                   {claim.caseSummary ?? "Not yet available — an automated review is still in progress."}
                 </p>
-                {claim.fraudIndicatorCount > 0 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: "0.6rem",
-                      marginTop: "0.9rem",
-                      padding: "0.75rem 0.9rem",
-                      borderRadius: "var(--radius-sm)",
-                      background: "var(--status-attention-bg)",
-                      color: "var(--status-attention-fg)",
-                    }}
-                  >
-                    <span style={{ flexShrink: 0, marginTop: "0.1rem" }}>
-                      <AlertTriangleIcon />
-                    </span>
-                    <span style={{ fontSize: "0.85rem" }}>
-                      {claim.fraudIndicatorCount === 1
-                        ? "1 fraud indicator flagged"
-                        : `${claim.fraudIndicatorCount} fraud indicators flagged`}{" "}
-                      — review before adjudication.
-                    </span>
+                {claim.fraudIndicators && claim.fraudIndicators.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.9rem" }}>
+                    {claim.fraudIndicators.map((indicator) => (
+                      <div
+                        key={indicator.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "0.6rem",
+                          padding: "0.75rem 0.9rem",
+                          borderRadius: "var(--radius-sm)",
+                          background: "var(--status-attention-bg)",
+                          color: "var(--status-attention-fg)",
+                        }}
+                      >
+                        <span style={{ flexShrink: 0, marginTop: "0.1rem" }}>
+                          <AlertTriangleIcon />
+                        </span>
+                        <span style={{ fontSize: "0.85rem" }}>
+                          <strong style={{ textTransform: "capitalize" }}>{indicator.type.replace(/_/g, " ")}</strong>
+                          {" "}
+                          <span style={{ opacity: 0.75 }}>({Math.round(indicator.confidence * 100)}% confidence)</span>
+                          {" — "}
+                          {indicator.description}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </Section>
@@ -284,6 +289,14 @@ export default function ClaimDetailPage() {
                   <DetailRow label="Attested" value={new Date(claim.attestationSignedAt).toLocaleString()} />
                   <DetailRow label="Submitted" value={new Date(claim.createdAt).toLocaleString()} />
                 </div>
+                {claim.riskReasoning && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", marginTop: "0.9rem" }}>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>
+                      AI risk reasoning
+                    </span>
+                    <p style={{ margin: 0, fontSize: "0.88rem" }}>{claim.riskReasoning}</p>
+                  </div>
+                )}
               </Section>
             </div>
           </div>

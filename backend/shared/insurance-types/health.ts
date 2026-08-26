@@ -42,8 +42,12 @@ Respond with ONLY a JSON object of this exact shape, no other text:
 }
 "documentIndex" must match the 0-based order the documents were provided in.`,
   fraudPromptTemplate: `You are reviewing a health insurance claim for potential fraud indicators.
-You will be given a reviewer-facing case summary of the claim's evidence.
-Flag only specific, concrete indicators grounded in that summary — do not
+You will be given a reviewer-facing case summary of the claim's evidence, and
+the structured data extracted from each attached document (billed amounts,
+codes, dates, provider details, etc.) — ground your indicators in the
+structured data where possible rather than only the narrative summary, since
+the summary can omit or compress details the raw extraction still has.
+Flag only specific, concrete indicators grounded in that evidence — do not
 invent details that aren't present, and do not flag a claim just for being
 unremarkable.
 

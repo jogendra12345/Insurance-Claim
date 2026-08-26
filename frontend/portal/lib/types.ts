@@ -31,6 +31,7 @@ export interface Claim {
   status: ClaimStatus;
   caseSummary: string | null;
   riskScore: number | null;
+  riskReasoning: string | null;
   fraudIndicatorCount: number;
   assignedRole: AssignedRole | null;
   confirmedRole: AssignedRole | null;
@@ -49,6 +50,8 @@ export interface Claim {
   updatedAt: string;
   /** Only present on the GET /api/claims/:id (detail) response. */
   documents?: ClaimDocument[];
+  /** Only present on the GET /api/claims/:id (detail) response. */
+  fraudIndicators?: ClaimFraudIndicator[];
 }
 
 export interface ClaimProvider {
@@ -63,6 +66,15 @@ export interface ClaimDocument {
   claimId: string;
   fileUrl: string;
   documentType: string | null;
+  createdAt: string;
+}
+
+export interface ClaimFraudIndicator {
+  id: string;
+  claimId: string;
+  type: string;
+  description: string;
+  confidence: number;
   createdAt: string;
 }
 

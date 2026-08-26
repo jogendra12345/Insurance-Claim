@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ApiError, fetchActiveClaimsByPolicy, fetchPolicies } from "@/lib/api";
 import type { Claim, Policy } from "@/lib/types";
-import { STATUS_TONE } from "@/app/policies/page";
+import { STATUS_TONE } from "@/lib/policy-status";
 import { relativeTime, absoluteDate } from "@/lib/time";
 
 const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {

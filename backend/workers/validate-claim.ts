@@ -16,6 +16,12 @@ interface ValidateClaimVariables {
 interface ValidateClaimOutput {
   validationPassed: boolean;
   policyId: string | null;
+  // Deterministic fraud-risk signals for the DMN routing table (see
+  // process/health-claim-routing.dmn) — cheap SQL-computed red flags rather
+  // than leaving everything to the LLM-based fraud/risk workers to infer
+  // from prose. null when there's no matched policy to compare against.
+  daysSincePolicyEffective: number | null;
+  claimantClaimCountLast12Months: number;
 }
 
 const JOB_TYPE = "validate-claim";
@@ -48,7 +54,7 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
          AND $3::date BETWEEN effective_date AND expiry_date`,
       [policyNumber, carrierId, claim.incident_date]
     );
-    const policy = policyRows[0] as { id: string } | undefined;
+    const policy = policyRows[0] as { id: string; effective_date: string } | undefined;
 
     const validationPassed = missingFields.length === 0 && !!policy;
 
@@ -59,17 +65,40 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       ]);
     }
 
+    // Red flag: loss reported suspiciously close to the policy's effective date.
+    const daysSincePolicyEffective = policy
+      ? Math.round(
+          (new Date(claim.incident_date).getTime() - new Date(policy.effective_date).getTime()) / (1000 * 60 * 60 * 24)
+        )
+      : null;
+
+    // Red flag: claimant has filed several claims in the trailing 12 months.
+    const { rows: claimCountRows } = await pool.query<{ count: string }>(
+      `SELECT count(*) FROM claims
+       WHERE claimant_email = $1 AND id != $2 AND created_at >= now() - interval '12 months'`,
+      [claim.claimant_email, claimId]
+    );
+    const claimantClaimCountLast12Months = Number(claimCountRows[0].count);
+
     await writeAuditLog({
       claimId,
       actorType: "system",
       actorId: JOB_TYPE,
       action: "validated",
-      detail: { validationPassed, missingFields, policyMatched: !!policy },
+      detail: {
+        validationPassed,
+        missingFields,
+        policyMatched: !!policy,
+        daysSincePolicyEffective,
+        claimantClaimCountLast12Months,
+      },
     });
 
     return job.complete({
       validationPassed,
       policyId: policy?.id ?? null,
+      daysSincePolicyEffective,
+      claimantClaimCountLast12Months,
     });
   },
 });

@@ -2,7 +2,7 @@ import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
-import { generateContent, parseJsonResponse } from "../shared/gemini-client";
+import { generateContent, parseJsonResponse, GEMINI_MODEL } from "../shared/gemini-client";
 
 // SPEC.md §12 — score-risk. Not insurance-type aware (only validate-claim,
 // extract-evidence, and detect-fraud-indicators are, per §12/§3).
@@ -23,6 +23,7 @@ interface RiskScoreResult {
 }
 
 const JOB_TYPE = "score-risk";
+const PROMPT_VERSION = "v1";
 
 const PROMPT_TEMPLATE = `You are scoring the risk of an insurance claim for an adjuster's review.
 You will be given the claim amount, the number of fraud indicators already
@@ -52,17 +53,17 @@ zeebeClient.createWorker<ScoreRiskVariables, Record<string, unknown>, ScoreRiskO
     const responseText = await generateContent(prompt);
     const result = parseJsonResponse<RiskScoreResult>(responseText);
 
-    await pool.query(`UPDATE claims SET risk_score = $1, updated_at = now() WHERE id = $2`, [
-      result.riskScore,
-      claimId,
-    ]);
+    await pool.query(
+      `UPDATE claims SET risk_score = $1, risk_reasoning = $2, updated_at = now() WHERE id = $3`,
+      [result.riskScore, result.reasoning, claimId]
+    );
 
     await writeAuditLog({
       claimId,
       actorType: "ai",
       actorId: JOB_TYPE,
       action: "scored_risk",
-      detail: { riskScore: result.riskScore, reasoning: result.reasoning },
+      detail: { riskScore: result.riskScore, reasoning: result.reasoning, model: GEMINI_MODEL, promptVersion: PROMPT_VERSION },
     });
 
     return job.complete({ riskScore: result.riskScore });

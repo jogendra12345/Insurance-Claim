@@ -3,7 +3,7 @@ import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
 import { getInsuranceTypeConfig } from "../shared/insurance-types/health";
-import { generateContent, fetchAsInlinePart, parseJsonResponse } from "../shared/gemini-client";
+import { generateContent, fetchAsInlinePart, parseJsonResponse, GEMINI_MODEL } from "../shared/gemini-client";
 
 // SPEC.md §12 — extract-evidence.
 interface ExtractEvidenceVariables {
@@ -21,6 +21,7 @@ interface ExtractionResult {
 }
 
 const JOB_TYPE = "extract-evidence";
+const PROMPT_VERSION = "v1";
 
 zeebeClient.createWorker<ExtractEvidenceVariables, Record<string, unknown>, ExtractEvidenceOutput>({
   taskType: JOB_TYPE,
@@ -72,7 +73,12 @@ zeebeClient.createWorker<ExtractEvidenceVariables, Record<string, unknown>, Extr
       actorType: "ai",
       actorId: JOB_TYPE,
       action: "extracted_evidence",
-      detail: { caseSummary: result.caseSummary, documentCount: documents.length },
+      detail: {
+        caseSummary: result.caseSummary,
+        documentCount: documents.length,
+        model: GEMINI_MODEL,
+        promptVersion: PROMPT_VERSION,
+      },
     });
 
     return job.complete({ caseSummary: result.caseSummary });

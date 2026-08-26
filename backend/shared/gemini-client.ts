@@ -1,7 +1,10 @@
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 // "-latest" alias tracks Google's current default flash model, so this
 // doesn't need a manual bump every time a dated model version is retired.
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
+// Exported so callers can log which model produced a given result (audit
+// trail / NAIC-style AI-decision traceability) without duplicating the
+// env-var fallback logic.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 
 interface InlinePart {
   inlineData: { mimeType: string; data: string };
@@ -30,6 +33,11 @@ export async function generateContent(promptText: string, parts: GeminiPart[] = 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: promptText }, ...parts] }],
+      // Low, fixed temperature — these calls feed fraud/risk decisions that
+      // need to be as consistent as possible for the same input, not
+      // creative. 0 isn't guaranteed fully deterministic on Gemini, but
+      // minimizes run-to-run drift versus the provider default.
+      generationConfig: { temperature: 0 },
     }),
   });
 
