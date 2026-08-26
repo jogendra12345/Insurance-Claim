@@ -1,0 +1,28 @@
+{
+  "components": [
+    {
+      "text": "## Triage Review\n\nThe AI suggested routing this claim to: **{{assignedRole}}**\n\nRisk score: **{{riskScore}}** · Fraud indicators: **{{fraudIndicatorCount}}**\n\n{{caseSummary}}",
+      "type": "text",
+      "id": "IntroText"
+    },
+    {
+      "label": "Confirmed role",
+      "type": "radio",
+      "id": "ConfirmedRoleField",
+      "key": "confirmedRole",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        { "label": "Adjuster", "value": "adjuster" },
+        { "label": "Investigator", "value": "investigator" },
+        { "label": "Legal", "value": "legal" }
+      ]
+    }
+  ],
+  "type": "default",
+  "id": "TriageReviewForm",
+  "executionPlatform": "Camunda Cloud",
+  "executionPlatformVersion": "8.9.0",
+  "schemaVersion": 17
+}

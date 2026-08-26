@@ -30,6 +30,19 @@ zeebeClient.createWorker<CaptureReviewDecisionVariables, Record<string, unknown>
     const { claimId, decision, denialReason, confirmedRole } = job.variables;
     const status = STATUS_BY_DECISION[decision];
 
+    // The review task's form requires `decision` and `denialReason` (when
+    // denying), but fail loudly into a visible Operate incident rather than
+    // writing an invalid/incomplete row if it's ever missing anyway — e.g.
+    // someone completes the task via the raw API instead of the form.
+    if (!status) {
+      throw new Error(
+        `capture-review-decision: decision must be one of ${Object.keys(STATUS_BY_DECISION).join(", ")}, got ${JSON.stringify(decision)}`
+      );
+    }
+    if (decision === "deny" && !denialReason) {
+      throw new Error("capture-review-decision: denialReason is required when decision is 'deny'");
+    }
+
     await pool.query(
       `UPDATE claims SET decision = $1, denial_reason = $2, status = $3, updated_at = now() WHERE id = $4`,
       [decision, denialReason ?? null, status, claimId]

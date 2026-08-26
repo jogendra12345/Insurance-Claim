@@ -12,12 +12,24 @@ interface CaptureTriageReviewVariables {
   assignedRole: string;
 }
 
+const VALID_ROLES = ["adjuster", "investigator", "legal"];
+
 const JOB_TYPE = "capture-triage-review";
 
 zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, Record<string, never>>({
   taskType: JOB_TYPE,
   taskHandler: async (job) => {
     const { claimId, confirmedRole, assignedRole } = job.variables;
+
+    // Task_TriageReview's form requires this field, but fail loudly (into a
+    // visible Operate incident) rather than silently writing NULL if it's
+    // ever missing anyway — e.g. someone completes the task via the raw API
+    // instead of the form.
+    if (!VALID_ROLES.includes(confirmedRole)) {
+      throw new Error(
+        `capture-triage-review: confirmedRole must be one of ${VALID_ROLES.join(", ")}, got ${JSON.stringify(confirmedRole)}`
+      );
+    }
 
     await pool.query(
       `UPDATE claims SET confirmed_role = $1, status = 'in_review', updated_at = now() WHERE id = $2`,

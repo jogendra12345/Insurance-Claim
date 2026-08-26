@@ -29,7 +29,7 @@ services:
     env_file:
       - path: .env
         required: true
-    mem_limit: 1g
+    mem_limit: 2g
     restart: on-failure
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9600 && echo -e \"GET /actuator/health/status HTTP/1.1\r\nHost: localhost\r\n\r\n\" >&3 && head -n 1 <&3'"]

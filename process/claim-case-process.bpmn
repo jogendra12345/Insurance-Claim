@@ -79,6 +79,7 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:assignmentDefinition candidateGroups="triage-team" />
+        <zeebe:formDefinition formId="TriageReviewForm" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_ToTriageGateway</bpmn:incoming>
       <bpmn:outgoing>Flow_ToCaptureTriageReview</bpmn:outgoing>
@@ -100,6 +101,7 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:assignmentDefinition candidateGroups="adjusters" />
+        <zeebe:formDefinition formId="ReviewDecisionForm" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Role_Adjuster</bpmn:incoming>
       <bpmn:outgoing>Flow_Adjuster_ToDecision</bpmn:outgoing>
@@ -108,6 +110,7 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:assignmentDefinition candidateGroups="investigators" />
+        <zeebe:formDefinition formId="ReviewDecisionForm" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Role_Investigator</bpmn:incoming>
       <bpmn:outgoing>Flow_Investigator_ToDecision</bpmn:outgoing>
@@ -116,6 +119,7 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:assignmentDefinition candidateGroups="legal-reviewers" />
+        <zeebe:formDefinition formId="ReviewDecisionForm" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Role_Legal</bpmn:incoming>
       <bpmn:outgoing>Flow_Legal_ToDecision</bpmn:outgoing>

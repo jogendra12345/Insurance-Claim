@@ -1,0 +1,34 @@
+{
+  "components": [
+    {
+      "text": "## Review & Decision\n\n{{caseSummary}}\n\nClaim amount: **{{claimAmount}}**",
+      "type": "text",
+      "id": "IntroText"
+    },
+    {
+      "label": "Decision",
+      "type": "radio",
+      "id": "DecisionField",
+      "key": "decision",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        { "label": "Approve", "value": "approve" },
+        { "label": "Deny", "value": "deny" },
+        { "label": "More info needed", "value": "moreInfo" }
+      ]
+    },
+    {
+      "label": "Denial reason (required if denying)",
+      "type": "textarea",
+      "id": "DenialReasonField",
+      "key": "denialReason"
+    }
+  ],
+  "type": "default",
+  "id": "ReviewDecisionForm",
+  "executionPlatform": "Camunda Cloud",
+  "executionPlatformVersion": "8.9.0",
+  "schemaVersion": 17
+}
