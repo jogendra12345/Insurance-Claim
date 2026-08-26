@@ -6,6 +6,19 @@
       "id": "IntroText"
     },
     {
+      "label": "Action",
+      "type": "radio",
+      "id": "TriageActionField",
+      "key": "triageAction",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        { "label": "Route for specialist review", "value": "review" },
+        { "label": "Reject claim", "value": "reject" }
+      ]
+    },
+    {
       "label": "Confirmed role",
       "type": "radio",
       "id": "ConfirmedRoleField",
@@ -13,11 +26,26 @@
       "validate": {
         "required": true
       },
+      "conditional": {
+        "hide": "=triageAction = \"reject\""
+      },
       "values": [
         { "label": "Adjuster", "value": "adjuster" },
         { "label": "Investigator", "value": "investigator" },
         { "label": "Legal", "value": "legal" }
       ]
+    },
+    {
+      "label": "Rejection reason",
+      "type": "textarea",
+      "id": "DenialReasonField",
+      "key": "denialReason",
+      "validate": {
+        "required": true
+      },
+      "conditional": {
+        "hide": "=triageAction != \"reject\""
+      }
     }
   ],
   "type": "default",

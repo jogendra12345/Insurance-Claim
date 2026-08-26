@@ -161,8 +161,8 @@ claims
   fraud_indicator_count integer NOT NULL DEFAULT 0  -- written by detect-fraud-indicators; only counts confidence >= 0.5 (§11/§12)
   assigned_role         text NULL            -- adjuster | investigator | legal | auto (DMN suggestion); written by capture-routing-decision
   confirmed_role        text NULL            -- role a human actually routed it to, after triage review; written by capture-triage-review
-  decision              text NULL            -- approve | deny | moreInfo; written by capture-review-decision
-  denial_reason         text NULL            -- written by capture-review-decision
+  decision              text NULL            -- approve | deny | moreInfo; written by capture-review-decision, or 'deny' by capture-triage-review on a triage rejection (§10)
+  denial_reason         text NULL            -- written by capture-review-decision or capture-triage-review (see decision above)
   process_instance_key  text NULL            -- Zeebe process instance key
   provider_id            uuid NOT NULL FK → providers.id  -- resolved synchronously at intake, find-or-create by NPI (§ "FNOL extended fields" below)
   diagnosis_code         text NOT NULL        -- ICD-10, e.g. E11.9
@@ -234,23 +234,32 @@ Started by the backend API when a claim is submitted, with initial variables `cl
 6. **Service Task** `score-risk` — combines fraud signal + claim complexity into a single `riskScore` (0–100) with `reasoning`, both written to `claims`
 7. **Business Rule Task** — evaluates the DMN decision selected via `decisionIdExpression` for this claim's `insuranceType` (v1: `health-claim-routing-decision`) → sets `assignedRole` (`adjuster` | `investigator` | `legal` | `auto`)
 8. **Service Task** `capture-routing-decision` — writes `claims.assigned_role = assignedRole`, sets `claims.status = 'triage'`, writes `audit_log`
-9. **User Task** `Triage Review` (candidate group `triage-team`, form `TriageReviewForm` — `process/forms/triage-review.form`) — reviewer sees the AI's case summary, fraud indicators, risk score, and suggested role; sets `confirmedRole` (may differ from `assignedRole`). **Every claim passes through this task — `assignedRole = "auto"` is a suggestion the reviewer accepts or overrides, never a skip** (see §1, §15; this replaced an earlier "auto-bypass" gateway that let low-risk claims skip human review entirely, which contradicted §1's "human confirming every AI-driven routing decision"). The form's `confirmedRole` field is required — Tasklist's default (no-form) "Complete" button previously let a reviewer complete this task with zero variables, silently losing the confirmed role; the form is what actually enforces the "human confirms" guarantee, not just the BPMN shape.
-10. **Service Task** `capture-triage-review` — writes `claims.confirmed_role = confirmedRole`, sets `claims.status = 'in_review'`, writes `audit_log` (flags an override when `confirmedRole != assignedRole`)
-11. **Exclusive Gateway** `Route by Confirmed Role` (default: `adjuster`, so an unset/unrecognized `confirmedRole` can't deadlock the instance) → one of three branches, only one taken per instance, each using form `ReviewDecisionForm` (`process/forms/review-decision.form`):
+9. **User Task** `Triage Review` (candidate group `triage-team`, form `TriageReviewForm` — `process/forms/triage-review.form`) — reviewer sees the AI's case summary, fraud indicators, risk score, and suggested role; the form's `triageAction` field (required) is either:
+   - `"review"` (default outcome) — sets `confirmedRole` (may differ from `assignedRole`; field required by the form when this action is chosen)
+   - `"reject"` — the triage reviewer rejects the claim outright without a full role-specific review (e.g. an obviously invalid or fraudulent claim); sets `denialReason` (required by the form when this action is chosen; `confirmedRole` is hidden and not collected)
+
+   **Every claim passes through this task — `assignedRole = "auto"` is a suggestion the reviewer accepts or overrides, never a skip** (see §1, §15; this replaced an earlier "auto-bypass" gateway that let low-risk claims skip human review entirely, which contradicted §1's "human confirming every AI-driven routing decision"). `triageAction`/`confirmedRole`/`denialReason` are required directly by the form — Tasklist's default (no-form) "Complete" button previously let a reviewer complete this task with zero variables, silently losing the confirmed role; the form is what actually enforces the "human confirms" guarantee, not just the BPMN shape.
+10. **Service Task** `capture-triage-review` — branches on `triageAction`:
+    - `"review"` → writes `claims.confirmed_role = confirmedRole`, sets `claims.status = 'in_review'`, writes `audit_log` (action `triage_confirmed`, flags an override when `confirmedRole != assignedRole`)
+    - `"reject"` → writes `claims.decision = 'deny'`, `claims.denial_reason = denialReason`, sets `claims.status = 'denied'`, writes `audit_log` (action `rejected_at_triage`) — same shape as `capture-review-decision`'s deny branch, since this bypasses role-specific review entirely
+11. **Exclusive Gateway** `Triage Decision?` (default: continue to role-specific review, so an unset/unrecognized `triageAction` can't deadlock the instance) →
+    - `triageAction = "reject"` → step 15 (merges into the existing denial path — `Task_DraftDenialLetter` has two incoming flows: this one and the role-specific-review decision path's `deny` branch)
+    - Otherwise (default) → step 12
+12. **Exclusive Gateway** `Route by Confirmed Role` (default: `adjuster`, so an unset/unrecognized `confirmedRole` can't deadlock the instance) → one of three branches, only one taken per instance, each using form `ReviewDecisionForm` (`process/forms/review-decision.form`):
     - `confirmedRole = "adjuster"` → **User Task** `Adjuster Review` (candidate group `adjusters`)
     - `confirmedRole = "investigator"` → **User Task** `Investigator Review` (candidate group `investigators`)
     - `confirmedRole = "legal"` → **User Task** `Legal Review` (candidate group `legal-reviewers`)
     - each sets `decision` (`approve` | `deny` | `moreInfo`, required by the form) and `denialReason` if denying (enforced by `capture-review-decision`, not the form — form-js's static required validation can't express "required only when decision=deny")
-12. **Service Task** `capture-review-decision` — writes `claims.decision`, `claims.denial_reason`, and maps `claims.status` from the decision (`approve` → `approved`, `deny` → `denied`, `moreInfo` → `awaiting_info`); writes `audit_log`
-13. **Exclusive Gateway** `Decision`
-    - `approve` (default) → step 14
-    - `decision = "deny"` → step 15
+13. **Service Task** `capture-review-decision` — writes `claims.decision`, `claims.denial_reason`, and maps `claims.status` from the decision (`approve` → `approved`, `deny` → `denied`, `moreInfo` → `awaiting_info`); writes `audit_log`
+14. **Exclusive Gateway** `Decision`
+    - `approve` (default) → step 15
+    - `decision = "deny"` → step 16
     - `decision = "moreInfo"` → **End Event** "Awaiting More Information" (terminal in v1 — see §14)
-14. Approved path: **Exclusive Gateway** `Needs Second Sign-off?` (`claimAmount` over threshold, e.g. 50,000) →
-    - Yes → **User Task** `Supervisor Sign-off` (candidate group `supervisors`) → **Service Task** `capture-signoff` (writes `audit_log`; `claims.status` is already `approved` from step 12) → settlement
+15. Approved path: **Exclusive Gateway** `Needs Second Sign-off?` (`claimAmount` over threshold, e.g. 50,000) →
+    - Yes → **User Task** `Supervisor Sign-off` (candidate group `supervisors`) → **Service Task** `capture-signoff` (writes `audit_log`; `claims.status` is already `approved` from step 13) → settlement
     - No (default) → straight to settlement
     - Settlement: **Service Task** `trigger-settlement` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Approved"
-15. Denied path: **Service Task** `draft-denial-letter` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Denied"
+16. Denied path (reached either from step 11's triage rejection or step 14's deny decision): **Service Task** `draft-denial-letter` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Denied"
 
 `close-case`'s documented job (§12) of writing "final `status`" is now a confirming/idempotent write against a status the relevant `capture-*` step already set at decision time, not the sole writer — see §12.
 
@@ -283,7 +292,7 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 | `detect-fraud-indicators` | `claimId`, `insuranceType`, `caseSummary` | Calls Gemini, grounded in the case summary *and* each document's `extracted_data`, to flag specific fraud indicators; writes every indicator to `claim_fraud_indicators` (all confidences) but only counts `confidence >= 0.5` toward `claims.fraud_indicator_count` / the output below | `fraudIndicatorCount` (number, counted only) |
 | `score-risk` | `claimId`, `claimAmount`, `fraudIndicatorCount`, `caseSummary` | Calls Gemini (temperature 0) to produce a single 0–100 risk score with reasoning; writes `claims.risk_score` and `claims.risk_reasoning` | `riskScore` (number) |
 | `capture-routing-decision` | `claimId`, `assignedRole` | Writes `claims.assigned_role`, sets `claims.status = 'triage'` | — |
-| `capture-triage-review` | `claimId`, `confirmedRole`, `assignedRole` | Writes `claims.confirmed_role`, sets `claims.status = 'in_review'`; `audit_log.detail` flags whether the reviewer overrode the AI's suggestion | — |
+| `capture-triage-review` | `claimId`, `triageAction`, `confirmedRole` (when reviewing), `assignedRole`, `denialReason` (when rejecting) | Branches on `triageAction`: `"review"` writes `claims.confirmed_role`, sets `status = 'in_review'` (`audit_log.detail` flags an override); `"reject"` writes `claims.decision = 'deny'` + `denial_reason`, sets `status = 'denied'` (same shape as `capture-review-decision`'s deny branch) | — |
 | `capture-review-decision` | `claimId`, `decision`, `denialReason`, `confirmedRole` | Writes `claims.decision`, `claims.denial_reason`; sets `claims.status` from `decision` (`approve→approved`, `deny→denied`, `moreInfo→awaiting_info`) | — |
 | `capture-signoff` | `claimId` | No `claims` columns to set (`status` is already `approved` from `capture-review-decision`) — exists solely to satisfy §13's "every user-task completion writes `audit_log`" rule for Supervisor Sign-off | — |
 | `capture-validation-exception` | `claimId` | Sets `claims.status = 'denied'` (v1's Validation Exception Review is reject-only, §10 step 3); writes `audit_log` | — |
@@ -321,4 +330,4 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 
 ## 15. Definition of done (v1)
 
-A health insurance claim can be submitted through the frontend, flows through the full BPMN process with real Gemini API calls at every AI step, a low-risk/low-value claim is confirmed by a triage reviewer even when the AI suggests no further specialist review is needed (`assignedRole = "auto"` is a suggestion the triage reviewer can accept or override, never a skip — see §10), a claim with fraud indicators routes to an investigator, a high-value claim routes to legal, a triage reviewer can override the AI's suggested role, a large approved settlement requires supervisor sign-off, and every step — automated or human — leaves a row in `audit_log` that reconstructs the full case history from intake to resolution. The process, workers, and DMN selection are all insurance-type-parameterized even though only `health` ships in v1.
+A health insurance claim can be submitted through the frontend, flows through the full BPMN process with real Gemini API calls at every AI step, a low-risk/low-value claim is confirmed by a triage reviewer even when the AI suggests no further specialist review is needed (`assignedRole = "auto"` is a suggestion the triage reviewer can accept or override, never a skip — see §10), a claim with fraud indicators routes to an investigator, a high-value claim routes to legal, a triage reviewer can override the AI's suggested role or reject an obviously invalid/fraudulent claim outright without a full role-specific review, a large approved settlement requires supervisor sign-off, and every step — automated or human — leaves a row in `audit_log` that reconstructs the full case history from intake to resolution. The process, workers, and DMN selection are all insurance-type-parameterized even though only `health` ships in v1.

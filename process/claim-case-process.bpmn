@@ -89,8 +89,19 @@
         <zeebe:taskDefinition type="capture-triage-review" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_ToCaptureTriageReview</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToRoleGateway</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToTriageDecisionGateway</bpmn:outgoing>
     </bpmn:serviceTask>
+    <!-- Triage Review can reject a claim outright (obviously invalid/
+         fraudulent claims don't need a full role-specific review to deny)
+         instead of always continuing to role-specific review — see
+         TriageReviewForm's `triageAction` field and
+         capture-triage-review.ts. Rejecting merges into the existing
+         denial path (Task_DraftDenialLetter) rather than duplicating it. -->
+    <bpmn:exclusiveGateway id="Gateway_TriageDecision" name="Triage Decision?" default="Flow_ToRoleGateway">
+      <bpmn:incoming>Flow_ToTriageDecisionGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToRoleGateway</bpmn:outgoing>
+      <bpmn:outgoing>Flow_TriageReject_ToDenial</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
     <bpmn:exclusiveGateway id="Gateway_RouteByConfirmedRole" name="Route by Confirmed Role" default="Flow_Role_Adjuster">
       <bpmn:incoming>Flow_ToRoleGateway</bpmn:incoming>
       <bpmn:outgoing>Flow_Role_Adjuster</bpmn:outgoing>
@@ -192,6 +203,7 @@
         <zeebe:taskDefinition type="draft-denial-letter" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Decision_Deny</bpmn:incoming>
+      <bpmn:incoming>Flow_TriageReject_ToDenial</bpmn:incoming>
       <bpmn:outgoing>Flow_ToNotifyDenied</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_NotifyClaimant_Denied" name="notify-claimant">
@@ -225,7 +237,11 @@
     <bpmn:sequenceFlow id="Flow_ToCaptureRoutingDecision" sourceRef="Task_RoutingDecision" targetRef="Task_CaptureRoutingDecision" />
     <bpmn:sequenceFlow id="Flow_ToTriageGateway" sourceRef="Task_CaptureRoutingDecision" targetRef="Task_TriageReview" />
     <bpmn:sequenceFlow id="Flow_ToCaptureTriageReview" sourceRef="Task_TriageReview" targetRef="Task_CaptureTriageReview" />
-    <bpmn:sequenceFlow id="Flow_ToRoleGateway" sourceRef="Task_CaptureTriageReview" targetRef="Gateway_RouteByConfirmedRole" />
+    <bpmn:sequenceFlow id="Flow_ToTriageDecisionGateway" sourceRef="Task_CaptureTriageReview" targetRef="Gateway_TriageDecision" />
+    <bpmn:sequenceFlow id="Flow_ToRoleGateway" sourceRef="Gateway_TriageDecision" targetRef="Gateway_RouteByConfirmedRole" />
+    <bpmn:sequenceFlow id="Flow_TriageReject_ToDenial" name="reject" sourceRef="Gateway_TriageDecision" targetRef="Task_DraftDenialLetter">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=triageAction = "reject"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_Role_Adjuster" name="adjuster" sourceRef="Gateway_RouteByConfirmedRole" targetRef="Task_AdjusterReview">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=confirmedRole = "adjuster"</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -291,38 +307,41 @@
       <bpmndi:BPMNShape id="Task_CaptureTriageReview_di" bpmnElement="Task_CaptureTriageReview">
         <dc:Bounds x="1375" y="30" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_RouteByConfirmedRole_di" bpmnElement="Gateway_RouteByConfirmedRole" isMarkerVisible="true">
+      <bpmndi:BPMNShape id="Gateway_TriageDecision_di" bpmnElement="Gateway_TriageDecision" isMarkerVisible="true">
         <dc:Bounds x="1550" y="45" width="50" height="50" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_AdjusterReview_di" bpmnElement="Task_AdjusterReview">
-        <dc:Bounds x="1675" y="30" width="100" height="80" />
+      <bpmndi:BPMNShape id="Gateway_RouteByConfirmedRole_di" bpmnElement="Gateway_RouteByConfirmedRole" isMarkerVisible="true">
+        <dc:Bounds x="1700" y="45" width="50" height="50" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_CaptureReviewDecision_di" bpmnElement="Task_CaptureReviewDecision">
+      <bpmndi:BPMNShape id="Task_AdjusterReview_di" bpmnElement="Task_AdjusterReview">
         <dc:Bounds x="1825" y="30" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CaptureReviewDecision_di" bpmnElement="Task_CaptureReviewDecision">
+        <dc:Bounds x="1975" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Decision_di" bpmnElement="Gateway_Decision" isMarkerVisible="true">
-        <dc:Bounds x="2000" y="45" width="50" height="50" />
+        <dc:Bounds x="2150" y="45" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_NeedsSecondSignoff_di" bpmnElement="Gateway_NeedsSecondSignoff" isMarkerVisible="true">
-        <dc:Bounds x="2750" y="45" width="50" height="50" />
+        <dc:Bounds x="2900" y="45" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_SupervisorSignoff_di" bpmnElement="Task_SupervisorSignoff">
-        <dc:Bounds x="2875" y="30" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_CaptureSignoff_di" bpmnElement="Task_CaptureSignoff">
         <dc:Bounds x="3025" y="30" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_TriggerSettlement_di" bpmnElement="Task_TriggerSettlement">
+      <bpmndi:BPMNShape id="Task_CaptureSignoff_di" bpmnElement="Task_CaptureSignoff">
         <dc:Bounds x="3175" y="30" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_NotifyClaimant_Approved_di" bpmnElement="Task_NotifyClaimant_Approved">
+      <bpmndi:BPMNShape id="Task_TriggerSettlement_di" bpmnElement="Task_TriggerSettlement">
         <dc:Bounds x="3325" y="30" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_CloseCase_Approved_di" bpmnElement="Task_CloseCase_Approved">
+      <bpmndi:BPMNShape id="Task_NotifyClaimant_Approved_di" bpmnElement="Task_NotifyClaimant_Approved">
         <dc:Bounds x="3475" y="30" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CloseCase_Approved_di" bpmnElement="Task_CloseCase_Approved">
+        <dc:Bounds x="3625" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_ClaimApproved_di" bpmnElement="EndEvent_ClaimApproved">
-        <dc:Bounds x="3657" y="52" width="36" height="36" />
+        <dc:Bounds x="3807" y="52" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_ValidationExceptionReview_di" bpmnElement="Task_ValidationExceptionReview">
         <dc:Bounds x="475" y="170" width="100" height="80" />
@@ -334,25 +353,25 @@
         <dc:Bounds x="807" y="192" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_InvestigatorReview_di" bpmnElement="Task_InvestigatorReview">
-        <dc:Bounds x="1975" y="170" width="100" height="80" />
+        <dc:Bounds x="2125" y="170" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_DraftDenialLetter_di" bpmnElement="Task_DraftDenialLetter">
-        <dc:Bounds x="2425" y="170" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_NotifyClaimant_Denied_di" bpmnElement="Task_NotifyClaimant_Denied">
         <dc:Bounds x="2575" y="170" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_CloseCase_Denied_di" bpmnElement="Task_CloseCase_Denied">
+      <bpmndi:BPMNShape id="Task_NotifyClaimant_Denied_di" bpmnElement="Task_NotifyClaimant_Denied">
         <dc:Bounds x="2725" y="170" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CloseCase_Denied_di" bpmnElement="Task_CloseCase_Denied">
+        <dc:Bounds x="2875" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_ClaimDenied_di" bpmnElement="EndEvent_ClaimDenied">
-        <dc:Bounds x="2907" y="192" width="36" height="36" />
+        <dc:Bounds x="3057" y="192" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_LegalReview_di" bpmnElement="Task_LegalReview">
-        <dc:Bounds x="1675" y="310" width="100" height="80" />
+        <dc:Bounds x="1825" y="310" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_AwaitingMoreInfo_di" bpmnElement="EndEvent_AwaitingMoreInfo">
-        <dc:Bounds x="2157" y="332" width="36" height="36" />
+        <dc:Bounds x="2307" y="332" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_ToValidateClaim_di" bpmnElement="Flow_ToValidateClaim">
         <di:waypoint x="93" y="70" />
@@ -395,81 +414,93 @@
         <di:waypoint x="1325" y="70" />
         <di:waypoint x="1375" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToRoleGateway_di" bpmnElement="Flow_ToRoleGateway">
+      <bpmndi:BPMNEdge id="Flow_ToTriageDecisionGateway_di" bpmnElement="Flow_ToTriageDecisionGateway">
         <di:waypoint x="1475" y="70" />
         <di:waypoint x="1550" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Role_Adjuster_di" bpmnElement="Flow_Role_Adjuster">
+      <bpmndi:BPMNEdge id="Flow_ToRoleGateway_di" bpmnElement="Flow_ToRoleGateway">
         <di:waypoint x="1600" y="70" />
-        <di:waypoint x="1675" y="70" />
+        <di:waypoint x="1700" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Role_Investigator_di" bpmnElement="Flow_Role_Investigator">
-        <di:waypoint x="1575" y="95" />
-        <di:waypoint x="1575" y="210" />
-        <di:waypoint x="1975" y="210" />
+      <bpmndi:BPMNEdge id="Flow_TriageReject_ToDenial_di" bpmnElement="Flow_TriageReject_ToDenial">
+        <di:waypoint x="1600" y="70" />
+        <di:waypoint x="1650" y="70" />
+        <di:waypoint x="1650" y="140" />
+        <di:waypoint x="2550" y="140" />
+        <di:waypoint x="2550" y="210" />
+        <di:waypoint x="2575" y="210" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Role_Legal_di" bpmnElement="Flow_Role_Legal">
-        <di:waypoint x="1575" y="95" />
-        <di:waypoint x="1575" y="350" />
-        <di:waypoint x="1675" y="350" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Adjuster_ToDecision_di" bpmnElement="Flow_Adjuster_ToDecision">
-        <di:waypoint x="1775" y="70" />
+      <bpmndi:BPMNEdge id="Flow_Role_Adjuster_di" bpmnElement="Flow_Role_Adjuster">
+        <di:waypoint x="1750" y="70" />
         <di:waypoint x="1825" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToDecisionGateway_di" bpmnElement="Flow_ToDecisionGateway">
+      <bpmndi:BPMNEdge id="Flow_Role_Investigator_di" bpmnElement="Flow_Role_Investigator">
+        <di:waypoint x="1725" y="95" />
+        <di:waypoint x="1725" y="210" />
+        <di:waypoint x="2125" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Role_Legal_di" bpmnElement="Flow_Role_Legal">
+        <di:waypoint x="1725" y="95" />
+        <di:waypoint x="1725" y="350" />
+        <di:waypoint x="1825" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Adjuster_ToDecision_di" bpmnElement="Flow_Adjuster_ToDecision">
         <di:waypoint x="1925" y="70" />
-        <di:waypoint x="2000" y="70" />
+        <di:waypoint x="1975" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToDecisionGateway_di" bpmnElement="Flow_ToDecisionGateway">
+        <di:waypoint x="2075" y="70" />
+        <di:waypoint x="2150" y="70" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Decision_Approve_di" bpmnElement="Flow_Decision_Approve">
-        <di:waypoint x="2050" y="70" />
-        <di:waypoint x="2750" y="70" />
+        <di:waypoint x="2200" y="70" />
+        <di:waypoint x="2900" y="70" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Decision_Deny_di" bpmnElement="Flow_Decision_Deny">
-        <di:waypoint x="2050" y="70" />
-        <di:waypoint x="2100" y="70" />
-        <di:waypoint x="2100" y="140" />
-        <di:waypoint x="2400" y="140" />
-        <di:waypoint x="2400" y="210" />
-        <di:waypoint x="2425" y="210" />
+        <di:waypoint x="2200" y="70" />
+        <di:waypoint x="2250" y="70" />
+        <di:waypoint x="2250" y="140" />
+        <di:waypoint x="2550" y="140" />
+        <di:waypoint x="2550" y="210" />
+        <di:waypoint x="2575" y="210" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Decision_MoreInfo_di" bpmnElement="Flow_Decision_MoreInfo">
-        <di:waypoint x="2050" y="70" />
-        <di:waypoint x="2100" y="70" />
-        <di:waypoint x="2100" y="280" />
-        <di:waypoint x="2100" y="280" />
-        <di:waypoint x="2100" y="350" />
-        <di:waypoint x="2157" y="350" />
+        <di:waypoint x="2200" y="70" />
+        <di:waypoint x="2250" y="70" />
+        <di:waypoint x="2250" y="280" />
+        <di:waypoint x="2250" y="280" />
+        <di:waypoint x="2250" y="350" />
+        <di:waypoint x="2307" y="350" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Signoff_Yes_di" bpmnElement="Flow_Signoff_Yes">
-        <di:waypoint x="2800" y="70" />
-        <di:waypoint x="2875" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Signoff_No_di" bpmnElement="Flow_Signoff_No">
-        <di:waypoint x="2775" y="95" />
-        <di:waypoint x="2775" y="140" />
-        <di:waypoint x="3225" y="140" />
-        <di:waypoint x="3225" y="110" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToCaptureSignoff_di" bpmnElement="Flow_ToCaptureSignoff">
-        <di:waypoint x="2975" y="70" />
+        <di:waypoint x="2950" y="70" />
         <di:waypoint x="3025" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Signoff_ToSettlement_di" bpmnElement="Flow_Signoff_ToSettlement">
+      <bpmndi:BPMNEdge id="Flow_Signoff_No_di" bpmnElement="Flow_Signoff_No">
+        <di:waypoint x="2925" y="95" />
+        <di:waypoint x="2925" y="140" />
+        <di:waypoint x="3375" y="140" />
+        <di:waypoint x="3375" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToCaptureSignoff_di" bpmnElement="Flow_ToCaptureSignoff">
         <di:waypoint x="3125" y="70" />
         <di:waypoint x="3175" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToNotifyApproved_di" bpmnElement="Flow_ToNotifyApproved">
+      <bpmndi:BPMNEdge id="Flow_Signoff_ToSettlement_di" bpmnElement="Flow_Signoff_ToSettlement">
         <di:waypoint x="3275" y="70" />
         <di:waypoint x="3325" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToCloseApproved_di" bpmnElement="Flow_ToCloseApproved">
+      <bpmndi:BPMNEdge id="Flow_ToNotifyApproved_di" bpmnElement="Flow_ToNotifyApproved">
         <di:waypoint x="3425" y="70" />
         <di:waypoint x="3475" y="70" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToClaimApproved_di" bpmnElement="Flow_ToClaimApproved">
+      <bpmndi:BPMNEdge id="Flow_ToCloseApproved_di" bpmnElement="Flow_ToCloseApproved">
         <di:waypoint x="3575" y="70" />
-        <di:waypoint x="3657" y="70" />
+        <di:waypoint x="3625" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToClaimApproved_di" bpmnElement="Flow_ToClaimApproved">
+        <di:waypoint x="3725" y="70" />
+        <di:waypoint x="3807" y="70" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToCaptureValidationException_di" bpmnElement="Flow_ToCaptureValidationException">
         <di:waypoint x="575" y="210" />
@@ -480,27 +511,27 @@
         <di:waypoint x="807" y="210" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Investigator_ToDecision_di" bpmnElement="Flow_Investigator_ToDecision">
-        <di:waypoint x="2025" y="250" />
+        <di:waypoint x="2175" y="250" />
+        <di:waypoint x="2175" y="280" />
         <di:waypoint x="2025" y="280" />
-        <di:waypoint x="1875" y="280" />
-        <di:waypoint x="1875" y="110" />
+        <di:waypoint x="2025" y="110" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToNotifyDenied_di" bpmnElement="Flow_ToNotifyDenied">
-        <di:waypoint x="2525" y="210" />
-        <di:waypoint x="2575" y="210" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToCloseDenied_di" bpmnElement="Flow_ToCloseDenied">
         <di:waypoint x="2675" y="210" />
         <di:waypoint x="2725" y="210" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToClaimDenied_di" bpmnElement="Flow_ToClaimDenied">
+      <bpmndi:BPMNEdge id="Flow_ToCloseDenied_di" bpmnElement="Flow_ToCloseDenied">
         <di:waypoint x="2825" y="210" />
-        <di:waypoint x="2907" y="210" />
+        <di:waypoint x="2875" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToClaimDenied_di" bpmnElement="Flow_ToClaimDenied">
+        <di:waypoint x="2975" y="210" />
+        <di:waypoint x="3057" y="210" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Legal_ToDecision_di" bpmnElement="Flow_Legal_ToDecision">
-        <di:waypoint x="1775" y="350" />
-        <di:waypoint x="1875" y="350" />
-        <di:waypoint x="1875" y="110" />
+        <di:waypoint x="1925" y="350" />
+        <di:waypoint x="2025" y="350" />
+        <di:waypoint x="2025" y="110" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
