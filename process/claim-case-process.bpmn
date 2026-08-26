@@ -80,7 +80,7 @@
       <bpmn:outgoing>Flow_ToRoleGateway</bpmn:outgoing>
     </bpmn:userTask>
 
-    <bpmn:exclusiveGateway id="Gateway_RouteByConfirmedRole" name="Route by Confirmed Role">
+    <bpmn:exclusiveGateway id="Gateway_RouteByConfirmedRole" name="Route by Confirmed Role" default="Flow_Role_Adjuster">
       <bpmn:incoming>Flow_ToRoleGateway</bpmn:incoming>
       <bpmn:outgoing>Flow_Role_Adjuster</bpmn:outgoing>
       <bpmn:outgoing>Flow_Role_Investigator</bpmn:outgoing>

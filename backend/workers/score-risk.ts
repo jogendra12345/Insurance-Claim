@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
+import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
 import { generateContent, parseJsonResponse } from "../shared/gemini-client";
 
@@ -50,6 +51,11 @@ zeebeClient.createWorker<ScoreRiskVariables, Record<string, unknown>, ScoreRiskO
 
     const responseText = await generateContent(prompt);
     const result = parseJsonResponse<RiskScoreResult>(responseText);
+
+    await pool.query(`UPDATE claims SET risk_score = $1, updated_at = now() WHERE id = $2`, [
+      result.riskScore,
+      claimId,
+    ]);
 
     await writeAuditLog({
       claimId,

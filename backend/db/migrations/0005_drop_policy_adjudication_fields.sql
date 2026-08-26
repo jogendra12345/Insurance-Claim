@@ -7,6 +7,6 @@
 -- claims.claim_amount, just via a plain <= check instead of adjudication.
 
 ALTER TABLE policies
-  DROP COLUMN deductible_amount,
-  DROP COLUMN copay_amount,
-  DROP COLUMN coinsurance_rate;
+  DROP COLUMN IF EXISTS deductible_amount,
+  DROP COLUMN IF EXISTS copay_amount,
+  DROP COLUMN IF EXISTS coinsurance_rate;

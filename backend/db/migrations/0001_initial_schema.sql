@@ -4,7 +4,6 @@
 -- first-class, unconstrained column so a future type is additive (no schema
 -- change needed to add e.g. 'vehicle'); claim_type/document_type CHECKs below
 -- are health-specific and will need their own values added per new type.
-where is database 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE claims (

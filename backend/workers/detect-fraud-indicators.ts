@@ -31,6 +31,8 @@ zeebeClient.createWorker<DetectFraudIndicatorsVariables, Record<string, unknown>
     const responseText = await generateContent(`${config.fraudPromptTemplate}${caseSummary}`);
     const result = parseJsonResponse<FraudDetectionResult>(responseText);
 
+    await pool.query(`DELETE FROM claim_fraud_indicators WHERE claim_id = $1`, [claimId]);
+
     for (const indicator of result.indicators) {
       await pool.query(
         `INSERT INTO claim_fraud_indicators (claim_id, type, description, confidence)
@@ -38,6 +40,11 @@ zeebeClient.createWorker<DetectFraudIndicatorsVariables, Record<string, unknown>
         [claimId, indicator.type, indicator.description, indicator.confidence]
       );
     }
+
+    await pool.query(
+      `UPDATE claims SET fraud_indicator_count = $1, updated_at = now() WHERE id = $2`,
+      [result.indicators.length, claimId]
+    );
 
     await writeAuditLog({
       claimId,
