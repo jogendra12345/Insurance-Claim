@@ -20,10 +20,16 @@
       ]
     },
     {
-      "label": "Denial reason (required if denying)",
+      "label": "Denial reason",
       "type": "textarea",
       "id": "DenialReasonField",
-      "key": "denialReason"
+      "key": "denialReason",
+      "validate": {
+        "required": true
+      },
+      "conditional": {
+        "hide": "=decision != \"deny\""
+      }
     }
   ],
   "type": "default",

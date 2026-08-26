@@ -3,8 +3,9 @@
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, submitClaim } from "@/lib/api";
-import type { ClaimType, NewClaimInput } from "@/lib/types";
+import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
 import { PolicySelect } from "./PolicySelect";
+import { ProviderSelect } from "./ProviderSelect";
 
 const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
   { value: "outpatient", label: "Outpatient" },
@@ -68,6 +69,23 @@ export function ClaimForm() {
   const [providerTaxId, setProviderTaxId] = useState("");
   const [facilityName, setFacilityName] = useState("");
   const [facilityAddress, setFacilityAddress] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState<Provider | undefined>(undefined);
+
+  function handleProviderSelect(provider: Provider | undefined) {
+    setSelectedProvider(provider);
+    if (provider) {
+      setProviderTaxId(provider.taxId);
+      setFacilityName(provider.facilityName);
+      setFacilityAddress(provider.facilityAddress);
+    } else if (selectedProvider) {
+      // Was locked to a provider's details, now typing a different NPI —
+      // clear them instead of silently submitting facility data that
+      // belongs to a different provider.
+      setProviderTaxId("");
+      setFacilityName("");
+      setFacilityAddress("");
+    }
+  }
   const [serviceDateFrom, setServiceDateFrom] = useState("");
   const [serviceDateTo, setServiceDateTo] = useState("");
   const [totalBilledAmount, setTotalBilledAmount] = useState("");
@@ -494,41 +512,49 @@ export function ClaimForm() {
 
             <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "0.25rem" }}>Provider / facility</div>
 
-            <Field label="Provider NPI" error={fieldErrors.providerNpi}>
-              <input
-                value={providerNpi}
-                inputMode="numeric"
-                maxLength={10}
-                onChange={(e) => setProviderNpi(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                placeholder="1234567890"
-                style={inputStyle}
-              />
+            <Field label="Provider NPI" error={fieldErrors.providerNpi} hint="Search by NPI or facility name — selecting one fills in the details below. Type a new 10-digit NPI to register a provider that isn't listed yet.">
+              <ProviderSelect value={providerNpi} onChange={setProviderNpi} onProviderSelect={handleProviderSelect} style={inputStyle} />
             </Field>
 
-            <Field label="Provider tax ID" error={fieldErrors.providerTaxId}>
+            <Field
+              label="Provider tax ID"
+              error={fieldErrors.providerTaxId}
+              hint={selectedProvider ? "Locked to the selected provider." : undefined}
+            >
               <input
                 value={providerTaxId}
+                disabled={!!selectedProvider}
                 onChange={(e) => setProviderTaxId(e.target.value)}
                 placeholder="12-3456789"
-                style={inputStyle}
+                style={selectedProvider ? disabledInputStyle : inputStyle}
               />
             </Field>
 
-            <Field label="Facility name" error={fieldErrors.facilityName}>
+            <Field
+              label="Facility name"
+              error={fieldErrors.facilityName}
+              hint={selectedProvider ? "Locked to the selected provider." : undefined}
+            >
               <input
                 value={facilityName}
+                disabled={!!selectedProvider}
                 onChange={(e) => setFacilityName(e.target.value)}
                 placeholder="Riverside Medical Center"
-                style={inputStyle}
+                style={selectedProvider ? disabledInputStyle : inputStyle}
               />
             </Field>
 
-            <Field label="Facility address" error={fieldErrors.facilityAddress}>
+            <Field
+              label="Facility address"
+              error={fieldErrors.facilityAddress}
+              hint={selectedProvider ? "Locked to the selected provider." : undefined}
+            >
               <input
                 value={facilityAddress}
+                disabled={!!selectedProvider}
                 onChange={(e) => setFacilityAddress(e.target.value)}
                 placeholder="123 Main St, Springfield"
-                style={inputStyle}
+                style={selectedProvider ? disabledInputStyle : inputStyle}
               />
             </Field>
           </>
@@ -946,4 +972,11 @@ const inputStyle: React.CSSProperties = {
   background: "var(--surface)",
   color: "var(--text)",
   width: "100%",
+};
+
+const disabledInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  background: "var(--surface-2)",
+  color: "var(--text-muted)",
+  cursor: "not-allowed",
 };

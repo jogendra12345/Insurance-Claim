@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import { claimsRouter } from "./routes/claims";
 import { policiesRouter } from "./routes/policies";
+import { providersRouter } from "./routes/providers";
 import { ensureBucket } from "./storage";
 
 const app = express();
@@ -13,6 +14,7 @@ app.use(express.json());
 
 app.use("/api/policies", policiesRouter);
 app.use("/api/claims", claimsRouter);
+app.use("/api/providers", providersRouter);
 
 ensureBucket()
   .then(() => {

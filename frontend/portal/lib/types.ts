@@ -61,6 +61,11 @@ export interface ClaimProvider {
   facilityAddress: string;
 }
 
+/** A `providers` row, as returned by GET /api/providers for the claim form's provider picker. */
+export interface Provider extends ClaimProvider {
+  id: string;
+}
+
 export interface ClaimDocument {
   id: string;
   claimId: string;
