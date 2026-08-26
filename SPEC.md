@@ -227,7 +227,7 @@ Started by the backend API when a claim is submitted, with initial variables `cl
 1. **Start Event** — Claim Submitted
 2. **Service Task** `validate-claim` — required fields + policy status, using the config for this claim's `insuranceType`; looks up `policies` by `policyNumber` and `carrierId`, sets `claims.policy_id` on match, sets `claims.status = 'validating'` on pass, and computes two deterministic red-flag signals for the DMN table below: `daysSincePolicyEffective` and `claimantClaimCountLast12Months`
 3. **Exclusive Gateway** `Validation Passed?`
-   - No → **User Task** `Validation Exception Review` (candidate group `triage-team`) — v1 is reject-only (no resolve-and-continue path yet — see §14) → **Service Task** `capture-validation-exception` (sets `claims.status = 'denied'`, writes `audit_log`) → **End Event** "Validation Failed"
+   - No → **User Task** `Validation Exception Review` (candidate group `triage-team`) — a `resolutionAction` field lets the reviewer either resolve (optionally correcting `policyNumber`, which is re-matched against `policies`) and continue, or reject outright → **Service Task** `capture-validation-exception` → **Exclusive Gateway** `Validation Exception Decision?`: `resolve` → step 4 (`extract-evidence`); `reject` (default) → the denial path (step 16, same as `Gateway_TriageDecision`'s reject branch)
    - Yes (default) → step 4
 4. **Service Task** `extract-evidence` — Gemini reads uploaded documents (per the type's expected document list), writes `case_summary` and per-document `extracted_data`
 5. **Service Task** `detect-fraud-indicators` — Gemini flags specific fraud indicators grounded in the case summary *and* each document's `extracted_data`; writes every indicator to `claim_fraud_indicators`, but only tallies indicators with `confidence >= 0.5` toward `fraudIndicatorCount` (a single low-confidence guess shouldn't be enough to route to investigator)
@@ -259,7 +259,7 @@ Started by the backend API when a claim is submitted, with initial variables `cl
     - Yes → **User Task** `Supervisor Sign-off` (candidate group `supervisors`) → **Service Task** `capture-signoff` (writes `audit_log`; `claims.status` is already `approved` from step 13) → settlement
     - No (default) → straight to settlement
     - Settlement: **Service Task** `trigger-settlement` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Approved"
-16. Denied path (reached either from step 11's triage rejection or step 14's deny decision): **Service Task** `draft-denial-letter` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Denied"
+16. Denied path (reached from step 3's validation-exception rejection, step 11's triage rejection, or step 14's deny decision): **Service Task** `draft-denial-letter` → **Service Task** `notify-claimant` → **Service Task** `close-case` → **End Event** "Claim Denied"
 
 `close-case`'s documented job (§12) of writing "final `status`" is now a confirming/idempotent write against a status the relevant `capture-*` step already set at decision time, not the sole writer — see §12.
 
@@ -295,7 +295,7 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 | `capture-triage-review` | `claimId`, `triageAction`, `confirmedRole` (when reviewing), `assignedRole`, `denialReason` (when rejecting) | Branches on `triageAction`: `"review"` writes `claims.confirmed_role`, sets `status = 'in_review'` (`audit_log.detail` flags an override); `"reject"` writes `claims.decision = 'deny'` + `denial_reason`, sets `status = 'denied'` (same shape as `capture-review-decision`'s deny branch) | — |
 | `capture-review-decision` | `claimId`, `decision`, `denialReason`, `confirmedRole` | Writes `claims.decision`, `claims.denial_reason`; sets `claims.status` from `decision` (`approve→approved`, `deny→denied`, `moreInfo→awaiting_info`) | — |
 | `capture-signoff` | `claimId` | No `claims` columns to set (`status` is already `approved` from `capture-review-decision`) — exists solely to satisfy §13's "every user-task completion writes `audit_log`" rule for Supervisor Sign-off | — |
-| `capture-validation-exception` | `claimId` | Sets `claims.status = 'denied'` (v1's Validation Exception Review is reject-only, §10 step 3); writes `audit_log` | — |
+| `capture-validation-exception` | `claimId`, `resolutionAction`, `correctedPolicyNumber` (optional, when resolving), `resolutionNotes` (optional, when resolving), `denialReason` (when rejecting) | Branches on `resolutionAction` (§10 step 3): `"resolve"` re-matches `correctedPolicyNumber` (if given) against `policies` and sets `claims.policy_id`/`policy_number`, sets `status = 'validating'`; `"reject"` writes `claims.decision = 'deny'` + `denial_reason`, sets `status = 'denied'` (same shape as `capture-triage-review`'s reject branch) | — |
 | `trigger-settlement` | `claimId`, `claimAmount` | Calls `SettlementProvider.pay()` — **mocked**, always succeeds | `settlementId` (string) |
 | `draft-denial-letter` | `claimId`, `denialReason`, `claimantName` | Calls Gemini to draft denial letter text grounded in the stated reason | `denialLetterText` (string) |
 | `notify-claimant` | `claimId`, `decision` | Calls `NotificationProvider.send()` — **mocked**, logs instead of sending | `notificationSent` (bool) |
@@ -312,7 +312,6 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 - Additional insurance types (vehicle, property, travel) using the extension points in §3 — a new `insurance-types/<type>.ts` config and a new `<type>-claim-routing-decision` DMN table.
 - Per-carrier tenant isolation: auth scoping by `carrier_id`, per-carrier DMN thresholds, per-carrier branding.
 - Cross-role escalation (e.g., investigator escalates to legal mid-review) instead of single DMN-time routing.
-- Resolve-and-continue path for Validation Exception Review — v1's `Task_ValidationExceptionReview` only rejects; a reviewer can't fix a data issue and let the claim continue into `extract-evidence`.
 - Loop `moreInfo` back to intake instead of ending the process (needs a message event + resubmission API).
 - Error boundary events on service tasks for graceful business-error handling.
 - Real settlement and notification providers.

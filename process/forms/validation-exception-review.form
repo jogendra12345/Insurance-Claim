@@ -1,0 +1,58 @@
+{
+  "components": [
+    {
+      "text": "## Validation Exception Review\n\nThis claim failed automated validation.\n\nPolicy number submitted: **{{policyNumber}}** · Claim type: **{{claimType}}** · Amount: **{{claimAmount}}**\n\nCheck the Process/History tab for the exact `validated` audit entry (missing fields / policy match failure) before deciding.",
+      "type": "text",
+      "id": "IntroText"
+    },
+    {
+      "label": "Action",
+      "type": "radio",
+      "id": "ResolutionActionField",
+      "key": "resolutionAction",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        { "label": "Resolve — correct the issue and continue", "value": "resolve" },
+        { "label": "Reject claim", "value": "reject" }
+      ]
+    },
+    {
+      "label": "Corrected policy number (optional)",
+      "type": "textfield",
+      "id": "CorrectedPolicyNumberField",
+      "key": "correctedPolicyNumber",
+      "description": "Leave blank to keep the submitted policy number and continue anyway.",
+      "conditional": {
+        "hide": "=resolutionAction != \"resolve\""
+      }
+    },
+    {
+      "label": "Resolution notes (optional)",
+      "type": "textarea",
+      "id": "ResolutionNotesField",
+      "key": "resolutionNotes",
+      "conditional": {
+        "hide": "=resolutionAction != \"resolve\""
+      }
+    },
+    {
+      "label": "Rejection reason",
+      "type": "textarea",
+      "id": "DenialReasonField",
+      "key": "denialReason",
+      "validate": {
+        "required": true
+      },
+      "conditional": {
+        "hide": "=resolutionAction != \"reject\""
+      }
+    }
+  ],
+  "type": "default",
+  "id": "ValidationExceptionReviewForm",
+  "executionPlatform": "Camunda Cloud",
+  "executionPlatformVersion": "8.9.0",
+  "schemaVersion": 17
+}
