@@ -29,6 +29,7 @@
       "conditional": {
         "hide": "=triageAction = \"reject\""
       },
+      "disabled": "=triageAction != \"review\"",
       "values": [
         { "label": "Adjuster", "value": "adjuster" },
         { "label": "Investigator", "value": "investigator" },
