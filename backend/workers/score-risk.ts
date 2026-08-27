@@ -15,6 +15,7 @@ interface ScoreRiskVariables {
 
 interface ScoreRiskOutput {
   riskScore: number;
+  riskReasoning: string;
 }
 
 interface RiskScoreResult {
@@ -66,7 +67,7 @@ zeebeClient.createWorker<ScoreRiskVariables, Record<string, unknown>, ScoreRiskO
       detail: { riskScore: result.riskScore, reasoning: result.reasoning, model: GEMINI_MODEL, promptVersion: PROMPT_VERSION },
     });
 
-    return job.complete({ riskScore: result.riskScore });
+    return job.complete({ riskScore: result.riskScore, riskReasoning: result.reasoning });
   },
 });
 

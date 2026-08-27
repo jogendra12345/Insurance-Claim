@@ -1,52 +1,99 @@
 {
   "components": [
     {
-      "text": "## Triage Review\n\nThe AI suggested routing this claim to: **{{assignedRole}}**\n\nRisk score: **{{riskScore}}** · Fraud indicators: **{{fraudIndicatorCount}}**\n\n{{caseSummary}}",
+      "text": "## Triage Review",
       "type": "text",
       "id": "IntroText"
     },
     {
-      "label": "Action",
-      "type": "radio",
-      "id": "TriageActionField",
-      "key": "triageAction",
-      "validate": {
-        "required": true
-      },
-      "values": [
-        { "label": "Route for specialist review", "value": "review" },
-        { "label": "Reject claim", "value": "reject" }
+      "label": "Policy & claim details",
+      "type": "group",
+      "id": "PolicyClaimDetailsGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "text": "**Policy:** {{policyNumber}} — {{policyholderName}}\n**Coverage amount:** {{coverageAmount}}\n\n**Claimant:** {{claimantName}} ({{claimantEmail}})\n**Claim type:** {{claimType}}\n**Incident date:** {{incidentDate}}\n**What happened:** {{incidentDescription}}\n\n**Diagnosis code:** {{diagnosisCode}} · **Procedure code:** {{procedureCode}}\n**Service date(s):** {{serviceDateFrom}} to {{serviceDateTo}}\n**Provider:** {{providerFacilityName}} (NPI {{providerNpi}})\n\n**Requested claim amount:** {{claimAmount}}\n**Total billed amount:** {{totalBilledAmount}}\n**Coordination of benefits:** {{coordinationOfBenefits}}",
+          "type": "text",
+          "id": "PolicyClaimDetailsText"
+        }
       ]
     },
     {
-      "label": "Confirmed role",
-      "type": "radio",
-      "id": "ConfirmedRoleField",
-      "key": "confirmedRole",
-      "validate": {
-        "required": true
-      },
-      "conditional": {
-        "hide": "=triageAction = \"reject\""
-      },
-      "disabled": "=triageAction != \"review\"",
-      "values": [
-        { "label": "Adjuster", "value": "adjuster" },
-        { "label": "Investigator", "value": "investigator" },
-        { "label": "Legal", "value": "legal" }
+      "label": "AI generated summary",
+      "type": "group",
+      "id": "AiSummaryGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "text": "{{caseSummary}}\n\n**Risk score:** {{riskScore}} / 100\n**Risk reasoning:** {{riskReasoning}}\n**Fraud indicators flagged:** {{fraudIndicatorCount}}\n**AI-suggested routing:** {{assignedRole}}",
+          "type": "text",
+          "id": "AiSummaryText"
+        }
       ]
     },
     {
-      "label": "Rejection reason",
-      "type": "textarea",
-      "id": "DenialReasonField",
-      "key": "denialReason",
-      "validate": {
-        "required": true
-      },
-      "conditional": {
-        "hide": "=triageAction != \"reject\""
-      }
+      "label": "Documents",
+      "type": "group",
+      "id": "DocumentsGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "text": "{{= if count(documents) = 0 then \"No documents attached.\" else string join(for d in documents return \"- [\" + d.name + \"](\" + d.url + \")\", \"\\n\")}}",
+          "type": "text",
+          "id": "DocumentsText"
+        }
+      ]
+    },
+    {
+      "label": "Decision",
+      "type": "group",
+      "id": "DecisionGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "label": "Action",
+          "type": "radio",
+          "id": "TriageActionField",
+          "key": "triageAction",
+          "validate": {
+            "required": true
+          },
+          "values": [
+            { "label": "Route for specialist review", "value": "review" },
+            { "label": "Reject claim", "value": "reject" }
+          ]
+        },
+        {
+          "label": "Confirmed role",
+          "type": "radio",
+          "id": "ConfirmedRoleField",
+          "key": "confirmedRole",
+          "validate": {
+            "required": true
+          },
+          "conditional": {
+            "hide": "=triageAction = \"reject\""
+          },
+          "readonly": "=triageAction != \"review\"",
+          "values": [
+            { "label": "Adjuster", "value": "adjuster" },
+            { "label": "Investigator", "value": "investigator" },
+            { "label": "Legal", "value": "legal" }
+          ]
+        },
+        {
+          "label": "Rejection reason",
+          "type": "textarea",
+          "id": "DenialReasonField",
+          "key": "denialReason",
+          "validate": {
+            "required": true
+          },
+          "conditional": {
+            "hide": "=triageAction != \"reject\""
+          }
+        }
+      ]
     }
   ],
   "type": "default",

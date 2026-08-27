@@ -1,35 +1,82 @@
 {
   "components": [
     {
-      "text": "## Review & Decision\n\n{{caseSummary}}\n\nClaim amount: **{{claimAmount}}**",
+      "text": "## Review & Decision",
       "type": "text",
       "id": "IntroText"
     },
     {
-      "label": "Decision",
-      "type": "radio",
-      "id": "DecisionField",
-      "key": "decision",
-      "validate": {
-        "required": true
-      },
-      "values": [
-        { "label": "Approve", "value": "approve" },
-        { "label": "Deny", "value": "deny" },
-        { "label": "More info needed", "value": "moreInfo" }
+      "label": "Policy & claim details",
+      "type": "group",
+      "id": "PolicyClaimDetailsGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "text": "**Policy:** {{policyNumber}} — {{policyholderName}}\n**Coverage amount:** {{coverageAmount}}\n\n**Claimant:** {{claimantName}} ({{claimantEmail}})\n**Claim type:** {{claimType}}\n**Incident date:** {{incidentDate}}\n**What happened:** {{incidentDescription}}\n\n**Diagnosis code:** {{diagnosisCode}} · **Procedure code:** {{procedureCode}}\n**Service date(s):** {{serviceDateFrom}} to {{serviceDateTo}}\n**Provider:** {{providerFacilityName}} (NPI {{providerNpi}})\n\n**Requested claim amount:** {{claimAmount}}\n**Total billed amount:** {{totalBilledAmount}}\n**Coordination of benefits:** {{coordinationOfBenefits}}",
+          "type": "text",
+          "id": "PolicyClaimDetailsText"
+        }
       ]
     },
     {
-      "label": "Denial reason",
-      "type": "textarea",
-      "id": "DenialReasonField",
-      "key": "denialReason",
-      "validate": {
-        "required": true
-      },
-      "conditional": {
-        "hide": "=decision != \"deny\""
-      }
+      "label": "AI generated summary",
+      "type": "group",
+      "id": "AiSummaryGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "text": "{{caseSummary}}\n\n**Risk score:** {{riskScore}} / 100\n**Risk reasoning:** {{riskReasoning}}\n**Fraud indicators flagged:** {{fraudIndicatorCount}}\n**Handled by:** {{confirmedRole}}",
+          "type": "text",
+          "id": "AiSummaryText"
+        }
+      ]
+    },
+    {
+      "label": "Documents",
+      "type": "group",
+      "id": "DocumentsGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "text": "{{= if count(documents) = 0 then \"No documents attached.\" else string join(for d in documents return \"- [\" + d.name + \"](\" + d.url + \")\", \"\\n\")}}",
+          "type": "text",
+          "id": "DocumentsText"
+        }
+      ]
+    },
+    {
+      "label": "Decision",
+      "type": "group",
+      "id": "DecisionGroup",
+      "showOutline": true,
+      "components": [
+        {
+          "label": "Decision",
+          "type": "radio",
+          "id": "DecisionField",
+          "key": "decision",
+          "validate": {
+            "required": true
+          },
+          "values": [
+            { "label": "Approve", "value": "approve" },
+            { "label": "Deny", "value": "deny" },
+            { "label": "More info needed", "value": "moreInfo" }
+          ]
+        },
+        {
+          "label": "Denial reason",
+          "type": "textarea",
+          "id": "DenialReasonField",
+          "key": "denialReason",
+          "validate": {
+            "required": true
+          },
+          "conditional": {
+            "hide": "=decision != \"deny\""
+          }
+        }
+      ]
     }
   ],
   "type": "default",

@@ -182,7 +182,7 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     await client.query("BEGIN");
 
     const policyResult = await client.query(
-      `SELECT id, carrier_id, insurance_type, coverage_amount FROM policies WHERE policy_number = $1`,
+      `SELECT id, carrier_id, insurance_type, coverage_amount, policyholder_name FROM policies WHERE policy_number = $1`,
       [policyNumber]
     );
     if (policyResult.rowCount === 0) {
@@ -251,15 +251,20 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     claim.provider_facility_name = providerRow.facility_name;
     claim.provider_facility_address = providerRow.facility_address;
 
+    // Collected alongside the DB inserts so the Zeebe process variables set
+    // below (for Tasklist form document links) don't need a second query.
+    const documentVariables: Array<{ name: string; url: string }> = [];
     for (const file of files) {
       const objectKey = `${Date.now()}-${file.originalname}`;
       await minioClient.putObject(BUCKET, objectKey, file.buffer, file.size, {
         "Content-Type": file.mimetype,
       });
+      const fileUrl = publicUrl(objectKey);
       await client.query(
         `INSERT INTO claim_documents (claim_id, file_url) VALUES ($1, $2)`,
-        [claim.id, publicUrl(objectKey)]
+        [claim.id, fileUrl]
       );
+      documentVariables.push({ name: file.originalname, url: fileUrl });
     }
 
     // SPEC.md §13 — every write path leaves an audit_log row.
@@ -291,6 +296,28 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
           // BPMN gateway conditions (`claimAmount > 50000`) get a number,
           // not a string (a string there fails with NOT_COMPARABLE).
           claimAmount: Number(claim.claim_amount),
+          // Below this line: not read by any BPMN/DMN condition — carried
+          // purely so the Tasklist review forms (TriageReviewForm,
+          // ReviewDecisionForm) can render a "Policy & claim details" and
+          // "Documents" section without a custom review UI (CLAUDE.md).
+          policyholderName: policy.policyholder_name,
+          coverageAmount: Number(policy.coverage_amount),
+          claimantName: claim.claimant_name,
+          claimantEmail: claim.claimant_email,
+          // pg parses `date` columns into JS Date objects, which the Zeebe
+          // SDK rejects outright ("Date type not supported in variables") —
+          // serialize explicitly, same reasoning as the claimAmount cast above.
+          incidentDate: claim.incident_date.toISOString(),
+          incidentDescription: claim.incident_description,
+          diagnosisCode: claim.diagnosis_code,
+          procedureCode: claim.procedure_code,
+          serviceDateFrom: claim.service_date_from.toISOString(),
+          serviceDateTo: claim.service_date_to ? claim.service_date_to.toISOString() : null,
+          totalBilledAmount: Number(claim.total_billed_amount),
+          coordinationOfBenefits: claim.coordination_of_benefits,
+          providerFacilityName: providerRow.facility_name,
+          providerNpi: providerRow.npi,
+          documents: documentVariables,
         },
       });
 
