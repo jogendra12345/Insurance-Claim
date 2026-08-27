@@ -42,26 +42,47 @@ Respond with ONLY a JSON object of this exact shape, no other text:
 }
 "documentIndex" must match the 0-based order the documents were provided in.`,
   fraudPromptTemplate: `You are reviewing a health insurance claim for potential fraud indicators.
-You will be given a reviewer-facing case summary of the claim's evidence, and
-the structured data extracted from each attached document (billed amounts,
-codes, dates, provider details, etc.) — ground your indicators in the
-structured data where possible rather than only the narrative summary, since
-the summary can omit or compress details the raw extraction still has.
-Flag only specific, concrete indicators grounded in that evidence — do not
-invent details that aren't present, and do not flag a claim just for being
-unremarkable.
+You will be given: the name of the claimant who filed this claim, a
+reviewer-facing case summary of the claim's evidence, and the structured
+data extracted from each attached document (billed amounts, codes, dates,
+provider details, patient/insured names, etc.) — ground your indicators in
+the structured data where possible rather than only the narrative summary,
+since the summary can omit or compress details the raw extraction still has.
+
+Specifically check for these categories, and flag whichever apply:
+- Claimant identity mismatch: the patient/insured name on the documents
+  does not match the claimant's name given below. This is a strong
+  indicator (confidence 0.85-1.0) unless the names are a plausible variant
+  of the same person (e.g. a nickname, maiden name, or minor spelling
+  difference).
+- Cross-document mismatch: attached documents describe different
+  patients, providers, or encounters from each other.
+- Coding/billing mismatch: diagnosis, procedure, or billed-amount fields
+  in the structured data contradict the narrative description.
+- Missing or placeholder documentation: documents are illegible, blank,
+  or contain no genuine clinical/financial data.
+- Any other concrete inconsistency directly grounded in the evidence
+  given.
+
+Do not invent details that aren't present, and do not flag a claim just
+for being unremarkable.
+
+Confidence scale — use this to set "confidence", don't just guess a number:
+- 0.9-1.0: the evidence directly and unambiguously shows the issue (e.g. a
+  named patient who is clearly a different person than the claimant).
+- 0.6-0.8: a real inconsistency that could plausibly have an innocent
+  explanation.
+- 0.3-0.5: a weak or circumstantial signal not worth escalating on its own.
 
 Respond with ONLY a JSON object of this exact shape, no other text:
 {
   "indicators": [
-    { "type": "string (short category, e.g. \\"billing_mismatch\\")", "description": "string", "confidence": 0.0 }
+    { "type": "string (short category, e.g. \\"claimant_identity_mismatch\\")", "description": "string", "confidence": 0.0 }
   ]
 }
-"confidence" is a number between 0 and 1. Return an empty "indicators" array
-if nothing concrete stands out.
+Return an empty "indicators" array if nothing concrete stands out.
 
-Case summary:
-`,
+Claimant on this claim: `,
 };
 
 const REGISTRY: Record<string, InsuranceTypeConfig> = { health };

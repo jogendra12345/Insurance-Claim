@@ -24,19 +24,37 @@ interface RiskScoreResult {
 }
 
 const JOB_TYPE = "score-risk";
-const PROMPT_VERSION = "v1";
+const PROMPT_VERSION = "v2-rubric";
 
 const PROMPT_TEMPLATE = `You are scoring the risk of an insurance claim for an adjuster's review.
 You will be given the claim amount, the number of fraud indicators already
 flagged against it, and a reviewer-facing case summary of its evidence.
 
-Produce a single risk score from 0 (lowest risk) to 100 (highest risk),
-grounded in the specifics given — do not invent details not present here.
+Score using this rubric — pick the band that best matches the evidence,
+then place the score within that band based on severity:
+- 0-19 (Low): No fraud indicators; the case summary describes complete,
+  internally consistent documentation with nothing unusual.
+- 20-39 (Low-moderate): No fraud indicators, but the case summary notes
+  minor gaps or ambiguities (e.g. a missing non-critical field).
+- 40-59 (Moderate): Exactly 1 fraud indicator, OR the case summary itself
+  describes a real inconsistency (e.g. mismatched dates, incomplete
+  records) even though no indicator was formally flagged.
+- 60-79 (High): 2+ fraud indicators, OR the case summary describes a
+  claimant/patient identity mismatch or a cross-document mismatch, OR a
+  high claim amount combined with any of the above.
+- 80-100 (Severe): 3+ fraud indicators, OR clear evidence of fabricated,
+  placeholder, or entirely unrelated documentation, OR the documents
+  plainly belong to someone other than the claimant.
+
+Treat a mismatch or inconsistency described in the case summary as
+significant even when fraudIndicatorCount is 0 — fraud detection can miss
+things the narrative summary still captures. Ground the score in the
+specifics given; do not invent details not present here.
 
 Respond with ONLY a JSON object of this exact shape, no other text:
 {
   "riskScore": 0,
-  "reasoning": "string, 1-3 sentences explaining the score"
+  "reasoning": "string, 1-3 sentences explaining the score, naming which rubric band and why"
 }
 
 Claim amount: `;

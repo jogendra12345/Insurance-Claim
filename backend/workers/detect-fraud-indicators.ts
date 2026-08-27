@@ -10,6 +10,10 @@ interface DetectFraudIndicatorsVariables {
   claimId: string;
   insuranceType: string;
   caseSummary: string;
+  // Set as a process variable at submission (POST /api/claims) — needed here
+  // so the fraud prompt can check documents against who actually filed the
+  // claim, not just against each other (see health.ts fraudPromptTemplate).
+  claimantName: string;
 }
 
 interface DetectFraudIndicatorsOutput {
@@ -21,7 +25,7 @@ interface FraudDetectionResult {
 }
 
 const JOB_TYPE = "detect-fraud-indicators";
-const PROMPT_VERSION = "v2-structured-data";
+const PROMPT_VERSION = "v3-claimant-identity-check";
 
 // Below this, an indicator is stored for the record but not counted toward
 // fraudIndicatorCount / DMN routing — a single low-confidence guess
@@ -32,7 +36,7 @@ const FRAUD_COUNT_CONFIDENCE_THRESHOLD = 0.5;
 zeebeClient.createWorker<DetectFraudIndicatorsVariables, Record<string, unknown>, DetectFraudIndicatorsOutput>({
   taskType: JOB_TYPE,
   taskHandler: async (job) => {
-    const { claimId, insuranceType, caseSummary } = job.variables;
+    const { claimId, insuranceType, caseSummary, claimantName } = job.variables;
     const config = getInsuranceTypeConfig(insuranceType);
 
     // Ground the model in the actual structured data extract-evidence pulled
@@ -47,7 +51,9 @@ zeebeClient.createWorker<DetectFraudIndicatorsVariables, Record<string, unknown>
         ? `\n\nExtracted document data:\n${JSON.stringify(documents.map((d) => d.extracted_data))}`
         : "";
 
-    const responseText = await generateContent(`${config.fraudPromptTemplate}${caseSummary}${extractedDataBlock}`);
+    const responseText = await generateContent(
+      `${config.fraudPromptTemplate}${claimantName}\n\nCase summary:\n${caseSummary}${extractedDataBlock}`
+    );
     const result = parseJsonResponse<FraudDetectionResult>(responseText);
 
     await pool.query(`DELETE FROM claim_fraud_indicators WHERE claim_id = $1`, [claimId]);
