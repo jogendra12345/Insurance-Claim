@@ -9,6 +9,13 @@ import { CLAIM_CASE_PROCESS_ID, zeebeClient } from "../zeebe";
 export const claimsRouter = Router();
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+// Tasklist's CSP (img-src: data: 'self' blob:) blocks <img> from loading a
+// plain MinIO URL, so an inline preview needs a data: URI embedded directly
+// in the process variable instead. Zeebe variables aren't meant to carry
+// blobs, so this is capped well under the file upload limit — large images
+// just don't get an inline preview (the document link still works for
+// every file, this size cap only affects the bonus inline render).
+const INLINE_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
 
 // Documents upload to MinIO (generic/object-storage-provisioning.md) — buffers
 // held in memory just long enough to hand off to minioClient.putObject, never
@@ -252,8 +259,13 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     claim.provider_facility_address = providerRow.facility_address;
 
     // Collected alongside the DB inserts so the Zeebe process variables set
-    // below (for Tasklist form document links) don't need a second query.
-    const documentVariables: Array<{ name: string; url: string }> = [];
+    // below (for Tasklist form document links/previews) don't need a second
+    // query. contentType lets the Tasklist form tell image uploads (which it
+    // can preview inline via an "image" component) apart from PDFs (which it
+    // can't — no native inline PDF viewer outside Camunda's own document
+    // service, which this app doesn't use; see HOSTING.md-adjacent decision
+    // in chat history).
+    const documentVariables: Array<{ name: string; url: string; contentType: string; dataUri: string | null }> = [];
     for (const file of files) {
       const objectKey = `${Date.now()}-${file.originalname}`;
       await minioClient.putObject(BUCKET, objectKey, file.buffer, file.size, {
@@ -264,7 +276,13 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
         `INSERT INTO claim_documents (claim_id, file_url) VALUES ($1, $2)`,
         [claim.id, fileUrl]
       );
-      documentVariables.push({ name: file.originalname, url: fileUrl });
+      const canInlinePreview = file.mimetype.startsWith("image/") && file.size <= INLINE_PREVIEW_MAX_BYTES;
+      documentVariables.push({
+        name: file.originalname,
+        url: fileUrl,
+        contentType: file.mimetype,
+        dataUri: canInlinePreview ? `data:${file.mimetype};base64,${file.buffer.toString("base64")}` : null,
+      });
     }
 
     // SPEC.md §13 — every write path leaves an audit_log row.

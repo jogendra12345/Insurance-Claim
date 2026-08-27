@@ -41,6 +41,57 @@
           "text": "{{= if count(documents) = 0 then \"No documents attached.\" else string join(for d in documents return \"- [\" + d.name + \"](\" + d.url + \")\", \"\\n\")}}",
           "type": "text",
           "id": "DocumentsText"
+        },
+        {
+          "text": "{{= if count(documents) >= 1 and documents[1].dataUri != null then documents[1].name else \"\"}}",
+          "type": "text",
+          "id": "DocumentImage1Caption",
+          "conditional": {
+            "hide": "=count(documents) < 1 or documents[1].dataUri = null"
+          }
+        },
+        {
+          "source": "=if count(documents) >= 1 then documents[1].dataUri else null",
+          "alt": "Uploaded document image",
+          "type": "image",
+          "id": "DocumentImage1",
+          "conditional": {
+            "hide": "=count(documents) < 1 or documents[1].dataUri = null"
+          }
+        },
+        {
+          "text": "{{= if count(documents) >= 2 and documents[2].dataUri != null then documents[2].name else \"\"}}",
+          "type": "text",
+          "id": "DocumentImage2Caption",
+          "conditional": {
+            "hide": "=count(documents) < 2 or documents[2].dataUri = null"
+          }
+        },
+        {
+          "source": "=if count(documents) >= 2 then documents[2].dataUri else null",
+          "alt": "Uploaded document image",
+          "type": "image",
+          "id": "DocumentImage2",
+          "conditional": {
+            "hide": "=count(documents) < 2 or documents[2].dataUri = null"
+          }
+        },
+        {
+          "text": "{{= if count(documents) >= 3 and documents[3].dataUri != null then documents[3].name else \"\"}}",
+          "type": "text",
+          "id": "DocumentImage3Caption",
+          "conditional": {
+            "hide": "=count(documents) < 3 or documents[3].dataUri = null"
+          }
+        },
+        {
+          "source": "=if count(documents) >= 3 then documents[3].dataUri else null",
+          "alt": "Uploaded document image",
+          "type": "image",
+          "id": "DocumentImage3",
+          "conditional": {
+            "hide": "=count(documents) < 3 or documents[3].dataUri = null"
+          }
         }
       ]
     },
