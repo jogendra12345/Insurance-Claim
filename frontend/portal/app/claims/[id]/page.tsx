@@ -305,7 +305,9 @@ export default function ClaimDetailPage() {
                   />
                   {claim.decision && <DetailRow label="Decision" value={DECISION_LABEL[claim.decision]} />}
                   <DetailRow label="Attested" value={new Date(claim.attestationSignedAt).toLocaleString()} />
-                  <DetailRow label="Submitted" value={new Date(claim.createdAt).toLocaleString()} />
+                  {claim.lastReviewerActionAt && (
+                    <DetailRow label="Last reviewer action" value={new Date(claim.lastReviewerActionAt).toLocaleString()} />
+                  )}
                 </div>
                 {claim.riskReasoning && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", marginTop: "0.9rem" }}>

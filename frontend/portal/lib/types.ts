@@ -52,6 +52,12 @@ export interface Claim {
   documents?: ClaimDocument[];
   /** Only present on the GET /api/claims/:id (detail) response. */
   fraudIndicators?: ClaimFraudIndicator[];
+  /**
+   * Only present on the GET /api/claims/:id (detail) response. When a
+   * reviewer (triage, review-decision, sign-off, validation-exception) last
+   * acted on this claim — null if no human has acted on it yet.
+   */
+  lastReviewerActionAt?: string | null;
 }
 
 export interface ClaimProvider {

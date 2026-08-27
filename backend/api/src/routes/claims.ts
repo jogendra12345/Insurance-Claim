@@ -82,10 +82,18 @@ claimsRouter.get("/:id", async (req, res) => {
       `SELECT * FROM claim_fraud_indicators WHERE claim_id = $1 ORDER BY confidence DESC`,
       [req.params.id]
     );
+    // Most recent human-actor audit_log row — when a reviewer (triage,
+    // review-decision, sign-off, validation-exception) last acted on this
+    // claim, distinct from claims.updated_at which AI/system steps bump too.
+    const lastReviewerActionResult = await pool.query(
+      `SELECT created_at FROM audit_log WHERE claim_id = $1 AND actor_type = 'human' ORDER BY created_at DESC LIMIT 1`,
+      [req.params.id]
+    );
     res.json({
       ...serializeClaim(claimResult.rows[0]),
       documents: documentsResult.rows.map(serializeClaimDocument),
       fraudIndicators: fraudIndicatorsResult.rows.map(serializeFraudIndicator),
+      lastReviewerActionAt: lastReviewerActionResult.rows[0]?.created_at ?? null,
     });
   } catch (err) {
     console.error("GET /api/claims/:id failed:", err);
