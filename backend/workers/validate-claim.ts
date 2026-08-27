@@ -102,12 +102,16 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
     const validationPassed =
       missingFields.length === 0 && !!policy && !duplicatePendingClaim && authorizedClaimant;
 
-    if (policy) {
-      await pool.query(`UPDATE claims SET policy_id = $1, updated_at = now() WHERE id = $2`, [
-        policy.id,
-        claimId,
-      ]);
-    }
+    // Always write policy_id (including null on no match) — POST
+    // /api/claims sets it at intake from a lookup that only checks
+    // policy_number exists (no status/date-range check), so a stale
+    // intake-time value must not survive this worker's own stricter match
+    // failing. capture-validation-exception.ts trusts policy_id as the
+    // authoritative "did a policy genuinely match" signal.
+    await pool.query(`UPDATE claims SET policy_id = $1, updated_at = now() WHERE id = $2`, [
+      policy?.id ?? null,
+      claimId,
+    ]);
 
     // Entering the automated AI-triage phase (extract-evidence through the
     // DMN routing decision) — capture-routing-decision advances this to
@@ -124,10 +128,12 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       : null;
 
     // Red flag: claimant has filed several claims in the trailing 12 months.
+    // Case-insensitive, matching the authorized-claimant check above — a
+    // claimant varying email casing between submissions shouldn't dodge this.
     const { rows: claimCountRows } = await pool.query<{ count: string }>(
       `SELECT count(*) FROM claims
-       WHERE claimant_email = $1 AND id != $2 AND created_at >= now() - interval '12 months'`,
-      [claim.claimant_email, claimId]
+       WHERE lower(claimant_email) = $1 AND id != $2 AND created_at >= now() - interval '12 months'`,
+      [claim.claimant_email.toLowerCase(), claimId]
     );
     const claimantClaimCountLast12Months = Number(claimCountRows[0].count);
 

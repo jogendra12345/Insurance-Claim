@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "text": "## Validation Exception Review\n\nThis claim failed automated validation.\n\nPolicy number submitted: **{{policyNumber}}** · Claim type: **{{claimType}}** · Amount: **{{claimAmount}}**\n\nCheck the Process/History tab for the exact `validated` audit entry (missing fields / policy match failure / duplicate) before deciding.",
+      "text": "## Validation Exception Review\n\nThis claim failed automated validation.\n\nPolicy number submitted: **{{policyNumber}}** · Claim type: **{{claimType}}** · Amount: **{{claimAmount}}**\n\nCheck the Process/History tab for the exact `validated` audit entry (missing fields / policy match failure / duplicate) before deciding. There's no way to change the policy number here — Resolve only continues a claim onto a policy that already matched.",
       "type": "text",
       "id": "IntroText"
     },
@@ -22,6 +22,14 @@
       }
     },
     {
+      "text": "⚠️ **No policy matched** — nothing on file matches the submitted policy number for this claim's incident date. Resolve isn't available for this failure — Reject is the only option.",
+      "type": "text",
+      "id": "NoPolicyMatchedWarning",
+      "conditional": {
+        "hide": "=policyId != null"
+      }
+    },
+    {
       "label": "Action",
       "type": "radio",
       "id": "ResolutionActionField",
@@ -30,28 +38,9 @@
         "required": true
       },
       "values": [
-        { "label": "Resolve — correct the issue and continue", "value": "resolve" },
+        { "label": "Resolve — continue with this claim as submitted", "value": "resolve" },
         { "label": "Reject claim", "value": "reject" }
       ]
-    },
-    {
-      "label": "Corrected policy number (optional)",
-      "type": "textfield",
-      "id": "CorrectedPolicyNumberField",
-      "key": "correctedPolicyNumber",
-      "description": "Leave blank to keep the submitted policy number and continue anyway.",
-      "conditional": {
-        "hide": "=resolutionAction != \"resolve\""
-      }
-    },
-    {
-      "label": "Resolution notes (optional)",
-      "type": "textarea",
-      "id": "ResolutionNotesField",
-      "key": "resolutionNotes",
-      "conditional": {
-        "hide": "=resolutionAction != \"resolve\""
-      }
     },
     {
       "label": "Rejection reason",
