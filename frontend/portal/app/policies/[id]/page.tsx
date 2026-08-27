@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ApiError, fetchActiveClaimsByPolicy, fetchPolicies } from "@/lib/api";
-import type { Claim, Policy } from "@/lib/types";
+import { ApiError, fetchActiveClaimsByPolicy, fetchPolicy } from "@/lib/api";
+import type { Claim, DependentRelationship, Policy } from "@/lib/types";
 import { STATUS_TONE } from "@/lib/policy-status";
 import { relativeTime, absoluteDate } from "@/lib/time";
 
@@ -13,6 +13,12 @@ const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
   pharmacy: "Pharmacy",
   dental: "Dental",
   maternity: "Maternity",
+  other: "Other",
+};
+
+const DEPENDENT_RELATIONSHIP_LABEL: Record<DependentRelationship, string> = {
+  spouse: "Spouse",
+  child: "Child",
   other: "Other",
 };
 
@@ -40,18 +46,8 @@ export default function PolicyDetailPage() {
     let cancelled = false;
     setState("loading");
     setError(null);
-    // No dedicated GET /api/policies/:id endpoint exists yet — the list is
-    // small enough in this demo to fetch and find client-side.
-    fetchPolicies()
-      .then(async (policies) => {
-        const match = policies.find((p) => p.id === params.id);
-        if (!match) {
-          if (!cancelled) {
-            setError("Policy not found.");
-            setState("error");
-          }
-          return;
-        }
+    fetchPolicy(params.id)
+      .then(async (match) => {
         if (!cancelled) setPolicy(match);
         const claimsForPolicy = await fetchActiveClaimsByPolicy(match.policyNumber);
         if (!cancelled) {
@@ -146,10 +142,30 @@ export default function PolicyDetailPage() {
           <Section title="Policyholder & coverage" icon={<FileTextIcon />}>
             <div className="detail-rows">
               <DetailRow label="Policyholder" value={policy.policyholderName} />
+              <DetailRow label="Policyholder email" value={policy.policyholderEmail} />
               <DetailRow label="Insurance type" value={policy.insuranceType} />
               <DetailRow label="Effective date" value={new Date(policy.effectiveDate).toLocaleDateString()} />
               <DetailRow label="Expiry date" value={new Date(policy.expiryDate).toLocaleDateString()} />
             </div>
+          </Section>
+
+          <Section title={`Dependents (${policy.dependents?.length ?? 0})`} icon={<UsersIcon />}>
+            {!policy.dependents || policy.dependents.length === 0 ? (
+              <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-muted)" }}>
+                No dependents on file — only the policyholder can file claims against this policy.
+              </p>
+            ) : (
+              <div className="detail-rows">
+                {policy.dependents.map((dependent) => (
+                  <div key={dependent.id} style={{ display: "flex", justifyContent: "space-between", gap: "1.5rem", fontSize: "0.9rem" }}>
+                    <span style={{ fontWeight: 500 }}>{dependent.fullName}</span>
+                    <span style={{ textAlign: "right", color: "var(--text-muted)" }}>
+                      {DEPENDENT_RELATIONSHIP_LABEL[dependent.relationship]} · {dependent.email}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </Section>
 
           <div
@@ -351,6 +367,20 @@ function FileTextIcon() {
         strokeLinejoin="round"
       />
       <path d="M14 3v5h5M9 13h6M9 17h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function UsersIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

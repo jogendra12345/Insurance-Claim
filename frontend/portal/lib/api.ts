@@ -13,6 +13,15 @@ export async function fetchPolicies(): Promise<Policy[]> {
   return res.json();
 }
 
+// GET /api/policies/:id — a single policy plus its dependents, for the policy detail page.
+export async function fetchPolicy(policyId: string): Promise<Policy> {
+  const res = await fetch(`${API_BASE_URL}/api/policies/${policyId}`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new ApiError(`Couldn't load that policy (${res.status}).`);
+  }
+  return res.json();
+}
+
 // GET /api/providers — backs the claim form's provider picker (autofills
 // facility name/address/tax ID on NPI selection).
 export async function fetchProviders(): Promise<Provider[]> {

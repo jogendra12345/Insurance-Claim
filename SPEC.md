@@ -128,18 +128,28 @@ Reviewers (browser) — Camunda Tasklist at localhost:8080/tasklist
 
 ```
 policies
-  id                uuid PK
-  policy_number     text NOT NULL UNIQUE
-  carrier_id        uuid NOT NULL        -- the insurer that issued this policy
-  insurance_type    text NOT NULL DEFAULT 'health'
-  policyholder_name text NOT NULL
-  status            text NOT NULL        -- active | lapsed | cancelled
-  effective_date    date NOT NULL
-  expiry_date       date NOT NULL
-  premium_amount    numeric NOT NULL     -- >= 0
-  coverage_amount   numeric NOT NULL     -- > 0; a claim against this policy must be <= it
-  created_at        timestamptz NOT NULL DEFAULT now()
-  updated_at        timestamptz NOT NULL DEFAULT now()
+  id                 uuid PK
+  policy_number      text NOT NULL UNIQUE
+  carrier_id         uuid NOT NULL        -- the insurer that issued this policy
+  insurance_type     text NOT NULL DEFAULT 'health'
+  policyholder_name  text NOT NULL
+  policyholder_email text NOT NULL        -- authorized-claimant check (below) matches against this or policy_dependents.email
+  status             text NOT NULL        -- active | lapsed | cancelled
+  effective_date     date NOT NULL
+  expiry_date        date NOT NULL
+  premium_amount     numeric NOT NULL     -- >= 0
+  coverage_amount    numeric NOT NULL     -- > 0; a claim against this policy must be <= it
+  created_at         timestamptz NOT NULL DEFAULT now()
+  updated_at         timestamptz NOT NULL DEFAULT now()
+
+policy_dependents
+  id           uuid PK
+  policy_id    uuid NOT NULL FK → policies.id
+  full_name    text NOT NULL
+  email        text NOT NULL
+  relationship text NOT NULL  -- spouse | child | other (the policyholder themself is never a row here — matched via policies.policyholder_email instead)
+  created_at   timestamptz NOT NULL DEFAULT now()
+  -- UNIQUE (policy_id, email)
 
 claims
   id                    uuid PK
@@ -216,6 +226,16 @@ Every job worker and every user-task completion handler writes at least one `aud
 
 `claims`' diagnosis/procedure code, provider (`providers`, via `provider_id`), service date(s), `total_billed_amount`, `coordination_of_benefits`, and `attestation_signed_at` were added per `.claude/specs/db/fnol_extended_fields.md` and `.claude/specs/generic/fnol_form_ui_update.md` (both Locked 2026-08-24) — captured directly on `ClaimForm` at intake, not derived from documents (`extract-evidence` isn't built yet). `providers` is a separate table, not flattened onto `claims`: the same NPI recurs across many claims, so it's keyed by `npi` (unique) and reused via find-or-create in `POST /api/claims` — on a collision, the existing row wins and newly submitted facility/tax-id details are discarded, never overwritten. `total_billed_amount` is stored but intentionally **not** wired into `validate-claim`, `score-risk`, the DMN routing table, or `trigger-settlement` — `claim_amount` stays the sole authoritative figure for routing/coverage/payout; `total_billed_amount` is informational context only until a future spec decides how a billed-vs-claimed gap should factor into risk scoring.
 
+### Authorized claimants (`policy_dependents`)
+
+Today, `claims.claimant_name`/`claimant_email` are free-text at submission with no check against the policy at all — anyone who knows a policy number can file against it. `policy_dependents` closes that gap: a claim is only valid if `claimant_email` **or** `claimant_name` (case-insensitive) matches `policies.policyholder_email`/`policyholder_name`, or the `email`/`full_name` on a `policy_dependents` row for that `policy_id` — either field matching is enough, not both (a claimant may type their name slightly differently than the record, or use a different but still-listed email; requiring both would make ordinary submissions fail validation and pile into Validation Exception Review for no fraud-relevant reason).
+
+Named "dependents," not "nominees": nominees are a life-insurance/beneficiary concept (who gets paid out on death), not who's allowed to *file* a claim. For health (the only `insurance_type` in v1), the people who actually incur medical expenses and would file are the policyholder and their covered dependents (spouse, children) — so that's the relationship this models. A future `insurance_type` with a real nominee/beneficiary concept (e.g. life) would need its own table under the §3 extension pattern, not a reuse of this one.
+
+Enforcement point: `validate-claim` (§10 step 2, §12) gains a third check alongside the existing policy-match and duplicate-claim checks — `authorizedClaimant` (bool). An unmatched `claimant_email` fails validation the same way an unmatched policy or a duplicate in-flight claim does: routes to **Validation Exception Review** rather than a hard rejection, since a legitimate mismatch (typo'd email, an unlisted dependent who should be added) needs a human to resolve it, not an automatic denial (CLAUDE.md's "human always makes the final decision"). `ValidationExceptionReviewForm` gets a third conditional warning banner (alongside the existing duplicate-claim one) for this case.
+
+Dependents are added at policy-creation time only: `POST /api/policies` accepts an optional `dependents` array alongside the policy fields, inserted in the same transaction. `GET /api/policies/:id` returns the policy plus its `dependents`, shown on the policy detail page's own section. There's no way to add/edit/remove dependents on an *already-existing* policy in v1 — no `PATCH`/`POST /api/policies/:id/dependents` endpoint — see §14.
+
 ### Migration tooling
 
 Raw SQL migration files, no ORM. Applied via `backend/db/run-migrations.sh` (psql-based, forward-only, sequentially numbered). Decided 2026-08-19: schema is small (4 tables) and stable; raw SQL is more reliably correct here than an ORM migration DSL; no rollback tooling needed yet since dev resets via drop/recreate. Revisit if `backend/api` needs a typed query layer, or a second insurance type needs dedicated tables beyond the `insurance_type` column pattern.
@@ -225,7 +245,7 @@ Raw SQL migration files, no ORM. Applied via `backend/db/run-migrations.sh` (psq
 Started by the backend API when a claim is submitted, with initial variables `claimId`, `carrierId`, `insuranceType`, `policyNumber`, `claimType`, `claimAmount`. The process itself is insurance-type-agnostic (§3) — only the workers and the DMN table it calls vary by `insuranceType`.
 
 1. **Start Event** — Claim Submitted
-2. **Service Task** `validate-claim` — required fields + policy status, using the config for this claim's `insuranceType`; looks up `policies` by `policyNumber` and `carrierId`; if matched, checks for a duplicate — another claim already on that `policy_id` with `status NOT IN ('approved', 'denied')` — and fails validation if one exists (one in-flight claim per policy at a time); sets `claims.policy_id` on match, sets `claims.status = 'validating'` on pass, and computes two deterministic red-flag signals for the DMN table below: `daysSincePolicyEffective` and `claimantClaimCountLast12Months`
+2. **Service Task** `validate-claim` — required fields + policy status, using the config for this claim's `insuranceType`; looks up `policies` by `policyNumber` and `carrierId`; if matched, checks for a duplicate — another claim already on that `policy_id` with `status NOT IN ('approved', 'denied')` — and fails validation if one exists (one in-flight claim per policy at a time); also checks `claimant_email` **or** `claimant_name` (case-insensitive, either is enough) against `policyholder_email`/`policyholder_name` and `policy_dependents.email`/`full_name` for the matched policy, failing validation if neither field matches on any row (see "Authorized claimants" under §9) — sets `claims.policy_id` on match, sets `claims.status = 'validating'` only when all three checks pass, and computes two deterministic red-flag signals for the DMN table below: `daysSincePolicyEffective` and `claimantClaimCountLast12Months`
 3. **Exclusive Gateway** `Validation Passed?`
    - No → **User Task** `Validation Exception Review` (candidate group `triage-team`) — a `resolutionAction` field lets the reviewer either resolve (optionally correcting `policyNumber`, which is re-matched against `policies`) and continue, or reject outright → **Service Task** `capture-validation-exception` → **Exclusive Gateway** `Validation Exception Decision?`: `resolve` → step 4 (`extract-evidence`); `reject` (default) → the denial path (step 16, same as `Gateway_TriageDecision`'s reject branch)
    - Yes (default) → step 4
@@ -295,7 +315,7 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 
 | Job type | Input variables | Does | Output variables |
 |---|---|---|---|
-| `validate-claim` | `insuranceType`, `carrierId`, `policyNumber`, `claimAmount`, `incidentDate` | Required-field check using the insurance-type config (§3) for which fields are required; looks up `policies` by `policyNumber` + `carrierId` and checks `status = 'active'` and `incidentDate` within `[effective_date, expiry_date]`; on a match, also checks for a duplicate in-flight claim on the same `policy_id` (`status NOT IN ('approved', 'denied')`) and fails validation if one exists; sets `claims.policy_id` and (on pass) `claims.status = 'validating'`; computes `daysSincePolicyEffective` and the claimant's trailing-12-month claim count for the DMN table (§11) | `validationPassed` (bool), `policyId` (uuid, nullable), `duplicatePendingClaim` (bool), `duplicateClaimId` (uuid, nullable), `daysSincePolicyEffective` (number, nullable), `claimantClaimCountLast12Months` (number) |
+| `validate-claim` | `insuranceType`, `carrierId`, `policyNumber`, `claimAmount`, `incidentDate` | Required-field check using the insurance-type config (§3) for which fields are required; looks up `policies` by `policyNumber` + `carrierId` and checks `status = 'active'` and `incidentDate` within `[effective_date, expiry_date]`; on a match, also checks for a duplicate in-flight claim on the same `policy_id` (`status NOT IN ('approved', 'denied')`) and fails validation if one exists; also checks `claims.claimant_email` **or** `claimant_name` (case-insensitive, either is enough) against `policyholder_email`/`policyholder_name` and `policy_dependents.email`/`full_name` for the matched policy, failing validation if neither field matches on any row (§9 "Authorized claimants"); sets `claims.policy_id` and (on pass of all checks) `claims.status = 'validating'`; computes `daysSincePolicyEffective` and the claimant's trailing-12-month claim count for the DMN table (§11) | `validationPassed` (bool), `policyId` (uuid, nullable), `duplicatePendingClaim` (bool), `duplicateClaimId` (uuid, nullable), `authorizedClaimant` (bool), `daysSincePolicyEffective` (number, nullable), `claimantClaimCountLast12Months` (number) |
 | `extract-evidence` | `claimId`, `insuranceType` | Loads `claim_documents`, calls Gemini (using the type's prompt template) to extract structured data per document and produce a reviewer-facing case summary; writes `case_summary` and `extracted_data` | `caseSummary` (string) |
 | `detect-fraud-indicators` | `claimId`, `insuranceType`, `caseSummary` | Calls Gemini, grounded in the case summary *and* each document's `extracted_data`, to flag specific fraud indicators; writes every indicator to `claim_fraud_indicators` (all confidences) but only counts `confidence >= 0.5` toward `claims.fraud_indicator_count` / the output below | `fraudIndicatorCount` (number, counted only) |
 | `score-risk` | `claimId`, `claimAmount`, `fraudIndicatorCount`, `caseSummary` | Calls Gemini (temperature 0) to produce a single 0–100 risk score with reasoning; writes `claims.risk_score` and `claims.risk_reasoning` | `riskScore` (number), `riskReasoning` (string) |
@@ -327,6 +347,7 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 - Custom review UI per role (replacing default Tasklist).
 - Customer-facing status page pulling live process state.
 - Auth for the claimant portal.
+- Adding/editing/removing `policy_dependents` (§9) on an *already-existing* policy — v1 only supports setting them at policy-creation time.
 - Deploying to Camunda 8 SaaS instead of local Docker Compose.
 - **Cloud hosting for the rest of the stack** (beyond Camunda, above). What needs to change before this app runs anywhere but a local machine:
   - Bucket access: the `claim-documents` MinIO bucket is public-read (`.claude/specs/generic/object-storage-provisioning.md`) — fine for throwaway dev data, not acceptable for real claim documents (often PII/health info) in production. Needs presigned URLs or an auth-gated proxy instead.

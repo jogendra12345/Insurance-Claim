@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, createPolicy, deletePolicy, fetchPolicies } from "@/lib/api";
-import type { NewPolicyInput, Policy, PolicyStatus } from "@/lib/types";
+import type { DependentRelationship, NewDependentInput, NewPolicyInput, Policy, PolicyStatus } from "@/lib/types";
 import { STATUS_TONE } from "@/lib/policy-status";
 import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -15,12 +15,16 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const emptyForm: NewPolicyInput = {
   policyNumber: "",
   policyholderName: "",
+  policyholderEmail: "",
   status: "active",
   effectiveDate: todayIso(),
   expiryDate: "",
   premiumAmount: "",
   coverageAmount: "",
+  dependents: [],
 };
+
+const emptyDependent: NewDependentInput = { fullName: "", email: "", relationship: "spouse" };
 
 const currency = (n: number) => n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
@@ -60,6 +64,7 @@ export default function PoliciesPage() {
     if (
       !form.policyNumber.trim() ||
       !form.policyholderName.trim() ||
+      !form.policyholderEmail.trim() ||
       !form.effectiveDate ||
       !form.expiryDate ||
       !form.premiumAmount ||
@@ -70,6 +75,10 @@ export default function PoliciesPage() {
     }
     if (form.expiryDate < form.effectiveDate) {
       setFormError("Expiry date must be after the effective date.");
+      return;
+    }
+    if (form.dependents.some((d) => !d.fullName.trim() || !d.email.trim())) {
+      setFormError("Fill in every dependent's name and email, or remove the empty row.");
       return;
     }
     const premium = Number(form.premiumAmount);
@@ -94,6 +103,21 @@ export default function PoliciesPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function addDependentRow() {
+    setForm((f) => ({ ...f, dependents: [...f.dependents, { ...emptyDependent }] }));
+  }
+
+  function updateDependentRow(index: number, patch: Partial<NewDependentInput>) {
+    setForm((f) => ({
+      ...f,
+      dependents: f.dependents.map((d, i) => (i === index ? { ...d, ...patch } : d)),
+    }));
+  }
+
+  function removeDependentRow(index: number) {
+    setForm((f) => ({ ...f, dependents: f.dependents.filter((_, i) => i !== index) }));
   }
 
   async function confirmDelete() {
@@ -173,6 +197,15 @@ export default function PoliciesPage() {
               style={inputStyle}
             />
           </FormField>
+          <FormField label="Policyholder email">
+            <input
+              type="email"
+              value={form.policyholderEmail}
+              onChange={(e) => setForm((f) => ({ ...f, policyholderEmail: e.target.value }))}
+              placeholder="jane.doe@example.com"
+              style={inputStyle}
+            />
+          </FormField>
           <FormField label="Status">
             <select
               value={form.status}
@@ -222,6 +255,89 @@ export default function PoliciesPage() {
               style={inputStyle}
             />
           </FormField>
+          <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                Dependents <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional — who else can file against this policy)</span>
+              </span>
+              <button
+                type="button"
+                onClick={addDependentRow}
+                className="transition btn-press"
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "0.35rem 0.7rem",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                + Add dependent
+              </button>
+            </div>
+            {form.dependents.length === 0 ? (
+              <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                Only the policyholder can file claims against this policy until a dependent is added.
+              </p>
+            ) : (
+              form.dependents.map((dependent, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 140px auto",
+                    gap: "0.6rem",
+                    alignItems: "center",
+                  }}
+                >
+                  <input
+                    value={dependent.fullName}
+                    onChange={(e) => updateDependentRow(index, { fullName: e.target.value })}
+                    placeholder="Dependent's full name"
+                    style={inputStyle}
+                  />
+                  <input
+                    type="email"
+                    value={dependent.email}
+                    onChange={(e) => updateDependentRow(index, { email: e.target.value })}
+                    placeholder="dependent@example.com"
+                    style={inputStyle}
+                  />
+                  <select
+                    value={dependent.relationship}
+                    onChange={(e) => updateDependentRow(index, { relationship: e.target.value as DependentRelationship })}
+                    style={inputStyle}
+                  >
+                    <option value="spouse">Spouse</option>
+                    <option value="child">Child</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => removeDependentRow(index)}
+                    aria-label="Remove dependent"
+                    className="transition btn-press"
+                    style={{
+                      border: "none",
+                      background: "var(--surface-2)",
+                      color: "var(--text-muted)",
+                      width: "28px",
+                      height: "28px",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                      fontSize: "0.9rem",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
           <button
             type="submit"
             disabled={saving}

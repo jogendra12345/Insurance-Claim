@@ -99,10 +99,23 @@ export const ACTIVE_STATUSES: ClaimStatus[] = [
 
 export type PolicyStatus = "active" | "lapsed" | "cancelled";
 
+/** Who this policy covers besides the policyholder — SPEC.md §9 "Authorized claimants". */
+export type DependentRelationship = "spouse" | "child" | "other";
+
+export interface PolicyDependent {
+  id: string;
+  policyId: string;
+  fullName: string;
+  email: string;
+  relationship: DependentRelationship;
+  createdAt: string;
+}
+
 export interface Policy {
   id: string;
   policyNumber: string;
   policyholderName: string;
+  policyholderEmail: string;
   insuranceType: string;
   status: PolicyStatus;
   effectiveDate: string;
@@ -110,16 +123,26 @@ export interface Policy {
   premiumAmount: number;
   coverageAmount: number;
   createdAt: string;
+  /** Only present on the GET /api/policies/:id (detail) response. */
+  dependents?: PolicyDependent[];
+}
+
+export interface NewDependentInput {
+  fullName: string;
+  email: string;
+  relationship: DependentRelationship;
 }
 
 export interface NewPolicyInput {
   policyNumber: string;
   policyholderName: string;
+  policyholderEmail: string;
   status: PolicyStatus;
   effectiveDate: string;
   expiryDate: string;
   premiumAmount: string;
   coverageAmount: string;
+  dependents: NewDependentInput[];
 }
 
 export interface NewClaimInput {

@@ -14,6 +14,14 @@
       }
     },
     {
+      "text": "⚠️ **Unrecognized claimant** — {{claimantName}} ({{claimantEmail}}) doesn't match the policyholder or any listed dependent on this policy. Verify this is a legitimate claimant (e.g. a dependent not yet on file) before resolving.",
+      "type": "text",
+      "id": "UnauthorizedClaimantWarning",
+      "conditional": {
+        "hide": "=authorizedClaimant = true"
+      }
+    },
+    {
       "label": "Action",
       "type": "radio",
       "id": "ResolutionActionField",

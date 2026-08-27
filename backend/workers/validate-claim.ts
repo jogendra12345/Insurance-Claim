@@ -18,6 +18,7 @@ interface ValidateClaimOutput {
   policyId: string | null;
   duplicatePendingClaim: boolean;
   duplicateClaimId: string | null;
+  authorizedClaimant: boolean;
   // Deterministic fraud-risk signals for the DMN routing table (see
   // process/health-claim-routing.dmn) — cheap SQL-computed red flags rather
   // than leaving everything to the LLM-based fraud/risk workers to infer
@@ -56,7 +57,9 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
          AND $3::date BETWEEN effective_date AND expiry_date`,
       [policyNumber, carrierId, claim.incident_date]
     );
-    const policy = policyRows[0] as { id: string; effective_date: string } | undefined;
+    const policy = policyRows[0] as
+      | { id: string; effective_date: string; policyholder_name: string; policyholder_email: string }
+      | undefined;
 
     // Duplicate-claim check: a policy shouldn't have two claims in flight at
     // once — if an earlier claim against the same policy hasn't reached a
@@ -73,7 +76,31 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       : { rows: [] as { id: string }[] };
     const duplicatePendingClaim = duplicateRows[0] as { id: string } | undefined;
 
-    const validationPassed = missingFields.length === 0 && !!policy && !duplicatePendingClaim;
+    // Authorized-claimant check (SPEC.md §9 "Authorized claimants") — a
+    // claim is only valid if the claimant is the policyholder or a listed
+    // dependent, checked by email OR name (case-insensitive, either is
+    // enough — requiring both would fail ordinary submissions over a
+    // formatting mismatch, not an actual authorization problem). No policy
+    // match means this check doesn't apply — that failure is already
+    // captured by `!!policy` below, not this flag.
+    let authorizedClaimant = true;
+    if (policy) {
+      const claimantEmail = claim.claimant_email.toLowerCase();
+      const claimantName = claim.claimant_name.toLowerCase();
+      const isPolicyholder =
+        policy.policyholder_email.toLowerCase() === claimantEmail ||
+        policy.policyholder_name.toLowerCase() === claimantName;
+      const { rowCount: dependentMatchCount } = await pool.query(
+        `SELECT id FROM policy_dependents
+         WHERE policy_id = $1 AND (lower(email) = $2 OR lower(full_name) = $3)
+         LIMIT 1`,
+        [policy.id, claimantEmail, claimantName]
+      );
+      authorizedClaimant = isPolicyholder || (dependentMatchCount ?? 0) > 0;
+    }
+
+    const validationPassed =
+      missingFields.length === 0 && !!policy && !duplicatePendingClaim && authorizedClaimant;
 
     if (policy) {
       await pool.query(`UPDATE claims SET policy_id = $1, updated_at = now() WHERE id = $2`, [
@@ -115,6 +142,7 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
         policyMatched: !!policy,
         duplicatePendingClaim: !!duplicatePendingClaim,
         duplicateClaimId: duplicatePendingClaim?.id ?? null,
+        authorizedClaimant,
         daysSincePolicyEffective,
         claimantClaimCountLast12Months,
       },
@@ -125,6 +153,7 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       policyId: policy?.id ?? null,
       duplicatePendingClaim: !!duplicatePendingClaim,
       duplicateClaimId: duplicatePendingClaim?.id ?? null,
+      authorizedClaimant,
       daysSincePolicyEffective,
       claimantClaimCountLast12Months,
     });
