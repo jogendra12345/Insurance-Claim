@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, fetchActiveClaimsByPolicy, fetchAllClaims } from "@/lib/api";
-import { ACTIVE_STATUSES, type Claim } from "@/lib/types";
+import { ACTIVE_STATUSES, type Claim, type ClaimStatus } from "@/lib/types";
 import { ClaimTable } from "@/components/ClaimTable";
 import { EmptyState } from "@/components/EmptyState";
 import { PolicySelect } from "@/components/PolicySelect";
+import { STATUS_META } from "@/components/StatusBadge";
+
+const ALL_STATUSES: ClaimStatus[] = ["submitted", "validating", "triage", "in_review", "awaiting_info", "approved", "denied"];
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -22,6 +25,7 @@ export default function HomePage() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [statFilter, setStatFilter] = useState<StatFilter>(null);
+  const [statusFilter, setStatusFilter] = useState<ClaimStatus | "all">("all");
 
   const load = useCallback(async (policyNumber: string) => {
     setState("loading");
@@ -46,12 +50,14 @@ export default function HomePage() {
   const totalValue = claims.reduce((sum, c) => sum + c.claimAmount, 0);
   const needsAttention = claims.filter((c) => c.status === "awaiting_info").length;
 
-  const visibleClaims =
+  const statFiltered =
     statFilter === "active"
       ? claims.filter((c) => ACTIVE_STATUSES.includes(c.status))
       : statFilter === "attention"
         ? claims.filter((c) => c.status === "awaiting_info")
         : claims;
+
+  const visibleClaims = statusFilter === "all" ? statFiltered : statFiltered.filter((c) => c.status === statusFilter);
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "2rem" }}>
@@ -153,6 +159,35 @@ export default function HomePage() {
               Show all
             </button>
           )}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as ClaimStatus | "all")}
+            aria-label="Filter by status"
+            style={{
+              padding: "0.5rem 0.75rem",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--text)",
+              fontSize: "0.85rem",
+            }}
+          >
+            <option value="all">All statuses</option>
+            {ALL_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_META[s].label}
+              </option>
+            ))}
+          </select>
+          {statusFilter !== "all" && (
+            <button
+              onClick={() => setStatusFilter("all")}
+              className="transition"
+              style={{ border: "none", background: "none", color: "var(--primary)", fontSize: "0.85rem", cursor: "pointer", fontWeight: 600 }}
+            >
+              Clear status
+            </button>
+          )}
         </div>
         <button
           onClick={() => void load(policyFilter)}
@@ -190,7 +225,13 @@ export default function HomePage() {
       {state === "loaded" && claims.length > 0 && visibleClaims.length === 0 && (
         <EmptyState
           title="Nothing matches this filter"
-          body={`No claims are currently "${statFilter ? STAT_FILTER_LABEL[statFilter] : ""}".`}
+          body={
+            statusFilter !== "all" && statFilter
+              ? `No claims are both "${STAT_FILTER_LABEL[statFilter]}" and "${STATUS_META[statusFilter].label}".`
+              : statusFilter !== "all"
+                ? `No claims are currently "${STATUS_META[statusFilter].label}".`
+                : `No claims are currently "${statFilter ? STAT_FILTER_LABEL[statFilter] : ""}".`
+          }
         />
       )}
 
