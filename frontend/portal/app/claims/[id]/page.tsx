@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ApiError, fetchClaim, fetchPolicies } from "@/lib/api";
 import type { Claim } from "@/lib/types";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, STATUS_META } from "@/components/StatusBadge";
 
 const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
   outpatient: "Outpatient",
@@ -150,6 +150,8 @@ export default function ClaimDetailPage() {
               Print
             </button>
           </div>
+
+          <StageTracker status={claim.status} />
 
           <StatRow claim={claim} />
 
@@ -444,6 +446,41 @@ export default function ClaimDetailPage() {
         </div>
       )}
     </main>
+  );
+}
+
+const STAGE_LABELS = ["Submitted", "In review", "Decision"] as const;
+
+/** Animated 3-stage chevron progress tracker driven off the claim's status stage (1-3). */
+function StageTracker({ status }: { status: Claim["status"] }) {
+  const currentStage = STATUS_META[status].stage;
+  const denied = status === "denied";
+
+  return (
+    <div
+      className="chevron-track animate-fade-in-up"
+      role="img"
+      aria-label={`Claim progress: ${STAGE_LABELS[currentStage - 1]}`}
+    >
+      {STAGE_LABELS.map((label, i) => {
+        const stageNum = i + 1;
+        const done = stageNum < currentStage;
+        const active = stageNum === currentStage;
+        const reached = done || active;
+        return (
+          <span
+            key={label}
+            className={`chevron-step${done ? " is-done" : ""}${active ? " is-active" : ""}`}
+            style={reached && denied ? { background: "var(--status-bad-fg)" } : undefined}
+          >
+            <span className="chevron-num" aria-hidden="true">
+              {done ? (denied ? "✕" : "✓") : stageNum}
+            </span>
+            {label}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 

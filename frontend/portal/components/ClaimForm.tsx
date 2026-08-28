@@ -291,9 +291,10 @@ export function ClaimForm() {
           gap: "0.75rem",
         }}
       >
-        <span aria-hidden="true" className="animate-pop" style={{ fontSize: "1.8rem", lineHeight: 1 }}>
-          ✓
-        </span>
+        <svg aria-hidden="true" width="56" height="56" viewBox="0 0 56 56" fill="none">
+          <circle className="check-circle" cx="28" cy="28" r="26" stroke="var(--status-good-fg)" strokeWidth="3" />
+          <path className="check-mark" d="M17 29 L24.5 36.5 L39 20" stroke="var(--status-good-fg)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         <h2 style={{ margin: 0, fontSize: "1.25rem", fontFamily: "var(--font-display)" }}>Claim submitted</h2>
         <p style={{ margin: 0, color: "var(--text)" }}>
           Reference: <strong style={{ fontVariantNumeric: "tabular-nums" }}>{confirmedId}</strong>

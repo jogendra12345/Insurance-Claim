@@ -40,6 +40,7 @@ export function TopBar() {
         >
           <span
             aria-hidden="true"
+            className="logo-glow"
             style={{
               width: "28px",
               height: "28px",
@@ -52,7 +53,6 @@ export function TopBar() {
               fontFamily: "var(--font-display)",
               fontWeight: 700,
               fontSize: "0.95rem",
-              boxShadow: "0 2px 8px var(--primary-glow)",
             }}
           >
             C

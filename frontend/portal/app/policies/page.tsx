@@ -7,6 +7,7 @@ import type { DependentRelationship, NewDependentInput, NewPolicyInput, Policy, 
 import { STATUS_TONE } from "@/lib/policy-status";
 import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ShieldCheckIllustration, IdCardIllustration } from "@/components/HeroIllustrations";
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -139,31 +140,41 @@ export default function PoliciesPage() {
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-      <header
-        className="animate-fade-in-up"
-        style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "1rem", flexWrap: "wrap" }}
+      <section
+        className="hero animate-fade-in-up"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1.5rem", flexWrap: "wrap", padding: "2rem 2.25rem" }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <span className="hero-orb hero-orb--a" aria-hidden="true" />
+        <span className="hero-orb hero-orb--b" aria-hidden="true" />
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "560px" }}>
           <h1 style={{ margin: 0, fontSize: "1.9rem" }}>Policies</h1>
-          <p style={{ margin: 0, color: "var(--text-muted)" }}>{policies.length} on file.</p>
+          <p style={{ margin: 0, color: "var(--text-muted)" }}>
+            {policies.length} on file — coverage, dependents, and everything a claim can be filed against.
+          </p>
+          <button
+            onClick={() => setShowAddForm((v) => !v)}
+            className="transition btn-press"
+            style={{
+              alignSelf: "flex-start",
+              marginTop: "0.5rem",
+              padding: "0.6rem 1.2rem",
+              borderRadius: "var(--radius-sm)",
+              border: "none",
+              background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
+              color: "var(--primary-contrast)",
+              fontWeight: 600,
+              cursor: "pointer",
+              boxShadow: "0 2px 10px var(--primary-glow)",
+            }}
+          >
+            {showAddForm ? "Close" : "+ Add policy"}
+          </button>
         </div>
-        <button
-          onClick={() => setShowAddForm((v) => !v)}
-          className="transition btn-press"
-          style={{
-            padding: "0.55rem 1.1rem",
-            borderRadius: "var(--radius-sm)",
-            border: "none",
-            background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
-            color: "var(--primary-contrast)",
-            fontWeight: 600,
-            cursor: "pointer",
-            boxShadow: "0 2px 10px var(--primary-glow)",
-          }}
-        >
-          {showAddForm ? "Close" : "+ Add policy"}
-        </button>
-      </header>
+        <div aria-hidden="true" style={{ display: "flex", alignItems: "flex-end", gap: "0.9rem", flexShrink: 0 }}>
+          <IdCardIllustration className="float-icon" />
+          <ShieldCheckIllustration className="float-icon-delay" />
+        </div>
+      </section>
 
       {showAddForm && (
         <form
