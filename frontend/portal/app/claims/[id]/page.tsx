@@ -451,9 +451,14 @@ export default function ClaimDetailPage() {
 
 const STAGE_LABELS = ["Submitted", "In review", "Decision"] as const;
 
-/** Animated 3-stage chevron progress tracker driven off the claim's status stage (1-3). */
+/** Animated 3-stage chevron progress tracker driven off the claim's status stage (1-3).
+    Completed steps use a neutral progress tint; the current step borrows its
+    color straight from the claim's own status badge (blue/amber/green/red)
+    so the tracker stays visually tied to StatusBadge instead of introducing
+    a separate, louder color language. */
 function StageTracker({ status }: { status: Claim["status"] }) {
-  const currentStage = STATUS_META[status].stage;
+  const meta = STATUS_META[status];
+  const currentStage = meta.stage;
   const denied = status === "denied";
 
   return (
@@ -466,15 +471,14 @@ function StageTracker({ status }: { status: Claim["status"] }) {
         const stageNum = i + 1;
         const done = stageNum < currentStage;
         const active = stageNum === currentStage;
-        const reached = done || active;
         return (
           <span
             key={label}
             className={`chevron-step${done ? " is-done" : ""}${active ? " is-active" : ""}`}
-            style={reached && denied ? { background: "var(--status-bad-fg)" } : undefined}
+            style={active ? { background: meta.bg, color: meta.fg } : undefined}
           >
             <span className="chevron-num" aria-hidden="true">
-              {done ? (denied ? "✕" : "✓") : stageNum}
+              {done ? (denied ? "✕" : "✓") : active ? meta.glyph : stageNum}
             </span>
             {label}
           </span>

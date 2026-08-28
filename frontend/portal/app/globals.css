@@ -425,71 +425,75 @@ textarea:focus {
   to { stroke-dashoffset: 0; }
 }
 
-/* Chevron stage tracker (claim detail): arrow-shaped segments that interlock
-   edge-to-edge, filling from left as the claim progresses through
-   submitted -> review -> decision. */
+/* Chevron stage tracker (claim detail): small interlocking arrow pills in
+   the same soft pastel tones as StatusBadge, not a loud solid ribbon —
+   only the current step gets a stronger tint, matching its status color. */
 .chevron-track {
-  display: flex;
+  display: inline-flex;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--surface);
 }
 
 .chevron-step {
-  --notch: 16px;
+  --notch: 11px;
   position: relative;
-  flex: 1 1 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-width: 0;
-  padding: 0.65rem 1rem 0.65rem calc(1rem + var(--notch));
-  background: var(--surface-2);
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem 0.4rem calc(0.75rem + var(--notch));
+  background: transparent;
   color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
   clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%, var(--notch) 50%);
 }
 
 .chevron-step:first-child {
-  padding-left: 1rem;
+  padding-left: 0.9rem;
   clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%);
 }
 
 .chevron-step:not(:first-child) {
-  margin-left: -16px;
+  margin-left: -11px;
 }
 
 .chevron-step:last-child {
+  padding-right: 1rem;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, var(--notch) 50%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .chevron-step {
-    transition: background 0.4s ease, color 0.4s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: background 0.4s ease, color 0.4s ease;
   }
 }
 
 .chevron-step.is-done {
-  background: var(--primary);
-  color: var(--primary-contrast);
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
 }
 
 .chevron-step.is-active {
-  background: var(--primary);
-  color: var(--primary-contrast);
+  font-weight: 700;
   z-index: 1;
-  transform: scaleY(1.08);
 }
 
 .chevron-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   flex-shrink: 0;
-  background: color-mix(in srgb, currentColor 18%, transparent);
+  background: color-mix(in srgb, currentColor 16%, transparent);
 }
 
 /* Theme toggle styled as a light bulb: glowing warm-yellow when the light
