@@ -37,10 +37,7 @@
       "validate": {
         "required": true
       },
-      "values": [
-        { "label": "Resolve — continue with this claim as submitted", "value": "resolve" },
-        { "label": "Reject claim", "value": "reject" }
-      ]
+      "valuesExpression": "=if policyId = null then [{label: \"Reject claim\", value: \"reject\"}] else [{label: \"Resolve — continue with this claim as submitted\", value: \"resolve\"}, {label: \"Reject claim\", value: \"reject\"}]"
     },
     {
       "label": "Rejection reason",
