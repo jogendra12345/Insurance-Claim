@@ -98,17 +98,32 @@ docker-compose up -d
 Operate/Tasklist at http://localhost:8080, login `demo` / `demo`.
 
 **Watch out:** the `orchestration` container's `mem_limit` (in
-`camunda-docker/docker-compose.yaml`) has needed bumping once already (1g →
-2g) — under load it pins near 100% memory and starts silently hanging on
-gRPC calls (deploys, Tasklist "Assign"/"Complete" actions) without raising
-an error, which looks like the UI is just stuck. Check with
-`docker stats --no-stream orchestration`; if it's pinned near the limit,
-bump `mem_limit` in `camunda-docker/docker-compose.yaml` and
-`docker-compose up -d orchestration` to recreate it (data persists in the
+`camunda-docker/docker-compose.yaml`) has needed bumping twice already (1g →
+2g → 2.5g) — under memory pressure it either silently hangs on gRPC calls
+(deploys, Tasklist "Assign"/"Complete" actions — looks like the UI is just
+stuck, no error raised) or a GC pause blocks the engine's single-threaded
+stream processor long enough to blow past an internal timeout, which
+surfaces as a spurious incident on a process instance (Operate shows an
+error like `Expected to evaluate expression but timed out after 5000 ms:
+'<some gateway condition>'` even though the variables involved are
+perfectly valid — it's an engine hiccup, not a data/BPMN bug). Resolving
+the incident via `POST /v2/incidents/{incidentKey}/resolution` (basic auth
+`demo`/`demo`) is safe once you've confirmed it's this kind of timeout
+rather than a real logic error.
+
+Check current usage with `docker stats --no-stream orchestration`; if it's
+pinned near the limit, bump `mem_limit` in `camunda-docker/docker-compose.yaml`
+and `docker-compose up -d orchestration` to recreate it (data persists in the
 named volumes, so this is safe — full JVM boot takes ~2-3 minutes after
 recreation, watch `docker logs orchestration` or poll
 `curl -u demo:demo http://localhost:8080/v2/topology` for
-`"health":"healthy"`).
+`"health":"healthy"`). Note Docker Desktop's own memory allocation on this
+machine is only ~3.8GB (of ~7.9GB host RAM) — if `orchestration` needs
+bumping again, check whether there's still headroom under Docker's overall
+VM limit before raising the container's `mem_limit` further; if not, the
+real fix is increasing Docker Desktop's memory allocation (Settings →
+Resources) rather than over-provisioning a single container within an
+already-tight VM.
 
 Deploy the process, DMN, and forms after any change to
 `process/claim-case-process.bpmn`, `process/health-claim-routing.dmn`, or

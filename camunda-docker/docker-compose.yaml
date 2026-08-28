@@ -29,7 +29,12 @@ services:
     env_file:
       - path: .env
         required: true
-    mem_limit: 2g
+    # Bumped 1g -> 2g -> 2.5g: under memory pressure a JVM GC pause can block
+    # the single-threaded stream processor long enough to blow past engine
+    # timeouts (e.g. a gateway FEEL expression "timed out after 5000 ms"),
+    # which surfaces as a spurious incident with no underlying data problem.
+    # See RUNNING-LOCALLY.md's "watch out" note for this container.
+    mem_limit: 2560m
     restart: on-failure
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9600 && echo -e \"GET /actuator/health/status HTTP/1.1\r\nHost: localhost\r\n\r\n\" >&3 && head -n 1 <&3'"]
