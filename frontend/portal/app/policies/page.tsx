@@ -32,6 +32,17 @@ const emptyDependent: NewDependentInput = { fullName: "", email: "", relationshi
 
 const currency = (n: number) => n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
+/** Suggests the next policy number by incrementing the highest existing "POL-<digits>" found. */
+function nextPolicyNumber(policies: Policy[]): string {
+  const numbers = policies
+    .map((p) => p.policyNumber.match(/^POL-(\d+)$/))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => ({ digits: m[1], value: parseInt(m[1], 10) }));
+  if (numbers.length === 0) return "POL-100001";
+  const max = numbers.reduce((a, b) => (b.value > a.value ? b : a));
+  return `POL-${String(max.value + 1).padStart(max.digits.length, "0")}`;
+}
+
 export default function PoliciesPage() {
   const router = useRouter();
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -163,7 +174,14 @@ export default function PoliciesPage() {
             {policies.length} on file — coverage, dependents, and everything a claim can be filed against.
           </p>
           <button
-            onClick={() => setShowAddForm((v) => !v)}
+            onClick={() => {
+              if (showAddForm) {
+                setShowAddForm(false);
+              } else {
+                setForm({ ...emptyForm, policyNumber: nextPolicyNumber(policies) });
+                setShowAddForm(true);
+              }
+            }}
             className="transition btn-press"
             style={{
               alignSelf: "flex-start",
@@ -203,13 +221,8 @@ export default function PoliciesPage() {
             alignItems: "end",
           }}
         >
-          <FormField label="Policy number">
-            <input
-              value={form.policyNumber}
-              onChange={(e) => setForm((f) => ({ ...f, policyNumber: e.target.value }))}
-              placeholder="POL-100011"
-              style={inputStyle}
-            />
+          <FormField label="Policy number" hint="Auto-assigned, next in sequence">
+            <input value={form.policyNumber} readOnly disabled style={disabledInputStyle} />
           </FormField>
           <FormField label="Policyholder name">
             <input
@@ -551,11 +564,12 @@ function Td({ children, align, muted }: { children: React.ReactNode; align?: "ri
   );
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+function FormField({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
       <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>{label}</span>
       {children}
+      {hint && <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{hint}</span>}
     </label>
   );
 }
@@ -567,4 +581,11 @@ const inputStyle: React.CSSProperties = {
   background: "var(--surface)",
   color: "var(--text)",
   width: "100%",
+};
+
+const disabledInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  background: "var(--surface-2)",
+  color: "var(--text-muted)",
+  cursor: "not-allowed",
 };
