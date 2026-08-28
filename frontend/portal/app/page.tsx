@@ -11,6 +11,8 @@ import { ShieldCheckIllustration, DocumentIllustration } from "@/components/Hero
 
 const ALL_STATUSES: ClaimStatus[] = ["submitted", "validating", "triage", "in_review", "awaiting_info", "approved", "denied"];
 
+const PAGE_SIZE = 10;
+
 type LoadState = "loading" | "loaded" | "error";
 
 type StatFilter = "active" | "attention" | null;
@@ -27,6 +29,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [statFilter, setStatFilter] = useState<StatFilter>(null);
   const [statusFilter, setStatusFilter] = useState<ClaimStatus | "all">("all");
+  const [page, setPage] = useState(0);
 
   const load = useCallback(async (policyNumber: string) => {
     setState("loading");
@@ -59,6 +62,12 @@ export default function HomePage() {
         : claims;
 
   const visibleClaims = statusFilter === "all" ? statFiltered : statFiltered.filter((c) => c.status === statusFilter);
+
+  useEffect(() => {
+    setPage(0);
+  }, [statFilter, statusFilter, claims]);
+
+  const pagedClaims = visibleClaims.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "2rem" }}>
@@ -246,7 +255,9 @@ export default function HomePage() {
         />
       )}
 
-      {state === "loaded" && visibleClaims.length > 0 && <ClaimTable claims={visibleClaims} />}
+      {state === "loaded" && visibleClaims.length > 0 && (
+        <ClaimTable claims={pagedClaims} page={page} pageSize={PAGE_SIZE} total={visibleClaims.length} onPageChange={setPage} />
+      )}
     </main>
   );
 }

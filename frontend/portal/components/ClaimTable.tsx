@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Claim } from "@/lib/types";
 import { STATUS_META, StatusBadge } from "./StatusBadge";
 import { relativeTime, absoluteDate } from "@/lib/time";
+import { Pagination } from "./Pagination";
 
 const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
   outpatient: "Outpatient",
@@ -40,7 +41,19 @@ function ProgressStepper({ stage, status }: { stage: 1 | 2 | 3; status: Claim["s
   );
 }
 
-export function ClaimTable({ claims }: { claims: Claim[] }) {
+export function ClaimTable({
+  claims,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  claims: Claim[];
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  onPageChange?: (page: number) => void;
+}) {
   const router = useRouter();
 
   return (
@@ -117,6 +130,9 @@ export function ClaimTable({ claims }: { claims: Claim[] }) {
           })}
         </tbody>
       </table>
+      {page !== undefined && pageSize !== undefined && total !== undefined && onPageChange && (
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} />
+      )}
     </div>
   );
 }

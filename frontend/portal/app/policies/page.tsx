@@ -8,6 +8,9 @@ import { STATUS_TONE } from "@/lib/policy-status";
 import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ShieldCheckIllustration, IdCardIllustration } from "@/components/HeroIllustrations";
+import { Pagination } from "@/components/Pagination";
+
+const PAGE_SIZE = 10;
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -43,6 +46,7 @@ export default function PoliciesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Policy | null>(null);
+  const [page, setPage] = useState(0);
 
   function load() {
     setState("loading");
@@ -59,6 +63,13 @@ export default function PoliciesPage() {
   }
 
   useEffect(load, []);
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(policies.length / PAGE_SIZE) - 1);
+    setPage((p) => Math.min(p, maxPage));
+  }, [policies.length]);
+
+  const pagedPolicies = policies.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   async function handleAddPolicy(e: React.FormEvent) {
     e.preventDefault();
@@ -420,7 +431,7 @@ export default function PoliciesPage() {
               </tr>
             </thead>
             <tbody className="stagger-list">
-              {policies.map((policy) => {
+              {pagedPolicies.map((policy) => {
                 const tone = STATUS_TONE[policy.status];
                 const goTo = () => router.push(`/policies/${policy.id}`);
                 return (
@@ -487,6 +498,7 @@ export default function PoliciesPage() {
               })}
             </tbody>
           </table>
+          <Pagination page={page} pageSize={PAGE_SIZE} total={policies.length} onPageChange={setPage} />
         </div>
       )}
 
