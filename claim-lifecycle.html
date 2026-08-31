@@ -395,8 +395,8 @@
       <div class="entry-num">04</div>
       <div class="entry-body">
         <h3>Validate claim</h3>
-        <p>A worker checks required fields are present and confirms the policy is active.</p>
-        <div class="tech"><span>job worker (Node/TS)</span><span>policy service (mocked)</span></div>
+        <p>A worker checks required fields, confirms the policy is active and covers this claimant, and blocks a second in-flight claim on the same policy.</p>
+        <div class="tech"><span>job worker (Node/TS)</span><span>policies table (PostgreSQL)</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -408,7 +408,7 @@
       <div class="entry-num">05</div>
       <div class="entry-body">
         <h3>Resolve exceptions, if invalid</h3>
-        <p>A triage staffer fixes data issues or rejects the claim outright before anything else runs.</p>
+        <p>A triage staffer resolves the claim to continue exactly as submitted, or rejects it outright — there's deliberately no way to edit the policy number here.</p>
         <div class="tech"><span>Camunda Tasklist</span><span>candidate group: triage-team</span></div>
       </div>
       <div class="note">
@@ -433,7 +433,7 @@
       <div class="entry-body">
         <h3>Extract evidence &amp; summarize</h3>
         <p>Uploaded documents are read and turned into structured data plus a case summary a reviewer can actually use.</p>
-        <div class="tech"><span>worker (Node/TS)</span><span>Claude API</span></div>
+        <div class="tech"><span>worker (Node/TS)</span><span>Gemini API</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -445,8 +445,8 @@
       <div class="entry-num">07</div>
       <div class="entry-body">
         <h3>Detect fraud indicators</h3>
-        <p>The claim and its evidence are checked against known fraud patterns and the claimant's history.</p>
-        <div class="tech"><span>worker</span><span>Claude API</span><span>claims-history store</span></div>
+        <p>The case summary and each document's extracted data are checked against a fixed list of fraud categories — identity mismatch, cross-document mismatch, billing/coding mismatch, missing documentation — each with a confidence score.</p>
+        <div class="tech"><span>worker</span><span>Gemini API</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -459,7 +459,7 @@
       <div class="entry-body">
         <h3>Score the risk</h3>
         <p>Fraud signal and claim complexity are combined into a single risk score.</p>
-        <div class="tech"><span>worker</span><span>Claude API reasoning</span></div>
+        <div class="tech"><span>worker</span><span>Gemini API reasoning</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
@@ -471,7 +471,7 @@
       <div class="entry-num">09</div>
       <div class="entry-body">
         <h3>Determine routing</h3>
-        <p>A decision table picks a suggested reviewer role from the risk score, fraud count, claim amount, and claim type.</p>
+        <p>A decision table picks a suggested reviewer role from the risk score, fraud count, claim amount, and two cheap SQL-derived red flags — days since the policy took effect, and the claimant's claim count over the last 12 months — rather than leaving everything to the AI workers to infer from prose.</p>
         <div class="tech"><span>DMN decision table</span></div>
       </div>
       <div class="note">
@@ -496,7 +496,7 @@
       <div class="entry-num">10</div>
       <div class="entry-body">
         <h3>Confirm or override routing</h3>
-        <p>A triage reviewer sees the AI's summary, fraud flags, and suggested role, then confirms it or sends the claim somewhere else.</p>
+        <p>Every claim stops here — the AI's suggested role is never a skip. A triage reviewer sees the AI's summary, fraud flags, and suggested role, then either confirms/overrides the role or rejects the claim outright without a full role-specific review.</p>
         <div class="tech"><span>Camunda Tasklist</span><span>candidate group: triage-team</span></div>
       </div>
       <div class="note">
@@ -584,7 +584,7 @@
       <div class="entry-body">
         <h3>Draft denial, if denied</h3>
         <p>A denial letter is generated citing the specific reason.</p>
-        <div class="tech"><span>worker</span><span>Claude API drafting</span></div>
+        <div class="tech"><span>worker</span><span>Gemini API drafting</span></div>
       </div>
       <div class="note">
         <span class="badge global">Global</span>
