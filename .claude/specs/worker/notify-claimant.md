@@ -17,8 +17,14 @@ BUILD-PLAN.md feature #16. SPEC.md §12 job-worker contract (row 12). SPEC.md §
 
 ## What it does
 
-1. Calls `NotificationProvider.send(claimId, decision, ...)` — a TypeScript interface defined in `backend/shared/` with one mock implementation in v1 (SPEC.md §12 closing note; CLAUDE.md's "swappable interfaces, mock only in v1" rule). The mock logs instead of actually sending (e.g. no real email/SMS integration).
-2. Runs on both the approved path (after `trigger-settlement`) and the denied path (after `draft-denial-letter`) — same worker, same job type, different upstream context feeding `decision`.
+1. Calls `NotificationProvider.send(claimId, decision)`:
+   ```ts
+   interface NotificationProvider {
+     send(claimId: string, decision: string): Promise<{ notificationSent: boolean }>;
+   }
+   ```
+   Defined in `backend/shared/` with one mock implementation in v1 (SPEC.md §12 closing note; CLAUDE.md's "swappable interfaces, mock only in v1" rule). The mock logs instead of actually sending (e.g. no real email/SMS integration).
+2. Runs on both the approved path (after `trigger-settlement`) and the denied path (after `draft-denial-letter`) — same worker, same job type, different upstream context feeding `decision`. On the deny path, the worker reads `claims.denial_letter_text` (via `claimId`, from Postgres — not threaded as a process variable) to include letter content in the mock "send" call, consistent with how other workers read from Postgres rather than growing the process-variable surface.
 3. Writes one `audit_log` row (`actor_type = 'system'`, `actor_id = 'notify-claimant'`, `action = 'claimant_notified'`, `detail` includes the decision and notification outcome) — SPEC.md §13.
 
 ## Output variables
@@ -47,5 +53,6 @@ No custom error boundary — an unhandled exception (including a failed `Notific
 
 ## Open Questions
 
-- `NotificationProvider`'s exact interface shape (method signature — what it needs beyond `claimId`/`decision`, e.g. claimant contact info, letter text for the deny path) isn't defined anywhere yet — needs to be authored in `backend/shared/` as part of this feature, alongside `SettlementProvider` (see `.claude/specs/worker/trigger-settlement.md`), since neither exists today.
-- On the deny path, does `notify-claimant` need `denialLetterText` as an additional input (to actually include letter content in the mock "send"), or is a bare decision notification sufficient for v1? SPEC.md §12's input-variable column for this worker lists only `claimId`, `decision` — worth confirming that's complete before implementing.
+Resolved:
+- ~~`NotificationProvider` interface shape?~~ Locked in as `send(claimId, decision) -> Promise<{ notificationSent: boolean }>`, see above.
+- ~~Does the deny path need `denialLetterText` as an input?~~ No — the worker reads `claims.denial_letter_text` itself via `claimId`, see above.

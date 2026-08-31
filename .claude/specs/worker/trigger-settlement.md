@@ -17,10 +17,21 @@ BUILD-PLAN.md feature #14. SPEC.md §12 job-worker contract (row 10). SPEC.md §
 
 ## What it does
 
-1. Calls `SettlementProvider.pay(claimId, claimAmount)` — a TypeScript interface defined in `backend/shared/` with one mock implementation in v1 (per SPEC.md §12's closing note; also CLAUDE.md's "swappable interfaces, mock only in v1" rule). The mock always succeeds and returns a fabricated settlement identifier.
-2. Writes one `audit_log` row (`actor_type = 'system'`, `actor_id = 'trigger-settlement'`, `action = 'settlement_triggered'`, `detail` includes the returned `settlementId`) — SPEC.md §13.
+1. Calls `SettlementProvider.pay(claimId, claimAmount)`:
+   ```ts
+   interface SettlementProvider {
+     pay(claimId: string, claimAmount: number): Promise<{ settlementId: string }>;
+   }
+   ```
+   Defined in `backend/shared/` with one mock implementation in v1 (per SPEC.md §12's closing note; also CLAUDE.md's "swappable interfaces, mock only in v1" rule). The mock always succeeds and returns a fabricated settlement identifier.
+2. Writes `claims.settlement_id = settlementId` (new nullable text column — see Data model note below).
+3. Writes one `audit_log` row (`actor_type = 'system'`, `actor_id = 'trigger-settlement'`, `action = 'settlement_triggered'`, `detail` includes the returned `settlementId`) — SPEC.md §13.
 
-Does not write anything to `claims` itself — `claims.status` is already `'approved'` from `capture-review-decision` (§10 step 13) or unchanged by the optional `capture-signoff` step; this worker's only durable side effect on the claim row, if any, is left to the interface implementation to decide (v1 mock: none — `settlementId` only flows onward as a process variable, not persisted to a `claims` column, since SPEC.md's data model has no such column today — flagged under Open Questions).
+`claims.status` is already `'approved'` from `capture-review-decision` (§10 step 13) and is unchanged by this worker or the optional `capture-signoff` step.
+
+### Data model note
+
+SPEC.md §9 has no `settlement_id` column today. This spec locks in adding one: `claims.settlement_id text NULL`, set only on the approved path once `trigger-settlement` runs. Needs a corresponding `backend/db/migrations/` entry and a SPEC.md §9 update before/alongside implementation.
 
 ## Output variables
 
@@ -46,5 +57,6 @@ No custom error boundary — an unhandled exception (including a failed `Settlem
 
 ## Open Questions
 
-- SPEC.md's data model (§9) has no column to persist `settlementId` onto the `claims` row — confirm whether one is needed (e.g. `claims.settlement_id`) before this is built, or whether the process-variable-only output is intentional for v1 (mirrors how `capture-signoff` writes no `claims` columns either, existing solely to satisfy the audit-trail rule).
-- `SettlementProvider`'s exact interface shape (method signature, return type) isn't defined anywhere yet — needs to be authored in `backend/shared/` as part of this feature, alongside `NotificationProvider` (see `.claude/specs/worker/notify-claimant.md`), since neither exists today.
+Resolved:
+- ~~Persist `settlementId` onto `claims`?~~ Yes — `claims.settlement_id`, see Data model note above.
+- ~~`SettlementProvider` interface shape?~~ Locked in as `pay(claimId, claimAmount) -> Promise<{ settlementId: string }>`, see above.

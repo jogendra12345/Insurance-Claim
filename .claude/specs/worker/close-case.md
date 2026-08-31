@@ -44,4 +44,5 @@ No custom error boundary — an unhandled exception falls back to Zeebe's defaul
 
 ## Open Questions
 
-- None of the `moreInfo` path's variables reach this worker — step 14's `Exclusive Gateway Decision` routes `decision = "moreInfo"` straight to the terminal **End Event** "Awaiting More Information" (§10 step 14, §14 future work), bypassing `draft-denial-letter`/`notify-claimant`/`close-case` entirely. Confirm that's intentional (i.e. `close-case` is never expected to see `decision = "moreInfo"` as an input) before implementing, since the worker's status-mapping logic above only needs to handle `approve`/`deny`.
+Resolved:
+- ~~Does `close-case` ever see `decision = "moreInfo"`?~~ Confirmed no — step 14's `Exclusive Gateway Decision` routes `moreInfo` straight to the terminal **End Event** "Awaiting More Information" (§10 step 14, §14 future work), bypassing `draft-denial-letter`/`notify-claimant`/`close-case` entirely. The status-mapping logic only needs the two branches (`approve`/`deny`) already documented above — no defensive third case.
