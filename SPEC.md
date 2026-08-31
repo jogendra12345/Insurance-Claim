@@ -346,9 +346,9 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 - Error boundary events on service tasks for graceful business-error handling.
 - A real settlement provider. (Notification is real as of 2026-08-31, though still sandbox-limited to one verified recipient address — see §12.)
 - PDF generation for denial letters.
-- Custom review UI per role (replacing default Tasklist).
+- Auth + role-based access for the frontend portal: a `users` table (claimant / admin / `triage-team` / `adjuster` / `investigator` / `legal-reviewer` / `supervisor`), login, and sessions. Claimant views scope `claims`/`policies` to `claimant_email = current user`; admin sees everything. Recommended shape (discussed 2026-08-31, not yet speced): the app's own auth is the trust boundary — Camunda stays behind it as a trusted backend service, with `backend/api` holding the single `demo` credential server-side and proxying Tasklist's v2 REST API (`/v2/user-tasks/search`, `/completion`, `/assignment`) rather than exposing Camunda credentials to end users. This sidesteps the still-open Identity/Keycloak decision (ROADMAP.md "Open decision before Step 6") — real Camunda-native multi-user auth (switching to `docker-compose-full.yaml`) is a separate, larger alternative if ever needed.
+- A custom in-app task page (candidate-group-scoped via the proxy above) — replaces having reviewers use Camunda's stock Tasklist UI directly. Depends on the auth/role work above existing first.
 - Customer-facing status page pulling live process state.
-- Auth for the claimant portal.
 - Adding/editing/removing `policy_dependents` (§9) on an *already-existing* policy — v1 only supports setting them at policy-creation time.
 - Deploying to Camunda 8 SaaS instead of local Docker Compose.
 - **Cloud hosting for the rest of the stack** (beyond Camunda, above). What needs to change before this app runs anywhere but a local machine:
