@@ -19,7 +19,11 @@ interface CaptureValidationExceptionVariables {
 
 const JOB_TYPE = "capture-validation-exception";
 
-zeebeClient.createWorker<CaptureValidationExceptionVariables, Record<string, unknown>, Record<string, never>>({
+interface CaptureValidationExceptionOutput {
+  decision?: "deny";
+}
+
+zeebeClient.createWorker<CaptureValidationExceptionVariables, Record<string, unknown>, CaptureValidationExceptionOutput>({
   taskType: JOB_TYPE,
   taskHandler: async (job) => {
     const { claimId, resolutionAction, denialReason } = job.variables;
@@ -37,7 +41,12 @@ zeebeClient.createWorker<CaptureValidationExceptionVariables, Record<string, unk
         action: "validation_exception_rejected",
         detail: { denialReason },
       });
-      return job.complete({});
+      // Same reasoning as capture-triage-review's reject branch: this
+      // merges into the shared denial path (draft-denial-letter →
+      // notify-claimant → close-case), all of which take `decision` as a
+      // process-variable input — must be set explicitly here since
+      // ValidationExceptionReviewForm doesn't produce it.
+      return job.complete({ decision: "deny" });
     }
 
     const { rows: claimRows } = await pool.query(`SELECT * FROM claims WHERE id = $1`, [claimId]);

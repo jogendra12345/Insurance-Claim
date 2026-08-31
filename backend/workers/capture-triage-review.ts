@@ -27,7 +27,11 @@ const VALID_ROLES = ["adjuster", "investigator", "legal"];
 
 const JOB_TYPE = "capture-triage-review";
 
-zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, Record<string, never>>({
+interface CaptureTriageReviewOutput {
+  decision?: "deny";
+}
+
+zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, CaptureTriageReviewOutput>({
   taskType: JOB_TYPE,
   taskHandler: async (job) => {
     const { claimId, triageAction, confirmedRole, assignedRole, denialReason } = job.variables;
@@ -55,7 +59,14 @@ zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, 
         detail: { denialReason, assignedRole },
       });
 
-      return job.complete({});
+      // draft-denial-letter (§10 step 16, reached directly from this
+      // branch — see Gateway_TriageDecision) and notify-claimant/close-case
+      // downstream of it all take `decision` as a process-variable input,
+      // matching capture-review-decision's deny path. Without setting it
+      // here explicitly, `decision` is simply never defined on this branch
+      // of the process instance, since the Triage Review form only produces
+      // triageAction/confirmedRole/denialReason, not decision.
+      return job.complete({ decision: "deny" });
     }
 
     if (!confirmedRole || !VALID_ROLES.includes(confirmedRole)) {
