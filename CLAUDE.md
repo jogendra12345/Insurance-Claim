@@ -38,7 +38,7 @@ Planned repo layout (SPEC.md §6):
 
 Key architectural rules to preserve when implementing:
 - `carrier_id` is a first-class field on every claim from v1 (multi-carrier/TPA support), even though tenant isolation/enforcement is future work.
-- `SettlementProvider` and `NotificationProvider` are swappable interfaces with mock implementations only — do not wire real payment/notification integrations in v1.
+- `SettlementProvider` is a swappable interface with a mock implementation only — do not wire a real payment integration in v1. `NotificationProvider` is the exception: it has a real implementation (Resend, `backend/shared/notification-provider.ts`) per explicit product direction (2026-08-31) — `notify-claimant` uses it whenever `RESEND_API_KEY` is set, falling back to the mock otherwise. See PREREQUISITES.md and SPEC.md §12.
 - Unhandled worker exceptions rely on Zeebe's built-in retry (3 attempts) then fail into an Operate incident — no custom BPMN error boundaries in v1.
 - Every job worker and every user-task completion must write at least one `audit_log` row (`actor_type`: `system`/`ai`/`human`).
 - Role-based review uses stock Camunda Tasklist with candidate groups (`triage-team`, `adjusters`, `investigators`, `legal-reviewers`, `supervisors`) — no custom review UI in v1.

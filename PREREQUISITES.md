@@ -65,5 +65,5 @@ MinIO runs from the same root `docker-compose.yaml` as Postgres — `docker comp
 ## Still needed (not yet decided/installed)
 
 - ~~Gemini API key~~ — provided 2026-08-25, stored in `backend/workers/.env` (`GEMINI_API_KEY`, gitignored) — for the AI-assisted steps (document extraction, risk scoring, denial letter drafting)
-- **Notification service** credentials — e.g. SendGrid or Twilio, for the customer notification step
+- ~~Notification service~~ — decided 2026-08-31: Resend, key stored in `backend/workers/.env` (`RESEND_API_KEY`, gitignored). Free-tier sandbox sender (`onboarding@resend.dev`, no domain verification) only delivers to the address the Resend account was signed up with — real delivery to arbitrary claimant addresses needs a verified domain, still open.
 - **Payment gateway** credentials — e.g. Stripe or ACH, for the payout step

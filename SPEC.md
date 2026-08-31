@@ -25,7 +25,7 @@ ClaimFlow AI is a Camunda-orchestrated claims application for insurers that comb
 
 **Non-goals (v1 — see §14 for future work)**
 - No additional insurance types (vehicle, property, travel, etc.) implemented in v1 — only the extension points exist (§3).
-- No real payment/settlement or notification integration — both mocked behind swappable interfaces.
+- No real payment/settlement integration — mocked behind a swappable interface. (Notification is real as of 2026-08-31 — see §12.)
 - No cross-role escalation (investigator → legal mid-review) — each claim is routed once by the DMN table.
 - No "request more info" resubmission loop — that path ends the process.
 - No per-carrier tenant isolation, branding, or auth — `carrier_id` is recorded but not yet enforced as a security boundary.
@@ -85,7 +85,7 @@ Reviewers (browser) — Camunda Tasklist at localhost:8080/tasklist
 | Document storage | S3-compatible object storage (local MinIO for dev) |
 | AI | Gemini API (Google Generative Language) — evidence extraction, fraud-indicator detection, risk scoring, denial letter drafting |
 | Settlement | Mocked behind a `SettlementProvider` interface |
-| Notification | Mocked behind a `NotificationProvider` interface |
+| Notification | `NotificationProvider` interface — real send via Resend (mock fallback if `RESEND_API_KEY` unset) |
 
 ## 7. Repo structure
 
@@ -328,10 +328,10 @@ Node/TypeScript, one job type each, via `@camunda8/sdk`. Default behavior: unhan
 | `capture-validation-exception` | `claimId`, `resolutionAction`, `denialReason` (when rejecting) | Branches on `resolutionAction` (§10 step 3): `"resolve"` sets `status = 'validating'` — allowed regardless of whether `claims.policy_id` is set, a deliberate human-override (see §10); `"reject"` writes `claims.decision = 'deny'` + `denial_reason`, sets `status = 'denied'` (same shape as `capture-triage-review`'s reject branch) | — |
 | `trigger-settlement` | `claimId`, `claimAmount` | Calls `SettlementProvider.pay()` — **mocked**, always succeeds | `settlementId` (string) |
 | `draft-denial-letter` | `claimId`, `denialReason`, `claimantName` | Calls Gemini to draft denial letter text grounded in the stated reason | `denialLetterText` (string) |
-| `notify-claimant` | `claimId`, `decision` | Calls `NotificationProvider.send()` — **mocked**, logs instead of sending | `notificationSent` (bool) |
+| `notify-claimant` | `claimId`, `decision` | Reads `claimant_name`, `claimant_email`, and (on `deny`) `denial_letter_text` from `claims`; calls `NotificationProvider.send()` — real send via Resend when `RESEND_API_KEY` is set, else falls back to the mock (logs instead of sending) | `notificationSent` (bool) |
 | `close-case` | `claimId`, `decision` | Writes final `status` to `claims` — by the time this runs, `capture-review-decision` already set the same value; this is a confirming/idempotent write, not the sole one (see §10) | — |
 
-`SettlementProvider` and `NotificationProvider` are TypeScript interfaces with one mock implementation each in v1. `validate-claim`, `extract-evidence`, and `detect-fraud-indicators` are insurance-type aware — each loads `backend/shared/insurance-types/<insuranceType>.ts` (v1: `health.ts` only) rather than hardcoding health-specific logic inline, so a new type is additive. The `capture-*` workers are not insurance-type aware — they only move already-computed process variables onto the `claims` row and are the same regardless of `insuranceType`.
+`SettlementProvider` and `NotificationProvider` are TypeScript interfaces; `SettlementProvider` still has only a mock implementation in v1. `NotificationProvider` gained a real implementation (Resend, `backend/shared/notification-provider.ts`) per explicit product direction on 2026-08-31 — `notify-claimant` picks it over the mock whenever `RESEND_API_KEY` is set (PREREQUISITES.md). Resend's free-tier sandbox sender only delivers to the address the Resend account was signed up with, so real delivery to arbitrary claimant addresses still needs a verified domain. `validate-claim`, `extract-evidence`, and `detect-fraud-indicators` are insurance-type aware — each loads `backend/shared/insurance-types/<insuranceType>.ts` (v1: `health.ts` only) rather than hardcoding health-specific logic inline, so a new type is additive. The `capture-*` workers are not insurance-type aware — they only move already-computed process variables onto the `claims` row and are the same regardless of `insuranceType`.
 
 ## 13. Audit trail
 
@@ -344,7 +344,7 @@ Every worker in §12, and every user-task completion, writes one `audit_log` row
 - Cross-role escalation (e.g., investigator escalates to legal mid-review) instead of single DMN-time routing.
 - Loop `moreInfo` back to intake instead of ending the process (needs a message event + resubmission API).
 - Error boundary events on service tasks for graceful business-error handling.
-- Real settlement and notification providers.
+- A real settlement provider. (Notification is real as of 2026-08-31, though still sandbox-limited to one verified recipient address — see §12.)
 - PDF generation for denial letters.
 - Custom review UI per role (replacing default Tasklist).
 - Customer-facing status page pulling live process state.
