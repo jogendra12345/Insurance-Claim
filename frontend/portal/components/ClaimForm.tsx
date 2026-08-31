@@ -26,8 +26,6 @@ const ACCEPTED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
 // backend/api/src/routes/claims.ts.
 const ICD10_PATTERN = /^[A-TV-Z][0-9][0-9AB](\.[0-9A-Z]{1,4})?$/i;
 const CPT_OR_HCPCS_PATTERN = /^(\d{5}|[A-Z]\d{4})$/i;
-const MULTI_DAY_CLAIM_TYPES: ClaimType[] = ["inpatient", "maternity"];
-
 function fileKey(f: File) {
   return `${f.name}-${f.size}-${f.lastModified}`;
 }
@@ -97,8 +95,6 @@ export function ClaimForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
-
-  const showServiceDateTo = MULTI_DAY_CLAIM_TYPES.includes(claimType);
 
   function syncFileInput(next: File[]) {
     if (fileInputRef.current) {
@@ -171,10 +167,8 @@ export function ClaimForm() {
       if (!serviceDateFrom) errors.serviceDateFrom = "Service date is required.";
       else if (serviceDateFrom > todayIso()) errors.serviceDateFrom = "Service date can't be in the future.";
 
-      if (showServiceDateTo) {
-        if (!serviceDateTo) errors.serviceDateTo = "End date of service is required for this claim type.";
-        else if (serviceDateFrom && serviceDateTo < serviceDateFrom) errors.serviceDateTo = "End date can't be before the start date.";
-      }
+      if (!serviceDateTo) errors.serviceDateTo = "End date of service is required.";
+      else if (serviceDateFrom && serviceDateTo < serviceDateFrom) errors.serviceDateTo = "End date can't be before the start date.";
 
       const billed = Number(totalBilledAmount);
       if (!totalBilledAmount || Number.isNaN(billed) || billed <= 0) {
@@ -262,7 +256,7 @@ export function ClaimForm() {
         facilityName: facilityName.trim(),
         facilityAddress: facilityAddress.trim(),
         serviceDateFrom,
-        serviceDateTo: showServiceDateTo ? serviceDateTo : serviceDateFrom,
+        serviceDateTo,
         totalBilledAmount: Number(totalBilledAmount),
         coordinationOfBenefits: coordinationOfBenefits === true,
         attested,
@@ -453,18 +447,16 @@ export function ClaimForm() {
               />
             </Field>
 
-            {showServiceDateTo && (
-              <Field label="Date of service (through)" error={fieldErrors.serviceDateTo}>
-                <input
-                  type="date"
-                  value={serviceDateTo}
-                  min={serviceDateFrom || undefined}
-                  max={todayIso()}
-                  onChange={(e) => setServiceDateTo(e.target.value)}
-                  style={inputStyle}
-                />
-              </Field>
-            )}
+            <Field label="Date of service (through)" error={fieldErrors.serviceDateTo}>
+              <input
+                type="date"
+                value={serviceDateTo}
+                min={serviceDateFrom || undefined}
+                max={todayIso()}
+                onChange={(e) => setServiceDateTo(e.target.value)}
+                style={inputStyle}
+              />
+            </Field>
 
             <Field
               label="Total billed amount (USD)"
@@ -686,7 +678,7 @@ export function ClaimForm() {
             diagnosisCode={diagnosisCode}
             procedureCode={procedureCode}
             serviceDateFrom={serviceDateFrom}
-            serviceDateTo={showServiceDateTo ? serviceDateTo : null}
+            serviceDateTo={serviceDateTo || null}
             totalBilledAmount={totalBilledAmount}
             coordinationOfBenefits={coordinationOfBenefits}
             facilityName={facilityName}

@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "text": "## Validation Exception Review\n\nThis claim failed automated validation.\n\nPolicy number submitted: **{{policyNumber}}** · Claim type: **{{claimType}}** · Amount: **{{claimAmount}}**\n\nCheck the Process/History tab for the exact `validated` audit entry (missing fields / policy match failure / duplicate) before deciding. There's no way to change the policy number here — Resolve only continues a claim onto a policy that already matched.",
+      "text": "## Validation Exception Review\n\nThis claim failed automated validation.\n\nPolicy number submitted: **{{policyNumber}}** · Claim type: **{{claimType}}** · Amount: **{{claimAmount}}**\n\nCheck the Process/History tab for the exact `validated` audit entry (missing fields / policy match failure / duplicate) before deciding. There's no way to change the policy number here — Approve continues the claim exactly as submitted.",
       "type": "text",
       "id": "IntroText"
     },
@@ -22,7 +22,7 @@
       }
     },
     {
-      "text": "⚠️ **No policy matched** — nothing on file matches the submitted policy number for this claim's incident date. Resolve isn't available for this failure — Reject is the only option.",
+      "text": "⚠️ **No policy matched** — nothing on file matches the submitted policy number for this claim's incident date. Approving continues the claim with no policy attached — no coverage, active-status, or incident-date check will ever run for it. Only approve if you have a specific reason to believe this is a legitimate claim despite the mismatch.",
       "type": "text",
       "id": "NoPolicyMatchedWarning",
       "conditional": {
@@ -37,7 +37,10 @@
       "validate": {
         "required": true
       },
-      "valuesExpression": "=if policyId = null then [{label: \"Reject claim\", value: \"reject\"}] else [{label: \"Resolve — continue with this claim as submitted\", value: \"resolve\"}, {label: \"Reject claim\", value: \"reject\"}]"
+      "values": [
+        { "label": "Approve — continue with this claim as submitted", "value": "resolve" },
+        { "label": "Reject claim", "value": "reject" }
+      ]
     },
     {
       "label": "Rejection reason",
