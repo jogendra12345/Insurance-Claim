@@ -31,7 +31,7 @@ BUILD-PLAN.md feature #14. SPEC.md §12 job-worker contract (row 10). SPEC.md §
 
 ### Data model note
 
-SPEC.md §9 has no `settlement_id` column today. This spec locks in adding one: `claims.settlement_id text NULL`, set only on the approved path once `trigger-settlement` runs. Needs a corresponding `backend/db/migrations/` entry and a SPEC.md §9 update before/alongside implementation.
+SPEC.md §9 has no `settlement_id` column today. This spec locks in adding one: `claims.settlement_id text NULL`, set only on the approved path once `trigger-settlement` runs. Formalized in `.claude/specs/db/resolution_worker_fields.md` (migration `0009_add_resolution_worker_fields.sql`); needs a SPEC.md §9 update before/alongside implementation.
 
 ## Output variables
 
