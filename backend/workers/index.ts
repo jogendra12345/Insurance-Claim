@@ -10,3 +10,7 @@ import "./capture-triage-review";
 import "./capture-review-decision";
 import "./capture-signoff";
 import "./capture-validation-exception";
+import "./trigger-settlement";
+import "./draft-denial-letter";
+import "./notify-claimant";
+import "./close-case";

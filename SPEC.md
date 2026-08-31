@@ -182,6 +182,8 @@ claims
   total_billed_amount    numeric NOT NULL     -- gross provider-billed amount; separate from claim_amount, not wired into any worker (see below)
   coordination_of_benefits boolean NOT NULL DEFAULT false  -- does the claimant have other coverage
   attestation_signed_at  timestamptz NOT NULL -- set server-side at submission time, not client-typed
+  settlement_id          text NULL            -- written by trigger-settlement on the approved path (mocked SettlementProvider)
+  denial_letter_text     text NULL            -- written by draft-denial-letter on the denied path; read back by notify-claimant
   created_at            timestamptz NOT NULL DEFAULT now()
   updated_at            timestamptz NOT NULL DEFAULT now()
 
