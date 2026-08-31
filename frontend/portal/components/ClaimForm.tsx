@@ -6,6 +6,7 @@ import { ApiError, submitClaim } from "@/lib/api";
 import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
 import { PolicySelect } from "./PolicySelect";
 import { ProviderSelect } from "./ProviderSelect";
+import { IcdCodeSelect } from "./IcdCodeSelect";
 
 const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
   { value: "outpatient", label: "Outpatient" },
@@ -418,11 +419,10 @@ export function ClaimForm() {
         {step === 2 && (
           <>
             <Field label="Diagnosis code (ICD-10)" error={fieldErrors.diagnosisCode}>
-              <input
+              <IcdCodeSelect
                 value={diagnosisCode}
-                onChange={(e) => setDiagnosisCode(e.target.value)}
+                onChange={setDiagnosisCode}
                 onBlur={() => setDiagnosisCode((v) => v.trim().toUpperCase())}
-                placeholder="E11.9"
                 style={inputStyle}
               />
             </Field>
