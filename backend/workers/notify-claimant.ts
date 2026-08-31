@@ -7,10 +7,10 @@ import { mockNotificationProvider, resendNotificationProvider } from "../shared/
 // SPEC.md §12 / .claude/specs/worker/notify-claimant.md — notify-claimant.
 // Runs on both the approved path (after trigger-settlement) and the denied
 // path (after draft-denial-letter) — same job type, different `decision`.
-// Reads claimant name/email and (on the deny path) denial_letter_text back
-// from `claims` via claimId, rather than taking them as process-variable
-// inputs — the real Resend provider needs actual content to send, not just
-// claimId/decision.
+// Reads everything the email body needs straight from `claims` via
+// claimId, rather than taking it as process-variable input — the real
+// Resend provider sends a detailed HTML email (claim details, amount,
+// incident info, settlement/denial content), not just claimId/decision.
 interface NotifyClaimantVariables {
   claimId: string;
   decision: "approve" | "deny";
@@ -39,7 +39,18 @@ zeebeClient.createWorker<NotifyClaimantVariables, Record<string, unknown>, Notif
       claimant_name: string;
       claimant_email: string;
       denial_letter_text: string | null;
-    }>(`SELECT claimant_name, claimant_email, denial_letter_text FROM claims WHERE id = $1`, [claimId]);
+      policy_number: string;
+      claim_type: string;
+      claim_amount: string;
+      incident_date: Date;
+      incident_description: string;
+      settlement_id: string | null;
+    }>(
+      `SELECT claimant_name, claimant_email, denial_letter_text, policy_number, claim_type,
+              claim_amount, incident_date, incident_description, settlement_id
+       FROM claims WHERE id = $1`,
+      [claimId]
+    );
     const claim = rows[0];
     if (!claim) {
       throw new Error(`notify-claimant: no claims row for claimId ${claimId}`);
@@ -51,6 +62,12 @@ zeebeClient.createWorker<NotifyClaimantVariables, Record<string, unknown>, Notif
       claimantEmail: claim.claimant_email,
       decision,
       denialLetterText: decision === "deny" ? claim.denial_letter_text : null,
+      policyNumber: claim.policy_number,
+      claimType: claim.claim_type,
+      claimAmount: Number(claim.claim_amount),
+      incidentDate: claim.incident_date.toISOString(),
+      incidentDescription: claim.incident_description,
+      settlementId: decision === "approve" ? claim.settlement_id : null,
     });
 
     await writeAuditLog({
