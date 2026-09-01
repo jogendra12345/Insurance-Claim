@@ -159,24 +159,28 @@
           <text>"adjuster"</text>
         </outputEntry>
       </rule>
-      <rule id="Rule_auto">
-        <inputEntry id="InputEntry_auto_fraud">
+      <!-- Catch-all: nothing above matched, so this is a low-risk/low-value
+           claim. Still routes to a real specialist (adjuster, the lightest-
+           weight reviewer) rather than an "auto" pseudo-role — every claim
+           gets a human review from one of the three real roles, no bypass. -->
+      <rule id="Rule_adjuster_default">
+        <inputEntry id="InputEntry_adjusterDefault_fraud">
           <text></text>
         </inputEntry>
-        <inputEntry id="InputEntry_auto_risk">
+        <inputEntry id="InputEntry_adjusterDefault_risk">
           <text></text>
         </inputEntry>
-        <inputEntry id="InputEntry_auto_amount">
+        <inputEntry id="InputEntry_adjusterDefault_amount">
           <text></text>
         </inputEntry>
-        <inputEntry id="InputEntry_auto_days">
+        <inputEntry id="InputEntry_adjusterDefault_days">
           <text></text>
         </inputEntry>
-        <inputEntry id="InputEntry_auto_claimCount">
+        <inputEntry id="InputEntry_adjusterDefault_claimCount">
           <text></text>
         </inputEntry>
-        <outputEntry id="OutputEntry_auto">
-          <text>"auto"</text>
+        <outputEntry id="OutputEntry_adjusterDefault">
+          <text>"adjuster"</text>
         </outputEntry>
       </rule>
     </decisionTable>

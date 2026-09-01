@@ -123,7 +123,7 @@ This expands the feature table you provided into a build-ready sequence, cross-c
 - `/dmn-table-review process/health-claim-routing.dmn` to confirm it matches spec before deploying.
 
 ### 9. Risk-based review routing
-- This is the `Needs Triage Review?` exclusive gateway in the BPMN — condition on `assignedRole = "auto"` (default/skip) vs. anything else (go to triage). Configure directly in Modeler; no worker involved.
+- *(Doc drift fixed — the actual SPEC.md §10 design has no bypass gateway here; every claim goes to `Triage Review` unconditionally, including low-risk ones, so there is no `"auto"`-skip condition to configure.)* "Risk-based review routing" is really just the DMN step (#8) — its output feeds `Triage Review` (#10) directly, no gateway in between. No separate Modeler work for this item.
 
 ### 10. Triage review & role confirmation
 - Configure the `Triage Review` User Task in Modeler: candidate group `triage-team`, form fields showing `caseSummary`, `riskScore`, fraud indicators, and `assignedRole`; output variable `confirmedRole`.
