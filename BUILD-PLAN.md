@@ -75,6 +75,7 @@ This expands the feature table you provided into a build-ready sequence, cross-c
 | 30 | Per-carrier tenant isolation | Auth scoping by `carrier_id`, per-carrier DMN thresholds/branding | #21 (auth) | High — cross-cutting, touches auth, DMN, and every query |
 | 31 | Deploy to Camunda 8 SaaS | Infra migration off local Docker Compose | Stable local process definitions | High — infra/ops work, not app code |
 | 32 | Cloud hosting for the rest of the stack | Presigned MinIO/S3 URLs, real domains for `NEXT_PUBLIC_API_BASE_URL`/`CORS_ORIGIN`, managed Postgres/object storage, secrets manager | All of the above | High — infra/ops work, largest item in §14 |
+| 33 | **Audit view** *(new)* | `GET /api/claims/:id/audit` (reads `audit_log` by `claim_id`), new `frontend/portal` staff-only page rendering the timeline | #21 (auth — gates access), DB (done) | Low — read-only, one query, no new tables; the `/case-trace` skill already proves the merge logic works |
 
 **Note on #26:** this is a demo app built to try out Claude Code + Camunda together, not a production claims system — no real payment integration is needed now or in this phase. `SettlementProvider` stays mocked (per `CLAUDE.md`'s existing rule) indefinitely; #26 is dropped from this plan rather than deferred.
 
