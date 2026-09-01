@@ -100,9 +100,10 @@ function buildEmail(context: NotificationContext): { subject: string; html: stri
 </div>`.trim();
 
   const textDetailLines = detailRows.map(([label, value]) => `${label}: ${value}`).join("\n");
-  const text = isDeny
-    ? `${context.denialLetterText ?? `Dear ${context.claimantName},\n\nYour claim has been denied.`}\n\n${textDetailLines}\n\nView your claim: ${claimUrl}`
-    : `Dear ${context.claimantName},\n\nGood news — your claim has been approved. Settlement is being processed.\n\n${textDetailLines}\n\nView your claim: ${claimUrl}`;
+  const textBodyParagraph = isDeny
+    ? context.denialLetterText ?? `We're sorry to inform you that your claim has been denied.`
+    : `Good news — your claim has been approved. Settlement is being processed.`;
+  const text = `Dear ${context.claimantName},\n\n${textBodyParagraph}\n\n${textDetailLines}\n\nView your claim: ${claimUrl}`;
 
   return { subject, html, text };
 }

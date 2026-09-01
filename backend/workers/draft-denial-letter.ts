@@ -28,11 +28,15 @@ letter strictly in the reason given below — do not invent additional
 reasons, dates, amounts, or claim details not present here.
 
 The letter must:
-- Address the claimant by name.
 - State plainly that the claim has been denied.
 - Explain the denial reason given below in plain language.
 - Close with a brief, neutral note that the claimant may contact the
   insurer with questions.
+
+This letter body will be inserted into an email that already opens with
+its own "Dear {name}," greeting to the claimant — do NOT include a
+greeting or salutation of any kind. Start directly with the substance
+of the letter.
 
 Respond with ONLY the letter text, no preamble, no JSON, no markdown
 formatting.
