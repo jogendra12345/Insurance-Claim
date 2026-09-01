@@ -9,6 +9,7 @@ Build order for ClaimFlow AI v1. Check items off as they're implemented.
 - [x] **5. Frontend** — claim submission form + claimant status page (React/Next.js)
 - [ ] **6. Human review** — Tasklist candidate groups configured, triage → role review → sign-off walked through manually. Blocked on the open decision below (each candidate group can only be verified as `demo` today, not as a real distinct user).
 - [ ] **7. End-to-end test** — see checklist below.
+- [ ] **8. Future work (post-v1)** — see `BUILD-PLAN.md` "Phase 2: Future work from SPEC.md §14" (items #21–32, target 11-Sep). Starts only once steps 1–7 above are complete. Auth + role-based access + in-app task page (#21) is first in that phase.
 
 ## Step 7 checklist (per SPEC.md §15's definition of done)
 

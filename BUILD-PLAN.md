@@ -57,6 +57,29 @@ This expands the feature table you provided into a build-ready sequence, cross-c
 
 ---
 
+## Phase 2: Future work from SPEC.md §14 (target: 11-Sep)
+
+**Scope-risk flag:** this is 10 calendar days from today (1-Sep) to also cover, on top of the v1 sequence above, which already runs through 11-Sep on its own. §14 lists roughly twelve future-work items ranging from small (PDF denial letters) to genuinely large, cross-cutting builds (auth, cloud hosting). Realistically not all twelve land by 11-Sep alongside a still-unfinished v1. Recommended priority order below — **#21 (auth + in-app task page) first**, since it's the most fully designed item in §14 (SPEC.md §14, the auth bullet, already has an implementation shape) and it's the item you called out specifically. Items #29–32 are flagged as very unlikely to fit in this window and should probably slip past 11-Sep rather than be rushed.
+
+| # | Feature | Built with | Depends on | Risk |
+|---|---|---|---|---|
+| 21 | **Auth + role-based access + in-app task page** | `users` table (`email`, `password_hash`, `role`), `backend/api` session/auth middleware, role→candidate-group map, `GET /api/tasks`, `POST /api/tasks/:key/claim`, `POST /api/tasks/:key/complete`, new `frontend/portal` `/tasks` route | v1 complete (#1–20), Camunda lightweight stack | Medium — well-specified in SPEC.md §14, but touches both backend and frontend and needs the open "does lightweight Camunda accept an arbitrary `assignee`" question resolved (§14) |
+| 22 | Additional insurance type (vehicle/property/travel) | `/add-insurance-type` skill — config module + DMN skeleton | #5–8 built | Low — scaffold-only per §2/§14, not wired into the live process |
+| 23 | Cross-role escalation (investigator → legal mid-review) | BPMN process change: new gateway/loop back into role routing | #11 (role reviews) | Medium — requires re-modeling part of the BPMN process, not additive |
+| 24 | `moreInfo` loop back to intake | Message event + resubmission API endpoint | #12 (decision routing), #4 (process kickoff) | Medium — new BPMN message event + new API surface |
+| 25 | Error boundary events on service tasks | BPMN process change (error boundary events per job type) | All job-worker service tasks (#5–17) | Medium — retrofits every existing service task |
+| 26 | ~~Real settlement provider~~ *(dropped — see note below)* | — | — | — |
+| 27 | PDF generation for denial letters | PDF library (e.g. `pdf-lib`) added to `draft-denial-letter` worker | #15 (denial letter drafting) | Low |
+| 28 | Adding/editing/removing `policy_dependents` on an existing policy | New `backend/api` endpoints + `policies`-adjacent table writes | DB (done) | Low |
+| 29 | Customer-facing status page pulling live process state | Frontend page reading Camunda process state (via #18's status endpoint or a new Operate-backed one) | #18, #21 (needs auth to scope claimant access) | Medium |
+| 30 | Per-carrier tenant isolation | Auth scoping by `carrier_id`, per-carrier DMN thresholds/branding | #21 (auth) | High — cross-cutting, touches auth, DMN, and every query |
+| 31 | Deploy to Camunda 8 SaaS | Infra migration off local Docker Compose | Stable local process definitions | High — infra/ops work, not app code |
+| 32 | Cloud hosting for the rest of the stack | Presigned MinIO/S3 URLs, real domains for `NEXT_PUBLIC_API_BASE_URL`/`CORS_ORIGIN`, managed Postgres/object storage, secrets manager | All of the above | High — infra/ops work, largest item in §14 |
+
+**Note on #26:** this is a demo app built to try out Claude Code + Camunda together, not a production claims system — no real payment integration is needed now or in this phase. `SettlementProvider` stays mocked (per `CLAUDE.md`'s existing rule) indefinitely; #26 is dropped from this plan rather than deferred.
+
+---
+
 ## Detailed instructions per feature
 
 ### 1. Claim submission form
