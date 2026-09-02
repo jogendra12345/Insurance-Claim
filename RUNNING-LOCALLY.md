@@ -53,8 +53,21 @@ cd backend/api
 npm run dev
 ```
 
-Runs on http://localhost:4000. Requires `backend/api/.env` to exist (copy from
-`backend/api/.env.example` if it's missing).
+Runs on http://localhost:4000. Requires `backend/api/.env` to exist — create
+it with:
+
+```
+DATABASE_URL=postgresql://claimflow:claimflow@localhost:5432/claimflow
+PORT=4000
+CORS_ORIGIN=http://localhost:3000
+MINIO_ENDPOINT=localhost
+MINIO_PORT=9000
+MINIO_ROOT_USER=claimflow
+MINIO_ROOT_PASSWORD=claimflow123
+MINIO_BUCKET=claim-documents
+ZEEBE_GRPC_ADDRESS=grpc://localhost:26500
+CAMUNDA_AUTH_STRATEGY=NONE
+```
 
 **Watch out:** if a previous `npm run dev` for this package is still holding
 port 4000 (background dev servers can outlive a `Ctrl+C` or a killed
@@ -74,8 +87,12 @@ cd frontend/portal
 npm run dev
 ```
 
-Runs on http://localhost:3000. Requires `frontend/portal/.env.local` to exist
-(copy from `frontend/portal/.env.local.example` if it's missing).
+Runs on http://localhost:3000. Requires `frontend/portal/.env.local` to
+exist — create it with:
+
+```
+NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+```
 
 **Watch out:** if port 3000 is already taken by a stale leftover `next dev`
 process, Next.js silently falls back to 3001, which breaks CORS since the
@@ -138,13 +155,30 @@ cd backend/workers
 npm run dev
 ```
 
-Starts all 9 workers (`validate-claim`, `extract-evidence`,
-`detect-fraud-indicators`, `score-risk`, and the 5 `capture-*` workers) —
-they hot-reload on file changes via `tsx watch`. Requires
-`backend/workers/.env` (copy from `.env.example`) with a valid
-`GEMINI_API_KEY`, and Camunda (step 6) already up. `POST /api/claims`
-(backend API, step 4) starts the process instance; nothing progresses past
-`validate-claim` without this running.
+Starts all 13 workers (`validate-claim`, `extract-evidence`,
+`detect-fraud-indicators`, `score-risk`, `trigger-settlement`,
+`draft-denial-letter`, `notify-claimant`, `close-case`, and the 5
+`capture-*` workers) — they hot-reload on file changes via `tsx watch`.
+Requires `backend/workers/.env` to exist — create it with:
+
+```
+DATABASE_URL=postgresql://claimflow:claimflow@localhost:5432/claimflow
+ZEEBE_GRPC_ADDRESS=grpc://localhost:26500
+CAMUNDA_AUTH_STRATEGY=NONE
+GEMINI_API_KEY=<your key>
+GEMINI_MODEL=gemini-3.6-flash
+FRONTEND_URL=http://localhost:3000
+
+# Optional — notify-claimant falls back to a console-log mock if neither is
+# set. Gmail is preferred over Resend when both are set (see PREREQUISITES.md).
+GMAIL_USER=
+GMAIL_APP_PASSWORD=
+RESEND_API_KEY=
+```
+
+and Camunda (step 6) already up. `POST /api/claims` (backend API, step 4)
+starts the process instance; nothing progresses past `validate-claim`
+without this running.
 
 ## Verifying it's up
 
@@ -155,7 +189,7 @@ they hot-reload on file changes via `tsx watch`. Requires
 | Postgres | localhost:5432 | `docker exec claimflow-postgres pg_isready -U claimflow -d claimflow` |
 | MinIO | http://localhost:9001 | console login `claimflow` / `claimflow123` |
 | Camunda | http://localhost:8080/v2/topology | `"health":"healthy"` on the partition |
-| Workers | terminal output | `<job-type> worker started, polling for jobs` for all 9 |
+| Workers | terminal output | `<job-type> worker started, polling for jobs` for all 13 |
 
 ## Shutting down
 

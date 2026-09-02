@@ -10,8 +10,13 @@ camunda-docker/driver-lib/*
 camunda-docker/.env
 camunda-docker/connector-secrets.txt
 
-# App Postgres env — see .env.example for the template
+# App Postgres env
 .env
+
+# .env.example templates are no longer tracked — required vars are listed
+# directly in RUNNING-LOCALLY.md instead.
+.env.example
+.env.local.example
 
 # OS/editor cruft
 .DS_Store

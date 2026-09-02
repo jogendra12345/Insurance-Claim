@@ -2,7 +2,7 @@ import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
-import { mockNotificationProvider, resendNotificationProvider } from "../shared/notification-provider";
+import { gmailNotificationProvider, mockNotificationProvider, resendNotificationProvider } from "../shared/notification-provider";
 
 // SPEC.md §12 / .claude/specs/worker/notify-claimant.md — notify-claimant.
 // Runs on both the approved path (after trigger-settlement) and the denied
@@ -22,12 +22,22 @@ interface NotifyClaimantOutput {
 
 const JOB_TYPE = "notify-claimant";
 
-// Picked once at worker startup: falls back to the mock (console.log) when
-// RESEND_API_KEY isn't set, so a dev machine without the key still runs
-// instead of failing every claim into an Operate incident.
-const provider = process.env.RESEND_API_KEY ? resendNotificationProvider : mockNotificationProvider;
+// Picked once at worker startup, preferring Gmail SMTP over Resend over the
+// mock (console.log): Gmail delivers to any claimant address today (relays
+// through a real mailbox via an App Password), whereas Resend's free-tier
+// sandbox only delivers to the account's own signup address until a domain
+// is verified (see PREREQUISITES.md). Falls back to the mock when neither
+// is configured, so a dev machine without either still runs instead of
+// failing every claim into an Operate incident.
+const provider = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
+  ? gmailNotificationProvider
+  : process.env.RESEND_API_KEY
+    ? resendNotificationProvider
+    : mockNotificationProvider;
+const providerName =
+  provider === gmailNotificationProvider ? "gmail" : provider === resendNotificationProvider ? "resend" : "mock";
 if (provider === mockNotificationProvider) {
-  console.log(`${JOB_TYPE}: RESEND_API_KEY not set — using mockNotificationProvider (no real email will send)`);
+  console.log(`${JOB_TYPE}: no GMAIL_USER/GMAIL_APP_PASSWORD or RESEND_API_KEY set — using mockNotificationProvider (no real email will send)`);
 }
 
 zeebeClient.createWorker<NotifyClaimantVariables, Record<string, unknown>, NotifyClaimantOutput>({
@@ -79,7 +89,7 @@ zeebeClient.createWorker<NotifyClaimantVariables, Record<string, unknown>, Notif
         decision,
         notificationSent,
         includedDenialLetter: decision === "deny" && claim.denial_letter_text !== null,
-        provider: provider === resendNotificationProvider ? "resend" : "mock",
+        provider: providerName,
       },
     });
 

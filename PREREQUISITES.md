@@ -46,11 +46,16 @@ docker compose down -v    # stop and wipe data
 ## Running the local app Postgres
 
 ```bash
-cp .env.example .env    # first time only — fill in real values if you change the defaults
 docker compose up -d      # start (repo root, not camunda-docker/)
 docker compose ps         # check status
 docker compose down       # stop (keeps data)
 ```
+
+No `.env` file is required here — `docker-compose.yaml` falls back to dev
+defaults (`POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD` all `claimflow`,
+`MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` `claimflow`/`claimflow123`, etc. — see
+the `${VAR:-default}` entries in that file). Add a root `.env` only if you
+want to override one of those defaults.
 
 Migrations live under `backend/db/migrations/`; apply them with `cd backend && npm run migrate` (see `.claude/specs/db/database-setup.md` and `SPEC.md` §8 for schema and tooling details).
 
@@ -60,10 +65,10 @@ MinIO runs from the same root `docker-compose.yaml` as Postgres — `docker comp
 
 - Console: http://localhost:9001
 - S3 API endpoint: http://localhost:9000
-- Login: whatever `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` are set to in `.env` (defaults in `.env.example`)
+- Login: whatever `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` are set to in `.env` (defaults to `claimflow`/`claimflow123`, set in `docker-compose.yaml`)
 
 ## Still needed (not yet decided/installed)
 
 - ~~Gemini API key~~ — provided 2026-08-25, stored in `backend/workers/.env` (`GEMINI_API_KEY`, gitignored) — for the AI-assisted steps (document extraction, risk scoring, denial letter drafting)
-- ~~Notification service~~ — decided 2026-08-31: Resend, key stored in `backend/workers/.env` (`RESEND_API_KEY`, gitignored). Free-tier sandbox sender (`onboarding@resend.dev`, no domain verification) only delivers to the address the Resend account was signed up with — real delivery to arbitrary claimant addresses needs a verified domain, still open.
+- ~~Notification service~~ — decided 2026-08-31: Resend, key stored in `backend/workers/.env` (`RESEND_API_KEY`, gitignored). Free-tier sandbox sender (`onboarding@resend.dev`, no domain verification) only delivers to the address the Resend account was signed up with — real delivery to arbitrary claimant addresses needs a verified domain, still open. Added 2026-09-02: Gmail SMTP via Nodemailer as a second implementation (`GMAIL_USER`/`GMAIL_APP_PASSWORD` in `backend/workers/.env`, gitignored) — `notify-claimant` prefers it over Resend when set, since it delivers to any claimant address today (relays through a real Gmail mailbox via an App Password, no domain verification needed). Lower sending limits (~500/day) and mail arrives from a personal Gmail address, so Resend + a verified domain remains the better choice long-term.
 - **Payment gateway** credentials — e.g. Stripe or ACH, for the payout step

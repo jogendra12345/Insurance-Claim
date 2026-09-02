@@ -1,9 +1,10 @@
 // SPEC.md §12 / CLAUDE.md originally called for a mock-only implementation
-// in v1. Per explicit product direction this now has a real email-sending
-// implementation (Resend) alongside the mock — selected at runtime by
-// notify-claimant based on whether RESEND_API_KEY is set, so a dev machine
-// without the key still runs (falls back to the mock) instead of failing
-// every denied/approved claim into an Operate incident.
+// in v1. Per explicit product direction this now has real email-sending
+// implementations alongside the mock — selected at runtime by
+// notify-claimant based on which provider's env vars are set, so a dev
+// machine with neither still runs (falls back to the mock) instead of
+// failing every denied/approved claim into an Operate incident.
+import nodemailer from "nodemailer";
 export interface NotificationContext {
   claimId: string;
   claimantName: string;
@@ -88,15 +89,20 @@ function buildEmail(context: NotificationContext): { subject: string; html: stri
     )
     .join("");
 
+  // Kept deliberately plain — a heavily-styled "marketing template" look
+  // (colored pill banners, translucent backgrounds) is itself a spam-filter
+  // signal, on top of this already relaying through a personal Gmail
+  // account rather than dedicated transactional infra. A closing
+  // organization line reads closer to a legitimate transactional email.
   const html = `
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#111827;">
   <p>Dear ${escapeHtml(context.claimantName)},</p>
-  <p style="display:inline-block;padding:6px 14px;border-radius:9999px;background:${statusColor}1a;color:${statusColor};font-weight:bold;">${statusLabel}</p>
+  <p style="color:${statusColor};font-weight:bold;">${statusLabel}</p>
   <p>${bodyParagraph}</p>
   <table style="border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;">${detailRowsHtml}</table>
   <p><a href="${claimUrl}" style="color:#2563eb;">View your claim</a></p>
   <p style="color:#6b7280;font-size:13px;">If you have any questions, please contact us and reference your claim ID above.</p>
-  <p>Sincerely,<br/>Claims Department</p>
+  <p>Sincerely,<br/>Claims Department<br/>ClaimFlow AI Insurance Services</p>
 </div>`.trim();
 
   const textDetailLines = detailRows.map(([label, value]) => `${label}: ${value}`).join("\n");
@@ -142,6 +148,51 @@ export const resendNotificationProvider: NotificationProvider = {
       const body = await res.text().catch(() => "");
       throw new Error(`Resend API error ${res.status}: ${body}`);
     }
+
+    return { notificationSent: true };
+  },
+};
+
+// Gmail SMTP via Nodemailer — sends to any recipient with no domain
+// verification, unlike resendNotificationProvider above (whose free-tier
+// sandbox only delivers to the Resend account's own signup address). Relays
+// through a real Gmail mailbox using an App Password (myaccount.google.com/apppasswords,
+// requires 2-Step Verification on the account), not the account password
+// itself. Lower sending limits than a dedicated email API (~500/day) and
+// mail arrives "from" a personal Gmail address, but unblocks real delivery
+// to arbitrary claimant addresses immediately — no DNS/domain ownership
+// needed, which the Resend path does require (see PREREQUISITES.md).
+let gmailTransporter: ReturnType<typeof nodemailer.createTransport> | null = null;
+function getGmailTransporter() {
+  if (!gmailTransporter) {
+    gmailTransporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+  }
+  return gmailTransporter;
+}
+
+export const gmailNotificationProvider: NotificationProvider = {
+  async send(context) {
+    const user = process.env.GMAIL_USER;
+    if (!user || !process.env.GMAIL_APP_PASSWORD) {
+      throw new Error("GMAIL_USER / GMAIL_APP_PASSWORD is not set (see backend/workers/.env.example)");
+    }
+
+    const { subject, html, text } = buildEmail(context);
+
+    await getGmailTransporter().sendMail({
+      from: `"ClaimFlow AI" <${user}>`,
+      replyTo: user,
+      to: context.claimantEmail,
+      subject,
+      html,
+      text,
+    });
 
     return { notificationSent: true };
   },
