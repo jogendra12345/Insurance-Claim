@@ -4,7 +4,7 @@ import multer from "multer";
 import { pool } from "../db";
 import { serializeClaim, serializeClaimDocument, serializeFraudIndicator } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
-import { CLAIM_CASE_PROCESS_ID, zeebeClient } from "../zeebe";
+import { CLAIM_CASE_PROCESS_ID, camundaRestClient, zeebeClient } from "../zeebe";
 
 export const claimsRouter = Router();
 
@@ -350,6 +350,40 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
          VALUES ($1, 'system', 'backend/api', 'process-started', $2)`,
         [claim.id, JSON.stringify({ processInstanceKey })]
       );
+
+      // Idempotency guard: createProcessInstance is not idempotent, and the
+      // Zeebe gRPC client auto-retries it on transient broker errors. If an
+      // earlier attempt's response timed out client-side but had already
+      // reached the broker, a later retry starts a second process instance
+      // for the same claimId — both then run concurrently against the same
+      // claim. claimId is unique per submission (freshly generated above),
+      // so any other instance carrying it is definitively a duplicate from
+      // this retry race, never a legitimate second process. Detect and
+      // cancel it here rather than leaving two instances racing each other.
+      const claimIdVariables = await camundaRestClient.searchVariables({
+        filter: { name: "claimId", value: JSON.stringify(claim.id) },
+      });
+      const duplicateProcessInstanceKeys = [
+        ...new Set(
+          claimIdVariables.items
+            .map((variable: { processInstanceKey: string }) => variable.processInstanceKey)
+            .filter((key: string) => key !== processInstanceKey)
+        ),
+      ];
+      for (const duplicateKey of duplicateProcessInstanceKeys) {
+        try {
+          await camundaRestClient.cancelProcessInstance({ processInstanceKey: duplicateKey });
+          await pool.query(
+            `INSERT INTO audit_log (claim_id, actor_type, actor_id, action, detail)
+             VALUES ($1, 'system', 'backend/api', 'duplicate-process-cancelled', $2)`,
+            [claim.id, JSON.stringify({ cancelledProcessInstanceKey: duplicateKey, keptProcessInstanceKey: processInstanceKey })]
+          );
+        } catch (cancelErr) {
+          // Already completed/cancelled, or a genuine race with another
+          // cleanup — not fatal either way, the kept instance is unaffected.
+          console.error(`Failed to cancel duplicate process instance ${duplicateKey} for claim ${claim.id}:`, cancelErr);
+        }
+      }
     } catch (zeebeErr) {
       console.error(`Starting the process instance for claim ${claim.id} failed:`, zeebeErr);
     }
