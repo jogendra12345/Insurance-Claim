@@ -12,7 +12,7 @@
       "showOutline": true,
       "components": [
         {
-          "text": "**Policy:** {{policyNumber}} — {{policyholderName}}\n**Coverage amount:** {{coverageAmount}}\n\n**Claimant:** {{claimantName}} ({{claimantEmail}})\n**Claim type:** {{claimType}}\n**Incident date:** {{incidentDate}}\n**What happened:** {{incidentDescription}}\n\n**Diagnosis code:** {{diagnosisCode}} · **Procedure code:** {{procedureCode}}\n**Service date(s):** {{serviceDateFrom}} to {{serviceDateTo}}\n**Provider:** {{providerFacilityName}} (NPI {{providerNpi}})\n\n**Requested claim amount:** {{claimAmount}}\n**Total billed amount:** {{totalBilledAmount}}\n**Coordination of benefits:** {{coordinationOfBenefits}}",
+          "text": "**Policy:** {{policyNumber}} — {{policyholderName}}\n**Coverage amount:** {{coverageAmount}}\n\n**Claimant:** {{claimantName}} ({{claimantEmail}})\n**Claim type:** {{claimType}}\n**Incident date:** {{incidentDate}}\n**What happened:** {{incidentDescription}}\n\n**Diagnosis code:** {{diagnosisCode}}\n**Procedure code:** {{procedureCode}}\n**Service date(s):** {{serviceDateFrom}} to {{serviceDateTo}}\n**Provider:** {{providerFacilityName}} (NPI {{providerNpi}})\n\n**Requested claim amount:** {{claimAmount}}\n**Total billed amount:** {{totalBilledAmount}}\n**Coordination of benefits:** {{coordinationOfBenefits}}",
           "type": "text",
           "id": "PolicyClaimDetailsText"
         }
