@@ -199,6 +199,23 @@ export async function claimTask(taskKey: string): Promise<void> {
   }
 }
 
+// GET /api/tasks/:key — single task's detail, for the /tasks/:key summary page.
+export async function fetchTask(taskKey: string): Promise<Task> {
+  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskKey}`, { cache: "no-store", ...withCredentials });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Couldn't load this task (${res.status}).`));
+  }
+  return res.json();
+}
+
+// POST /api/tasks/:key/unclaim — releases the task back to the queue.
+export async function unclaimTask(taskKey: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskKey}/unclaim`, { method: "POST", ...withCredentials });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Couldn't unclaim this task (${res.status}).`));
+  }
+}
+
 // POST /api/tasks/:key/complete — variables are the same field sets the
 // Camunda-rendered forms (TriageReviewForm, ReviewDecisionForm,
 // ValidationExceptionReviewForm) already produce.
