@@ -5,8 +5,11 @@ import { useAuth } from "@/lib/auth-context";
 import { STAFF_ROLES } from "@/lib/types";
 import { ThemeToggle } from "./ThemeToggle";
 
-const TABS = [
-  { href: "/policies", label: "Policies", match: (path: string) => path.startsWith("/policies") },
+// A claimant only ever has the one policy summary behind this tab
+// (app/policies/page.tsx redirects them straight to it), so the tab reads
+// "Policy" for them; staff still manage a whole list, so "Policies".
+const TABS = (policyLabel: string) => [
+  { href: "/policies", label: policyLabel, match: (path: string) => path.startsWith("/policies") },
   { href: "/", label: "Claims", match: (path: string) => path === "/" || path.startsWith("/claims") },
 ];
 
@@ -17,7 +20,9 @@ export function TopBar() {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
 
-  const tabs = user && STAFF_ROLES.includes(user.role) ? [...TABS, STAFF_TAB] : TABS;
+  const isStaff = !!user && STAFF_ROLES.includes(user.role);
+  const isClaimant = user?.role === "claimant";
+  const tabs = isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
 
   return (
     <header
