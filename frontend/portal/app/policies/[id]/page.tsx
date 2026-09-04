@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ApiError, fetchActiveClaimsByPolicy, fetchPolicy } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import type { Claim, DependentRelationship, Policy } from "@/lib/types";
 import { STATUS_TONE } from "@/lib/policy-status";
 import { relativeTime, absoluteDate } from "@/lib/time";
@@ -37,6 +38,7 @@ function currency(n: number): string {
 export default function PolicyDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [claims, setClaims] = useState<Claim[]>([]);
   const [state, setState] = useState<LoadState>("loading");
@@ -68,9 +70,11 @@ export default function PolicyDetailPage() {
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
-      <a href="/policies" className="transition" style={{ fontSize: "0.85rem", color: "var(--text-muted)", textDecoration: "none" }}>
-        ← Back to policies
-      </a>
+      {user?.role !== "claimant" && (
+        <a href="/policies" className="transition" style={{ fontSize: "0.85rem", color: "var(--text-muted)", textDecoration: "none" }}>
+          ← Back to policies
+        </a>
+      )}
 
       {state === "loading" && <div className="skeleton" style={{ marginTop: "1.5rem", height: "280px" }} aria-busy="true" />}
 
