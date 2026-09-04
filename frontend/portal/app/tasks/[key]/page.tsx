@@ -2,15 +2,32 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ApiError, claimTask, completeTask, fetchTask, unclaimTask } from "@/lib/api";
+import { ApiError, claimTask, completeTask, fetchClaim, fetchTask, unclaimTask } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { STAFF_ROLES } from "@/lib/types";
-import type { Task } from "@/lib/types";
+import type { Claim, Task } from "@/lib/types";
 import { StatusBadge } from "@/components/StatusBadge";
 
 type LoadState = "loading" | "loaded" | "error";
 
 const currency = (n: number) => n.toLocaleString(undefined, { style: "currency", currency: "USD" });
+
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"];
+
+function fileNameFromUrl(url: string): string {
+  const decoded = decodeURIComponent(url.split("/").pop() ?? url);
+  // Uploaded object keys are prefixed "<timestamp>-<originalname>" — strip that for display.
+  return decoded.replace(/^\d+-/, "");
+}
+
+function isImage(url: string): boolean {
+  const lower = url.toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+function isPdf(url: string): boolean {
+  return url.toLowerCase().endsWith(".pdf");
+}
 
 // Same field sets as process/forms/{triage-review,review-decision,
 // validation-exception-review}.form — completed here through the
@@ -23,6 +40,7 @@ export default function TaskDetailPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [task, setTask] = useState<Task | null>(null);
+  const [documents, setDocuments] = useState<Claim["documents"]>(undefined);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,6 +53,15 @@ export default function TaskDetailPage() {
       .then((data) => {
         setTask(data);
         setState("loaded");
+        // The task list/detail endpoints join `claims` for display context
+        // but don't carry documents — fetch those separately from the full
+        // claim detail (GET /api/claims/:id), same source the claimant-
+        // facing claim page uses.
+        if (data.claim) {
+          fetchClaim(data.claim.id)
+            .then((full) => setDocuments(full.documents))
+            .catch(() => setDocuments(undefined));
+        }
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : "Couldn't load this task.");
@@ -51,12 +78,19 @@ export default function TaskDetailPage() {
     load();
   }, [authLoading, user, router, load]);
 
+  // Update task state directly from the action's own success, rather than
+  // re-fetching GET /api/tasks/:key right after — Camunda's Tasklist search/
+  // read model can lag a beat behind a just-completed assign/unassign
+  // command, so an immediate re-fetch can show the pre-action state even
+  // though the write already succeeded (confirmed against Camunda directly
+  // during testing: the command returns 204, but the very next search can
+  // still show the old assignee for a moment).
   async function handleClaim() {
     setBusy(true);
     setActionError(null);
     try {
       await claimTask(params.key);
-      load();
+      setTask((t) => (t ? { ...t, assignee: user!.email } : t));
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Couldn't claim this task.");
     } finally {
@@ -69,7 +103,7 @@ export default function TaskDetailPage() {
     setActionError(null);
     try {
       await unclaimTask(params.key);
-      load();
+      setTask((t) => (t ? { ...t, assignee: null } : t));
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Couldn't unclaim this task.");
     } finally {
@@ -128,6 +162,53 @@ export default function TaskDetailPage() {
               <DetailRow label="Risk score" value={task.claim.riskScore !== null ? `${task.claim.riskScore} / 100` : "—"} />
               <DetailRow label="Fraud indicators" value={String(task.claim.fraudIndicatorCount)} />
               <DetailRow label="AI-suggested role" value={task.claim.assignedRole ?? "—"} />
+            </Section>
+          )}
+
+          {task.claim && (
+            <Section title={`Documents (${documents?.length ?? 0})`}>
+              {!documents || documents.length === 0 ? (
+                <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-muted)" }}>No documents attached.</p>
+              ) : (
+                <div className="stagger-list" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        padding: "0.75rem",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: "0.85rem", fontWeight: 600, wordBreak: "break-all" }}
+                      >
+                        {fileNameFromUrl(doc.fileUrl)}
+                      </a>
+                      {isImage(doc.fileUrl) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={doc.fileUrl}
+                          alt={fileNameFromUrl(doc.fileUrl)}
+                          style={{ maxWidth: "100%", maxHeight: "320px", borderRadius: "var(--radius-sm)", objectFit: "contain" }}
+                        />
+                      ) : isPdf(doc.fileUrl) ? (
+                        <iframe
+                          src={doc.fileUrl}
+                          title={fileNameFromUrl(doc.fileUrl)}
+                          style={{ width: "100%", height: "320px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}
+                        />
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
             </Section>
           )}
 
