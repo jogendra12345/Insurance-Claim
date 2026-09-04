@@ -2,7 +2,14 @@
 
 # generic/auth-role-based-access
 
-**Status:** Draft
+**Status:** Locked
+
+> Locked 2026-09-04. Open Questions 1–4 are resolved below (folded into Design); Open Question 5 (Camunda `assignee` passthrough) stays open as a non-blocking follow-up since it doesn't affect access control either way.
+>
+> - **Session storage (was Q1):** signed cookie, not a Postgres `sessions` table — simplest option for an internal test app (`[[project_demo_app_no_real_payments]]`); no revocation requirement was raised to justify the extra table. If logout-everywhere/forced-revocation becomes a real need later, revisit with a `token_version` column on `users`.
+> - **Staff account provisioning (was Q2):** admin user-management UI is **cut from this spec's build scope**. The handful of staff test accounts needed to unblock `ROADMAP.md` Step 6 are seeded directly (SQL or the `[[seed-data]]` skill) — faster than building a UI for a one-time need. "In scope" below is amended accordingly; a self-service admin page is deferred to a future spec if staff turnover ever makes seeding impractical.
+> - **Password hashing (was Q3):** bcrypt (via `bcryptjs` or equivalent), matching `backend/api`'s existing Node/TS stack with no new native-binary dependency.
+> - **Staff read-scope (was Q4):** confirmed as designed — no role restriction on `GET /api/claims` beyond claimant-scoping; every staff role sees all claims, same as `admin`. Revisit only if a concrete need for role-scoped visibility (not just task-action scoping) comes up.
 
 ## Purpose
 
@@ -11,7 +18,7 @@ Give ClaimFlow AI real authentication and role-based access control, replacing t
 ## Scope
 
 **In scope:**
-- A `users` table and self-registration for claimants, gated by a lightweight policy-match check (policy number + email), and admin-only provisioning for every staff role.
+- A `users` table and self-registration for claimants, gated by a lightweight policy-match check (policy number + email). Staff role accounts are provisioned by seeding rows directly (SQL / `[[seed-data]]`), not via an admin UI — see lock note.
 - Session-based login/logout for the frontend portal.
 - Scoping `GET /api/claims`/`/api/policies` (and any claim-detail endpoint) by the authenticated caller's role.
 - An explicit role → BPMN candidate-group map.
@@ -36,11 +43,11 @@ Give ClaimFlow AI real authentication and role-based access control, replacing t
 |---|---|---|---|---|
 | `id` | uuid | no | `gen_random_uuid()` | primary key |
 | `email` | text | no | — | unique, case-insensitive (citext or `lower(email)` unique index) |
-| `password_hash` | text | no | — | bcrypt/argon2, never plaintext |
+| `password_hash` | text | no | — | bcrypt, never plaintext |
 | `role` | text | no | — | `claimant \| admin \| triage-team \| adjuster \| investigator \| legal-reviewer \| supervisor` (check constraint or enum) |
 | `created_at` | timestamptz | no | `now()` | |
 
-Claimants self-register via a signup form; the request body accepts no `role` field — the API hardcodes `role = 'claimant'` for the public signup endpoint. Signup additionally requires a `policyNumber` field (see "Claimant signup verification" below) — the account isn't created unless it passes that check. Every staff role (`admin`, `triage-team`, `adjuster`, `investigator`, `legal-reviewer`, `supervisor`) is created only by an existing `admin`, via an admin-only user-management endpoint/page (in scope for this spec, minimal — create + list + deactivate, no self-service staff signup ever). This mirrors the exact wording already locked in `SPEC.md` §14: "letting someone pick 'I'm a supervisor' at signup would let anyone grant themselves settlement-approval authority."
+Claimants self-register via a signup form; the request body accepts no `role` field — the API hardcodes `role = 'claimant'` for the public signup endpoint. Signup additionally requires a `policyNumber` field (see "Claimant signup verification" below) — the account isn't created unless it passes that check. Every staff role (`admin`, `triage-team`, `adjuster`, `investigator`, `legal-reviewer`, `supervisor`) is seeded directly into `users` (SQL or `[[seed-data]]`) rather than self-registered or admin-UI-provisioned — see lock note. No endpoint accepts a client-supplied `role`. This mirrors the exact wording already locked in `SPEC.md` §14: "letting someone pick 'I'm a supervisor' at signup would let anyone grant themselves settlement-approval authority."
 
 No `carrier_id` on `users` in this pass — see Out of scope above.
 
@@ -56,7 +63,7 @@ A claimant tied to more than one policy (e.g. a dependent on one policy who is a
 
 ### Session mechanism
 
-Server-side session, not JWT: `backend/api` sets an httpOnly, `SameSite=Lax` session cookie on login; session state (user id, role) lives server-side (in Postgres, a `sessions` table keyed by opaque token — matches the rest of the stack's Postgres-first pattern rather than adding Redis for v1) or, alternatively, a signed cookie carrying `{userId, role}` if session-table overhead isn't wanted for a test app. **Open question — see below**; this spec assumes the Postgres `sessions` table unless the review flags it as overkill for an internal test app (`[[project_demo_app_no_real_payments]]`).
+Server-side-verified session, not a bare JWT: `backend/api` sets an httpOnly, `SameSite=Lax` cookie on login, signed server-side and carrying `{userId, role}` — no separate `sessions` table (decided at lock; see lock note). Logout clears the cookie client-side; there is no server-side revocation list in v1.
 
 `POST /api/auth/signup` (claimant only, policy-matched per above), `POST /api/auth/login`, `POST /api/auth/logout`. No email-ownership verification, no password reset in v1 (Open Questions).
 
@@ -99,11 +106,7 @@ Minimal: a `/login` page and a `/signup` page (claimant self-registration only) 
 
 ## Open Questions
 
-1. **Session storage: Postgres `sessions` table vs. signed cookie?** A `sessions` table is consistent with this stack's Postgres-first pattern and makes server-side revocation (logout-everywhere, admin-deactivates-user) trivial; a signed cookie needs no new table but makes revocation harder (would need a token-versioning column on `users` instead). Given this is an internal test app (`[[project_demo_app_no_real_payments]]`) — recommend the simpler signed-cookie approach unless revocation is a real requirement.
-2. **Does the admin user-management UI/endpoint belong in this spec's build, or is a raw SQL insert acceptable for provisioning the handful of staff test accounts needed to unblock `ROADMAP.md` Step 6?** A minimal admin page is in scope above, but for an internal test app with a handful of known reviewers, seeding `users` rows directly (or via the existing `[[seed-data]]` skill) may be faster than building a UI for it. Recommend deciding this at lock time based on how many staff accounts are actually needed.
-3. **Password policy / hashing library choice** — bcrypt (simple, widely used) vs. argon2 (stronger, more setup) — no strong requirement either way for a test app; recommend bcrypt via `bcryptjs` or similar to match `backend/api`'s existing Node/TS stack with no new native-binary dependency.
-4. **Does staff read-scope on `GET /api/claims` need role restriction beyond claimant-scoping** (e.g. should an `adjuster` only see claims routed to adjusters)? Left unscoped in Design above; flag if this needs tightening before lock.
-5. **Camunda `assignee` passthrough** (real app-user email vs. always `demo` in Camunda's own audit trail) — carried over verbatim from `SPEC.md` §14 as still open; doesn't block this spec's core access-control goal either way.
+1. **Camunda `assignee` passthrough** (real app-user email vs. always `demo` in Camunda's own audit trail) — carried over verbatim from `SPEC.md` §14 as still open; doesn't block this spec's core access-control goal either way, and can be picked up independently whenever it's convenient.
 
 ## Follow-up dependencies
 
