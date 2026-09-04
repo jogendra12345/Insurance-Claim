@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import multer from "multer";
+import { requireAuth } from "../auth";
 import { pool } from "../db";
 import { serializeClaim, serializeClaimDocument, serializeFraudIndicator } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
@@ -56,16 +57,30 @@ const CLAIM_SELECT_WITH_PROVIDER = `
   LEFT JOIN providers p ON p.id = claims.provider_id
 `;
 
-claimsRouter.get("/", async (req, res) => {
+// .claude/specs/generic/auth-role-based-access.md "Scoping existing
+// endpoints" — claimant sees only claims.claimant_email = their own email
+// (case-insensitive, same match validate-claim uses); every staff role
+// (including admin) is unscoped.
+claimsRouter.get("/", requireAuth, async (req, res) => {
   const policyNumber = req.query.policyNumber;
+  const scopeToOwnClaims = req.user!.role === "claimant";
 
   try {
-    const result =
-      typeof policyNumber === "string" && policyNumber.trim()
-        ? await pool.query(`${CLAIM_SELECT_WITH_PROVIDER} WHERE claims.policy_number = $1 ORDER BY claims.created_at DESC`, [
-            policyNumber.trim(),
-          ])
-        : await pool.query(`${CLAIM_SELECT_WITH_PROVIDER} ORDER BY claims.created_at DESC`);
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (typeof policyNumber === "string" && policyNumber.trim()) {
+      params.push(policyNumber.trim());
+      conditions.push(`claims.policy_number = $${params.length}`);
+    }
+    if (scopeToOwnClaims) {
+      params.push(req.user!.email);
+      conditions.push(`lower(claims.claimant_email) = lower($${params.length})`);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const result = await pool.query(
+      `${CLAIM_SELECT_WITH_PROVIDER} ${where} ORDER BY claims.created_at DESC`,
+      params
+    );
     res.json(result.rows.map(serializeClaim));
   } catch (err) {
     console.error("GET /api/claims failed:", err);
@@ -75,10 +90,16 @@ claimsRouter.get("/", async (req, res) => {
 
 // GET /api/claims/:id — SPEC.md §7's single-claim status endpoint. Includes
 // this claim's documents so the claim detail page can offer a view toggle.
-claimsRouter.get("/:id", async (req, res) => {
+claimsRouter.get("/:id", requireAuth, async (req, res) => {
   try {
     const claimResult = await pool.query(`${CLAIM_SELECT_WITH_PROVIDER} WHERE claims.id = $1`, [req.params.id]);
     if (claimResult.rowCount === 0) {
+      return res.status(404).json({ message: "Claim not found." });
+    }
+    if (
+      req.user!.role === "claimant" &&
+      claimResult.rows[0].claimant_email.toLowerCase() !== req.user!.email.toLowerCase()
+    ) {
       return res.status(404).json({ message: "Claim not found." });
     }
     const documentsResult = await pool.query(

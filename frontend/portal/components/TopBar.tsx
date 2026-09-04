@@ -1,6 +1,8 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { STAFF_ROLES } from "@/lib/types";
 import { ThemeToggle } from "./ThemeToggle";
 
 const TABS = [
@@ -8,8 +10,14 @@ const TABS = [
   { href: "/", label: "Claims", match: (path: string) => path === "/" || path.startsWith("/claims") },
 ];
 
+const STAFF_TAB = { href: "/tasks", label: "Tasks", match: (path: string) => path.startsWith("/tasks") };
+
 export function TopBar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, logout } = useAuth();
+
+  const tabs = user && STAFF_ROLES.includes(user.role) ? [...TABS, STAFF_TAB] : TABS;
 
   return (
     <header
@@ -63,7 +71,7 @@ export function TopBar() {
         </a>
 
         <nav style={{ display: "flex", gap: "0.25rem", height: "100%" }}>
-          {TABS.map((tab) => {
+          {tabs.map((tab) => {
             const active = tab.match(pathname);
             return (
               <a
@@ -87,7 +95,37 @@ export function TopBar() {
           })}
         </nav>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "1rem" }}>
+          {!loading && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.85rem" }}>
+              {user ? (
+                <>
+                  <span style={{ color: "var(--text-muted)" }}>{user.email}</span>
+                  <button
+                    onClick={async () => {
+                      await logout();
+                      router.push("/login");
+                    }}
+                    className="transition"
+                    style={{
+                      border: "none",
+                      background: "none",
+                      color: "var(--text)",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    Log out
+                  </button>
+                </>
+              ) : (
+                <a href="/login" className="transition" style={{ color: "var(--text)", fontWeight: 600, textDecoration: "none" }}>
+                  Log in
+                </a>
+              )}
+            </div>
+          )}
           <ThemeToggle />
         </div>
       </div>

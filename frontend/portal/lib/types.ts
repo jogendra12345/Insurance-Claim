@@ -145,6 +145,41 @@ export interface NewPolicyInput {
   dependents: NewDependentInput[];
 }
 
+// .claude/specs/generic/auth-role-based-access.md — locked design.
+export type Role =
+  | "claimant"
+  | "admin"
+  | "triage-team"
+  | "adjuster"
+  | "investigator"
+  | "legal-reviewer"
+  | "supervisor";
+
+export const STAFF_ROLES: Role[] = [
+  "admin",
+  "triage-team",
+  "adjuster",
+  "investigator",
+  "legal-reviewer",
+  "supervisor",
+];
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: Role;
+}
+
+export interface Task {
+  taskKey: string;
+  name: string;
+  elementId: string;
+  candidateGroups: string[];
+  assignee: string | null;
+  creationDate: string;
+  claim: Claim | null;
+}
+
 export interface NewClaimInput {
   policyNumber: string;
   claimType: ClaimType;

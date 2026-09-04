@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
+import { requireAuth } from "../auth";
 import { pool } from "../db";
 
 export const policiesRouter = Router();
@@ -39,9 +40,22 @@ function serializeDependent(row: any) {
 // endpoint yet alongside POST/GET /api/claims — fold into a proper api-type
 // spec once backend/api's other endpoints are built. No dependents here —
 // keep the list payload light; use GET /:id for a single policy's dependents.
-policiesRouter.get("/", async (_req, res) => {
+// .claude/specs/generic/auth-role-based-access.md "Scoping existing
+// endpoints" — a claimant only sees policies they're the policyholder of or
+// a listed dependent on (email match, same as validate-claim's authorized-
+// claimant check); every staff role (including admin) is unscoped.
+policiesRouter.get("/", requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM policies ORDER BY policy_number`);
+    const result =
+      req.user!.role === "claimant"
+        ? await pool.query(
+            `SELECT DISTINCT policies.* FROM policies
+             LEFT JOIN policy_dependents ON policy_dependents.policy_id = policies.id
+             WHERE lower(policies.policyholder_email) = lower($1) OR lower(policy_dependents.email) = lower($1)
+             ORDER BY policy_number`,
+            [req.user!.email]
+          )
+        : await pool.query(`SELECT * FROM policies ORDER BY policy_number`);
     res.json(result.rows.map(serializePolicy));
   } catch (err) {
     console.error("GET /api/policies failed:", err);
@@ -51,11 +65,22 @@ policiesRouter.get("/", async (_req, res) => {
 
 // GET /api/policies/:id — a single policy plus its authorized-claimant
 // dependents (SPEC.md §9 "Authorized claimants"), for the policy detail page.
-policiesRouter.get("/:id", async (req, res) => {
+policiesRouter.get("/:id", requireAuth, async (req, res) => {
   try {
     const policyResult = await pool.query(`SELECT * FROM policies WHERE id = $1`, [req.params.id]);
     if (policyResult.rowCount === 0) {
       return res.status(404).json({ message: "Policy not found." });
+    }
+    if (req.user!.role === "claimant") {
+      const policy = policyResult.rows[0];
+      const isPolicyholder = policy.policyholder_email.toLowerCase() === req.user!.email.toLowerCase();
+      const { rowCount } = await pool.query(
+        `SELECT id FROM policy_dependents WHERE policy_id = $1 AND lower(email) = lower($2) LIMIT 1`,
+        [policy.id, req.user!.email]
+      );
+      if (!isPolicyholder && (rowCount ?? 0) === 0) {
+        return res.status(404).json({ message: "Policy not found." });
+      }
     }
     const dependentsResult = await pool.query(
       `SELECT * FROM policy_dependents WHERE policy_id = $1 ORDER BY created_at`,
