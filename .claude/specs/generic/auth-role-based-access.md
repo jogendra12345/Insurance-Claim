@@ -11,7 +11,7 @@ Give ClaimFlow AI real authentication and role-based access control, replacing t
 ## Scope
 
 **In scope:**
-- A `users` table and self-registration for claimants; admin-only provisioning for every staff role.
+- A `users` table and self-registration for claimants, gated by a lightweight policy-match check (policy number + email), and admin-only provisioning for every staff role.
 - Session-based login/logout for the frontend portal.
 - Scoping `GET /api/claims`/`/api/policies` (and any claim-detail endpoint) by the authenticated caller's role.
 - An explicit role → BPMN candidate-group map.
@@ -24,7 +24,7 @@ Give ClaimFlow AI real authentication and role-based access control, replacing t
 - The `moreInfo` resubmit endpoint itself (`POST /api/claims/:id/resubmit`) — this spec only unblocks it by existing; the endpoint is specced separately in `SPEC.md` §14's `moreInfo` item.
 - The audit view page/endpoint — same relationship: unblocked, not built here.
 - Switching to Camunda-native Identity/Keycloak (`docker-compose-full.yaml`) or Camunda SaaS — explicitly the alternative this spec avoids (Option B over Options 1/2 in `ROADMAP.md`).
-- Password reset / email verification flows — v1 login only; see Open Questions.
+- Password reset / email-ownership verification (confirmation code) / DOB-or-zip identity checks — v1 signup only proves policy-holder status via policy number + email match (see "Claimant signup verification" in Design), not inbox ownership; see Open Questions.
 - OAuth/SSO providers (Google, Microsoft, etc.) — internal test app, not a product requiring third-party login.
 - Per-request Camunda `assignee` passthrough of the real app-user's identity — flagged as an open question in `SPEC.md` §14 (whether the lightweight Camunda stack accepts an arbitrary `assignee` string); noted here as a nice-to-have, not required for access control since the app's own auth is the enforcement boundary, not Camunda's.
 
@@ -40,15 +40,25 @@ Give ClaimFlow AI real authentication and role-based access control, replacing t
 | `role` | text | no | — | `claimant \| admin \| triage-team \| adjuster \| investigator \| legal-reviewer \| supervisor` (check constraint or enum) |
 | `created_at` | timestamptz | no | `now()` | |
 
-Claimants self-register via a signup form; the request body accepts no `role` field — the API hardcodes `role = 'claimant'` for the public signup endpoint. Every staff role (`admin`, `triage-team`, `adjuster`, `investigator`, `legal-reviewer`, `supervisor`) is created only by an existing `admin`, via an admin-only user-management endpoint/page (in scope for this spec, minimal — create + list + deactivate, no self-service staff signup ever). This mirrors the exact wording already locked in `SPEC.md` §14: "letting someone pick 'I'm a supervisor' at signup would let anyone grant themselves settlement-approval authority."
+Claimants self-register via a signup form; the request body accepts no `role` field — the API hardcodes `role = 'claimant'` for the public signup endpoint. Signup additionally requires a `policyNumber` field (see "Claimant signup verification" below) — the account isn't created unless it passes that check. Every staff role (`admin`, `triage-team`, `adjuster`, `investigator`, `legal-reviewer`, `supervisor`) is created only by an existing `admin`, via an admin-only user-management endpoint/page (in scope for this spec, minimal — create + list + deactivate, no self-service staff signup ever). This mirrors the exact wording already locked in `SPEC.md` §14: "letting someone pick 'I'm a supervisor' at signup would let anyone grant themselves settlement-approval authority."
 
 No `carrier_id` on `users` in this pass — see Out of scope above.
+
+### Claimant signup verification (lightweight)
+
+Real insurers don't create a policyholder account off an email address alone — the common pattern (confirmed by looking at how live insurer portals handle this) is: policy number + one or two more identifiers not derivable from just knowing an email (DOB, zip, name), checked before account creation, followed by a separate email-ownership verification (confirmation code) before the account is usable. Full production form is more than this test app needs, but the "prove you actually hold the policy" half of it is cheap and closes the most obvious gap — today's design otherwise lets anyone who merely knows a policyholder's email address register and immediately see that policyholder's claims.
+
+**What this spec adopts:** `POST /api/auth/signup` requires `email`, `password`, and `policyNumber`. The endpoint looks up `policies` by `policy_number` and checks the submitted `email` (case-insensitive) against that policy's `policyholder_email` **or** any of its `policy_dependents.email` rows — the exact same match `validate-claim` already performs for authorized claimants (`SPEC.md` §9). If no policy row matches both fields, signup is rejected (`400`, generic "policy number and email don't match our records" message — deliberately not revealing *which* field failed, to avoid leaking whether a given policy number or email exists). On success, the account is created immediately — **no email-verification code and no DOB/zip step**; those stay explicitly out of scope (see Out of scope) as the part of the real-world pattern this spec deliberately doesn't adopt for an internal test app (`[[project_demo_app_no_real_payments]]`).
+
+This check only runs at signup, once. It doesn't change `GET /api/claims`/`/api/policies` scoping (still plain `claimant_email` match, per "Scoping existing endpoints" below), and it doesn't retroactively touch claims submitted before the claimant's account existed — those still surface once their `claimant_email` matches the logged-in user's email.
+
+A claimant tied to more than one policy (e.g. a dependent on one policy who is also a policyholder on another) only needs `policyNumber` to match *one* policy at signup — this proves policy-holder status once, not per-policy; every claim under any policy sharing that same email is visible to them either way, since scoping is by email, not by the policy used at signup.
 
 ### Session mechanism
 
 Server-side session, not JWT: `backend/api` sets an httpOnly, `SameSite=Lax` session cookie on login; session state (user id, role) lives server-side (in Postgres, a `sessions` table keyed by opaque token — matches the rest of the stack's Postgres-first pattern rather than adding Redis for v1) or, alternatively, a signed cookie carrying `{userId, role}` if session-table overhead isn't wanted for a test app. **Open question — see below**; this spec assumes the Postgres `sessions` table unless the review flags it as overkill for an internal test app (`[[project_demo_app_no_real_payments]]`).
 
-`POST /api/auth/signup` (claimant only), `POST /api/auth/login`, `POST /api/auth/logout`. No email verification, no password reset in v1 (Open Questions).
+`POST /api/auth/signup` (claimant only, policy-matched per above), `POST /api/auth/login`, `POST /api/auth/logout`. No email-ownership verification, no password reset in v1 (Open Questions).
 
 ### Scoping existing endpoints
 
