@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, createPolicy, deletePolicy, fetchPolicies } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import type { DependentRelationship, NewDependentInput, NewPolicyInput, Policy, PolicyStatus } from "@/lib/types";
 import { STATUS_TONE } from "@/lib/policy-status";
 import { EmptyState } from "@/components/EmptyState";
@@ -45,6 +46,7 @@ function nextPolicyNumber(policies: Policy[]): string {
 
 export default function PoliciesPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +76,18 @@ export default function PoliciesPage() {
   }
 
   useEffect(load, []);
+
+  // Claimants don't get the manage-list view (Add/Delete controls make no
+  // sense for them) — just the one policy's summary page, per
+  // .claude/specs/generic/auth-role-based-access.md's scoping. A claimant
+  // is expected to have exactly one policy visible; if they somehow have
+  // more (e.g. also a dependent elsewhere), send them to the first — full
+  // multi-policy claimant UI is a later pass, not this stopgap.
+  useEffect(() => {
+    if (!authLoading && user?.role === "claimant" && state === "loaded" && policies.length > 0) {
+      router.replace(`/policies/${policies[0].id}`);
+    }
+  }, [authLoading, user, state, policies, router]);
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(policies.length / PAGE_SIZE) - 1);
@@ -160,6 +174,17 @@ export default function PoliciesPage() {
     }
   }
 
+  // While a claimant's redirect to their policy summary is pending (auth
+  // still loading, policies still loading, or the redirect effect above
+  // hasn't fired yet), render nothing rather than flash the manage-list UI.
+  if (authLoading || (user?.role === "claimant" && (state !== "loaded" || policies.length > 0))) {
+    return (
+      <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
+        <div className="skeleton" style={{ height: "280px" }} aria-busy="true" />
+      </main>
+    );
+  }
+
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "1.75rem" }}>
       <section
@@ -173,6 +198,7 @@ export default function PoliciesPage() {
           <p style={{ margin: 0, color: "var(--text-muted)" }}>
             {policies.length} on file — coverage, dependents, and everything a claim can be filed against.
           </p>
+          {user?.role !== "claimant" && (
           <button
             onClick={() => {
               if (showAddForm) {
@@ -198,6 +224,7 @@ export default function PoliciesPage() {
           >
             {showAddForm ? "Close" : "+ Add policy"}
           </button>
+          )}
         </div>
         <div aria-hidden="true" style={{ display: "flex", alignItems: "flex-end", gap: "0.9rem", flexShrink: 0 }}>
           <IdCardIllustration className="float-icon" />
@@ -483,28 +510,30 @@ export default function PoliciesPage() {
                     <Td align="right">{currency(policy.premiumAmount)}</Td>
                     <Td align="right">{currency(policy.coverageAmount)}</Td>
                     <Td align="right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPendingDelete(policy);
-                        }}
-                        disabled={deletingId === policy.id}
-                        aria-label={`Delete policy ${policy.policyNumber}`}
-                        className="transition btn-press"
-                        style={{
-                          border: "none",
-                          background: "var(--surface-2)",
-                          color: "var(--text-muted)",
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "50%",
-                          cursor: deletingId === policy.id ? "default" : "pointer",
-                          fontSize: "0.9rem",
-                          lineHeight: 1,
-                        }}
-                      >
-                        ✕
-                      </button>
+                      {user?.role !== "claimant" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPendingDelete(policy);
+                          }}
+                          disabled={deletingId === policy.id}
+                          aria-label={`Delete policy ${policy.policyNumber}`}
+                          className="transition btn-press"
+                          style={{
+                            border: "none",
+                            background: "var(--surface-2)",
+                            color: "var(--text-muted)",
+                            width: "28px",
+                            height: "28px",
+                            borderRadius: "50%",
+                            cursor: deletingId === policy.id ? "default" : "pointer",
+                            fontSize: "0.9rem",
+                            lineHeight: 1,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
                     </Td>
                   </tr>
                 );
