@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 import { fetchCurrentUser, logout as apiLogout } from "./api";
 import type { AuthUser } from "./types";
 
@@ -18,67 +18,38 @@ const AuthContext = createContext<AuthContextValue>({
   logout: async () => {},
 });
 
-const CACHE_KEY = "claimflow_last_user";
+// initialUser comes from the server (RootLayout resolves it by forwarding
+// the session cookie to GET /api/auth/me during SSR — see app/layout.tsx)
+// so the very first HTML the browser paints already has the right
+// logged-in state, before any client JS runs. Seeding client state from a
+// cache (localStorage, etc.) can't fix that: the server-rendered HTML
+// paints first regardless of what React does after hydration.
+export function AuthProvider({
+  children,
+  initialUser,
+}: {
+  children: React.ReactNode;
+  initialUser: AuthUser | null;
+}) {
+  const [user, setUser] = useState<AuthUser | null>(initialUser);
+  const [loading, setLoading] = useState(false);
 
-// Every nav link in this app is a plain <a href> (full page reload, not
-// next/link), so AuthProvider remounts on every navigation and briefly has
-// user=null while GET /api/auth/me is in flight — long enough for e.g.
-// TopBar's role-dependent tab label to flash its logged-out default before
-// flipping to the real one. Seeding state from this per-viewer cache paints
-// the right value immediately; the fetch below still runs and corrects it
-// (including clearing it) if the cached guess turns out stale.
-function readCachedUser(): AuthUser | null {
-  if (typeof window === "undefined") return null; // SSR/build pass — no localStorage
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedUser(user: AuthUser | null) {
-  try {
-    if (user) localStorage.setItem(CACHE_KEY, JSON.stringify(user));
-    else localStorage.removeItem(CACHE_KEY);
-  } catch {
-    // ignore — private browsing / blocked storage, cache is a convenience only
-  }
-}
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Starts null (matching SSR, which has no localStorage) to avoid a
-  // hydration mismatch; the layout effect below seeds the cached guess
-  // synchronously before the browser paints, so there's still no visible
-  // flash on the client.
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useLayoutEffect(() => {
-    const cached = readCachedUser();
-    if (cached) setUser(cached);
-  }, []);
-
+  // Not auto-run on mount — initialUser is already correct for every full
+  // page load (server-resolved, see app/layout.tsx). Exposed for the
+  // /login and /signup pages to call after a router.push (client-side nav,
+  // doesn't re-run the server component) so context picks up the new
+  // session without a full reload.
   const refresh = useCallback(() => {
     setLoading(true);
     fetchCurrentUser()
-      .then((fetched) => {
-        setUser(fetched);
-        writeCachedUser(fetched);
-      })
-      .catch(() => {
-        setUser(null);
-        writeCachedUser(null);
-      })
+      .then(setUser)
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(refresh, [refresh]);
 
   async function logout() {
     await apiLogout();
     setUser(null);
-    writeCachedUser(null);
   }
 
   return <AuthContext.Provider value={{ user, loading, refresh, logout }}>{children}</AuthContext.Provider>;
