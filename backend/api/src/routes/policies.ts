@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
-import { requireAuth } from "../auth";
+import { requireAuth, requireRole } from "../auth";
 import { pool } from "../db";
 
 export const policiesRouter = Router();
@@ -203,7 +203,7 @@ policiesRouter.post("/", async (req, res) => {
 // DELETE /api/policies/:id — blocked (FK ON DELETE RESTRICT) while any claim
 // still references this policy; reported back as a clear 409 rather than a
 // raw database error. Dependents are removed automatically (ON DELETE CASCADE).
-policiesRouter.delete("/:id", async (req, res) => {
+policiesRouter.delete("/:id", requireRole("admin"), async (req, res) => {
   try {
     const result = await pool.query(`DELETE FROM policies WHERE id = $1`, [req.params.id]);
     if (result.rowCount === 0) {

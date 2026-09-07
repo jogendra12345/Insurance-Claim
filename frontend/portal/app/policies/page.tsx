@@ -510,7 +510,7 @@ export default function PoliciesPage() {
                     <Td align="right">{currency(policy.premiumAmount)}</Td>
                     <Td align="right">{currency(policy.coverageAmount)}</Td>
                     <Td align="right">
-                      {user?.role !== "claimant" && (
+                      {user?.role === "admin" && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
