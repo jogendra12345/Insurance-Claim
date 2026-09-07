@@ -67,6 +67,13 @@ MINIO_ROOT_PASSWORD=claimflow123
 MINIO_BUCKET=claim-documents
 ZEEBE_GRPC_ADDRESS=grpc://localhost:26500
 CAMUNDA_AUTH_STRATEGY=NONE
+
+# Optional — the forgot-password flow's OTP email falls back to a
+# console-log mock (prints the code here) if neither is set. Same values as
+# backend/workers/.env below; Gmail is preferred over Resend when both are set.
+GMAIL_USER=
+GMAIL_APP_PASSWORD=
+RESEND_API_KEY=
 ```
 
 **Watch out:** if a previous `npm run dev` for this package is still holding

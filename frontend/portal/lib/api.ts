@@ -164,6 +164,33 @@ export async function login(input: { email: string; password: string }): Promise
   return res.json();
 }
 
+// POST /api/auth/forgot-password — always resolves with a generic message,
+// whether or not the email matches an account.
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Request failed (${res.status}).`));
+  }
+  return res.json();
+}
+
+// POST /api/auth/verify-otp — verifies the code and sets newPassword in the same call.
+export async function verifyOtp(input: { email: string; otp: string; newPassword: string }): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Couldn't reset your password (${res.status}).`));
+  }
+  return res.json();
+}
+
 // POST /api/auth/register-staff — admin-only, creates a non-claimant account.
 export async function registerStaff(input: { email: string; password: string; role: Role }): Promise<AuthUser> {
   const res = await fetch(`${API_BASE_URL}/api/auth/register-staff`, {

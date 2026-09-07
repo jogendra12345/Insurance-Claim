@@ -56,7 +56,12 @@ export default function LoginPage() {
           {busy ? "Logging in…" : "Log in"}
         </button>
       </form>
-      <p style={{ marginTop: "1.5rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+      <p style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+        <a href="/forgot-password" style={{ color: "var(--primary)", fontWeight: 600 }}>
+          Forgot password?
+        </a>
+      </p>
+      <p style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
         Not a claimant yet?{" "}
         <a href="/signup" style={{ color: "var(--primary)", fontWeight: 600 }}>
           Sign up

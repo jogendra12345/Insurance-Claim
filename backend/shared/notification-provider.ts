@@ -4,7 +4,12 @@
 // notify-claimant based on which provider's env vars are set, so a dev
 // machine with neither still runs (falls back to the mock) instead of
 // failing every denied/approved claim into an Operate incident.
-import nodemailer from "nodemailer";
+// Transport (Gmail SMTP / Resend HTTP) lives in ./email-sender.ts, shared
+// with backend/api's forgot-password flow (.claude/specs/generic/
+// forgot-password-otp-reset.md) — this file only builds the claim-specific
+// email body and picks which transport to call.
+import { sendViaGmail, sendViaResend } from "./email-sender";
+
 export interface NotificationContext {
   claimId: string;
   claimantName: string;
@@ -114,41 +119,10 @@ function buildEmail(context: NotificationContext): { subject: string; html: stri
   return { subject, html, text };
 }
 
-const RESEND_API_BASE = "https://api.resend.com";
-// Resend's shared sandbox sender — works with no domain verification, but
-// (per Resend's free-tier rules) only delivers to the email address the
-// Resend account itself was signed up with.
-const SANDBOX_FROM = "ClaimFlow AI <onboarding@resend.dev>";
-
 export const resendNotificationProvider: NotificationProvider = {
   async send(context) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      throw new Error("RESEND_API_KEY is not set (see backend/workers/.env.example)");
-    }
-
     const { subject, html, text } = buildEmail(context);
-
-    const res = await fetch(`${RESEND_API_BASE}/emails`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: SANDBOX_FROM,
-        to: context.claimantEmail,
-        subject,
-        html,
-        text,
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`Resend API error ${res.status}: ${body}`);
-    }
-
+    await sendViaResend({ to: context.claimantEmail, subject, html, text });
     return { notificationSent: true };
   },
 };
@@ -162,38 +136,10 @@ export const resendNotificationProvider: NotificationProvider = {
 // mail arrives "from" a personal Gmail address, but unblocks real delivery
 // to arbitrary claimant addresses immediately — no DNS/domain ownership
 // needed, which the Resend path does require (see PREREQUISITES.md).
-let gmailTransporter: ReturnType<typeof nodemailer.createTransport> | null = null;
-function getGmailTransporter() {
-  if (!gmailTransporter) {
-    gmailTransporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-    });
-  }
-  return gmailTransporter;
-}
-
 export const gmailNotificationProvider: NotificationProvider = {
   async send(context) {
-    const user = process.env.GMAIL_USER;
-    if (!user || !process.env.GMAIL_APP_PASSWORD) {
-      throw new Error("GMAIL_USER / GMAIL_APP_PASSWORD is not set (see backend/workers/.env.example)");
-    }
-
     const { subject, html, text } = buildEmail(context);
-
-    await getGmailTransporter().sendMail({
-      from: `"ClaimFlow AI" <${user}>`,
-      replyTo: user,
-      to: context.claimantEmail,
-      subject,
-      html,
-      text,
-    });
-
+    await sendViaGmail({ to: context.claimantEmail, subject, html, text });
     return { notificationSent: true };
   },
 };
