@@ -2,6 +2,13 @@ import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
+import { notifyRole } from "../shared/reviewer-notifications";
+
+// Mirrors the "Needs Second Sign-off?" gateway's condition in
+// process/claim-case-process.bpmn (SPEC.md §10 step 15) — kept in sync by
+// hand; see .claude/specs/generic/reviewer-task-notification-emails.md's
+// Open Questions for the drift risk this duplication carries.
+const SUPERVISOR_SIGNOFF_THRESHOLD = 50000;
 
 // SPEC.md §12 — capture-review-decision. Bridges the role-specific review
 // task's (Adjuster/Investigator/Legal) `decision`/`denialReason` output onto
@@ -48,12 +55,21 @@ zeebeClient.createWorker<CaptureReviewDecisionVariables, Record<string, unknown>
       [decision, denialReason ?? null, status, claimId]
     );
 
+    let reviewersNotified: number | null = null;
+    if (decision === "approve") {
+      const { rows } = await pool.query(`SELECT claim_amount FROM claims WHERE id = $1`, [claimId]);
+      const claimAmount = Number(rows[0]?.claim_amount ?? 0);
+      if (claimAmount > SUPERVISOR_SIGNOFF_THRESHOLD) {
+        reviewersNotified = (await notifyRole("supervisor", claimId, "Supervisor Sign-off")).notifiedCount;
+      }
+    }
+
     await writeAuditLog({
       claimId,
       actorType: "human",
       actorId: "tasklist",
       action: "decision_recorded",
-      detail: { decision, denialReason: denialReason ?? null, confirmedRole },
+      detail: { decision, denialReason: denialReason ?? null, confirmedRole, reviewersNotified },
     });
 
     return job.complete({});

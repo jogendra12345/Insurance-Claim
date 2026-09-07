@@ -2,6 +2,7 @@ import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
+import { notifyRole } from "../shared/reviewer-notifications";
 
 // SPEC.md §12 — capture-routing-decision. Bridges the DMN business rule
 // task's `assignedRole` process variable onto the `claims` row: the DMN
@@ -24,12 +25,14 @@ zeebeClient.createWorker<CaptureRoutingDecisionVariables, Record<string, unknown
       [assignedRole, claimId]
     );
 
+    const { notifiedCount } = await notifyRole("triage-team", claimId, "Triage Review");
+
     await writeAuditLog({
       claimId,
       actorType: "system",
       actorId: JOB_TYPE,
       action: "routed",
-      detail: { assignedRole },
+      detail: { assignedRole, reviewersNotified: notifiedCount },
     });
 
     return job.complete({});

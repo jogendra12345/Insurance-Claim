@@ -4,6 +4,8 @@
 
 **Status:** Draft
 
+> Test-mode note (2026-09-07): per explicit product direction, since this is a small internal test app (`[[project_demo_app_no_real_payments]]`), every reviewer-notification email in this pass is redirected to a single fixed test address (`ayanchou2015@gmail.com`) instead of the real per-user `users.email` lookup — see "New shared helper" below. This is a deliberate, temporary simplification, not a design change to who "should" receive these in a real deployment; swap the redirect back out for the real per-role query whenever this moves past test/demo use.
+
 ## Purpose
 
 Today, a reviewer only learns a task is waiting for them by opening `/tasks` (or stock Tasklist) and checking — there's no push notification of any kind when a `Triage Review`, `Validation Exception Review`, `Adjuster/Investigator/Legal Review`, or `Supervisor Sign-off` task becomes available for their role. This spec adds that: when one of those tasks opens, every `users` row with the matching role gets an email pointing them at `/tasks`, reusing the same `sendEmail()` primitive `[[forgot-password-otp-reset]]` already extracted for the OTP flow (itself reused from `notify-claimant`'s Gmail/Resend transport) — no new email infrastructure, just a new caller.
@@ -30,7 +32,7 @@ Today, a reviewer only learns a task is waiting for them by opening `/tasks` (or
 notifyRole(role: Role, claimId: string, taskLabel: string): Promise<{ notifiedCount: number }>
 ```
 
-- `SELECT email FROM users WHERE role = $1` — every account with that exact role, no candidate-group indirection needed here (unlike `[[auth-role-based-access]]`'s Tasklist-proxy mapping, this is a direct app-role lookup, not a BPMN candidate-group one).
+- `SELECT email FROM users WHERE role = $1` — every account with that exact role, no candidate-group indirection needed here (unlike `[[auth-role-based-access]]`'s Tasklist-proxy mapping, this is a direct app-role lookup, not a BPMN candidate-group one). **Test-mode override:** the recipient list this query produces is still computed (so `notifiedCount`/logging stay meaningful), but the actual `sendEmail()` call's `to` is hardcoded to `TEST_RECIPIENT = "ayanchou2015@gmail.com"` instead of each matched row's real `email` — see the lock note at the top. One `const` in this one file is the single place that needs to change to restore real per-reviewer delivery later.
 - Builds a short inline-styled-HTML email (same pattern as `notify-claimant`'s `buildEmail()` and the OTP email in `[[forgot-password-otp-reset]]`): "`<taskLabel>` task waiting" subject, one line naming the claim, a link to `${FRONTEND_URL}/tasks`.
 - Sends one email per matched user via the existing `sendEmail()` (`backend/shared/email-sender.ts`), `Promise.all`'d.
 - **Best-effort, not build-or-fail:** wraps the whole lookup+send in a `try/catch` that only `console.error`s on failure — never throws. A misconfigured email provider (or zero users with that role) must never turn into a failed job / Operate incident on an otherwise-successful claim-processing step. This mirrors `notify-claimant`'s own mock-fallback philosophy (SPEC.md §12: "a dev machine with neither still runs... instead of failing every denied/approved claim into an Operate incident") applied to a second, non-critical email path.

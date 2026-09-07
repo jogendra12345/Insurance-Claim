@@ -2,6 +2,7 @@ import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
+import { notifyRole } from "../shared/reviewer-notifications";
 
 // SPEC.md §12 — capture-triage-review. Bridges Triage Review's output onto
 // `claims` — a human (Tasklist) completion has no way to write to Postgres
@@ -24,6 +25,19 @@ interface CaptureTriageReviewVariables {
 }
 
 const VALID_ROLES = ["adjuster", "investigator", "legal"];
+
+// confirmedRole values ("legal") aren't the same strings as users.role
+// ("legal-reviewer") — .claude/specs/generic/reviewer-task-notification-emails.md.
+const CONFIRMED_ROLE_TO_USER_ROLE: Record<string, string> = {
+  adjuster: "adjuster",
+  investigator: "investigator",
+  legal: "legal-reviewer",
+};
+const CONFIRMED_ROLE_TO_TASK_LABEL: Record<string, string> = {
+  adjuster: "Adjuster Review",
+  investigator: "Investigator Review",
+  legal: "Legal Review",
+};
 
 const JOB_TYPE = "capture-triage-review";
 
@@ -80,12 +94,18 @@ zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, 
       [confirmedRole, claimId]
     );
 
+    const { notifiedCount: reviewersNotified } = await notifyRole(
+      CONFIRMED_ROLE_TO_USER_ROLE[confirmedRole],
+      claimId,
+      CONFIRMED_ROLE_TO_TASK_LABEL[confirmedRole]
+    );
+
     await writeAuditLog({
       claimId,
       actorType: "human",
       actorId: "tasklist",
       action: "triage_confirmed",
-      detail: { confirmedRole, assignedRole, overridden: confirmedRole !== assignedRole },
+      detail: { confirmedRole, assignedRole, overridden: confirmedRole !== assignedRole, reviewersNotified },
     });
 
     return job.complete({});

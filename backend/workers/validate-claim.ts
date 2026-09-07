@@ -3,6 +3,7 @@ import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
 import { getInsuranceTypeConfig } from "../shared/insurance-types/health";
+import { notifyRole } from "../shared/reviewer-notifications";
 
 // SPEC.md §12 — validate-claim.
 interface ValidateClaimVariables {
@@ -137,6 +138,10 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
     );
     const claimantClaimCountLast12Months = Number(claimCountRows[0].count);
 
+    const reviewersNotified = validationPassed
+      ? null
+      : (await notifyRole("triage-team", claimId, "Validation Exception Review")).notifiedCount;
+
     await writeAuditLog({
       claimId,
       actorType: "system",
@@ -151,6 +156,7 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
         authorizedClaimant,
         daysSincePolicyEffective,
         claimantClaimCountLast12Months,
+        reviewersNotified,
       },
     });
 
