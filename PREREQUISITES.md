@@ -14,7 +14,7 @@ Everything needed to run and continue building this project.
 |---|---|---|
 | Docker Desktop | 29.6.2 | Runs the Camunda containers |
 | Docker Compose | v5.3.1 | Starts/stops the Camunda stack |
-| Camunda 8 Self-Managed | 8.9.16 (orchestration), 8.9.7 (connectors) | The workflow engine — Zeebe + Operate + Tasklist, running locally via Docker Compose (lightweight config, H2 storage) |
+| Camunda 8 Self-Managed | 8.9.16 (orchestration) | The workflow engine — Zeebe + Operate + Tasklist, running locally via Docker Compose (lightweight config, H2 storage). Connectors was dropped from `camunda-docker/docker-compose.yaml` (2026-09-07) — not used by this project's BPMN process, and its own JVM was ~450MB of pure overhead on this memory-tight machine. |
 | Camunda Desktop Modeler | 5.50.1 | Draws and deploys BPMN process diagrams and DMN decision tables |
 | PostgreSQL | 16 (Docker, `postgres:16-alpine`) | Claim records database (`claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) — separate from Camunda's own storage, run via the root `docker-compose.yaml` |
 | MinIO | `minio/minio` (Docker) | S3-compatible object storage for uploaded claim documents (`SPEC.md` §6), run via the same root `docker-compose.yaml` — see `.claude/specs/generic/object-storage-provisioning.md` |

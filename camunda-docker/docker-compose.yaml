@@ -6,7 +6,11 @@
 # For local development, we recommend using KIND instead of `docker-compose`:
 # https://docs.camunda.io/docs/self-managed/setup/deploy/local/local-kubernetes-cluster/
 
-# This is a lightweight configuration with Orchestration (Zeebe + Operate + Tasklist) and Connectors
+# This is a lightweight configuration with Orchestration (Zeebe + Operate + Tasklist) only.
+# Connectors was dropped (2026-09-07) — this project's BPMN process doesn't use any connector
+# tasks, so the ~450MB it was actually using (of its 512MB mem_limit) was pure overhead on an
+# already memory-tight machine. Re-add the `connectors` service below (see git history) if a
+# future process needs an outbound/inbound connector.
 # See docker-compose-full.yaml for a configuration that also includes Optimize, Identity, Keycloak, Web Modeler, and Console.
 services:
   camunda-data-init:
@@ -54,35 +58,6 @@ services:
       camunda-data-init:
         condition: service_completed_successfully
 
-  # Camunda Connectors - executes outbound and inbound connector logic
-  # Docs: https://docs.camunda.io/docs/self-managed/connectors-deployment/connectors-configuration/
-  connectors:
-    image: camunda/connectors-bundle:${CAMUNDA_CONNECTORS_VERSION}
-    container_name: connectors
-    ports:
-      - "8086:8080"
-    env_file:
-      - connector-secrets.txt
-      - path: .env
-        required: true
-    mem_limit: 512m
-    restart: on-failure
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health/readiness"]
-      interval: 30s
-      timeout: 1s
-      retries: 5
-      start_period: 30s
-    configs:
-      - source: connectors-config
-        target: application.yaml
-    networks:
-      - camunda
-    depends_on:
-      orchestration:
-        # Wait for orchestration service to be healthy, otherwise we get a lot of noisy logs from connection errors
-        condition: service_healthy
-
 volumes:
   camunda:
   camunda-data:
@@ -92,22 +67,5 @@ networks:
     name: camunda
 
 configs:
-  connectors-config:
-    content: |
-      camunda:
-        client:
-          mode: self-managed
-          grpc-address: http://orchestration:26500
-          rest-address: http://orchestration:8080
-      management:
-        endpoints:
-          web:
-            exposure:
-              include: health,configprops
-        endpoint:
-          health:
-            probes:
-              enabled: true
-
   orchestration-config:
     file: ./configuration/${ORCHESTRATION_CONFIG_FILE:-application-h2.yaml}
