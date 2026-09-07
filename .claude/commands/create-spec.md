@@ -1,11 +1,11 @@
 ---
-description: Generate a new Draft spec (db, bpmn, dmn, worker, insurance-type, api, or generic) following this repo's Draft → Review & Lock → Build lifecycle, then branch and commit it per the project's branch-per-spec convention
+description: Generate a new Draft spec (db, bpmn, dmn, worker, insurance-type, api, or generic) following this repo's Draft → Review & Lock → Build lifecycle, then commit it directly to main per the project's no-per-feature-branch convention
 argument-hint: [type] [name]
 ---
 
 ## Git behavior (not silent)
 
-After the spec file is written, this command also creates/switches to a branch named `spec/<type>-<name>`, commits the new spec file there with the message `Draft spec: <type>/<name>`, and asks before pushing. It never touches unrelated changes, never pushes without explicit yes/no confirmation, and never opens a pull request — a PR only makes sense once the spec moves from Draft to Locked, which is a separate manual step. See "Git operations" below for the exact sequence.
+After the spec file is written, this command commits the new spec file directly on the current branch (normally `main` — this repo does not use per-feature/per-spec branches) with the message `Draft spec: <type>/<name>`, and asks before pushing. It never touches unrelated changes, never pushes without explicit yes/no confirmation, and never opens a pull request — a PR only makes sense once the spec moves from Draft to Locked, which is a separate manual step. See "Git operations" below for the exact sequence.
 
 ## Inputs
 
@@ -87,15 +87,14 @@ Match `SPEC.md`'s actual current section for each type — use the structure bel
 
 ## Git operations
 
-Run these only after the spec file has been successfully written to disk. Use the exact branch name `spec/<type>-<name>` (hyphen between type and name, e.g. `spec/db-add_carrier_config_table`) and the exact commit message `Draft spec: <type>/<name>` (slash between type and name).
+Run these only after the spec file has been successfully written to disk. This repo does not use per-feature or per-spec branches (see `[[feedback_no_per_feature_branches]]`) — commit straight to whatever branch is currently checked out (normally `main`). Use the exact commit message `Draft spec: <type>/<name>` (slash between type and name).
 
-1. **Check status first.** Run `git status`. If there are uncommitted changes to files *other than* the spec file just written, stop here, warn the user which files are dirty, and do not proceed to branch/commit — let them stash or commit those separately first.
-2. **Branch.** Check whether `spec/<type>-<name>` already exists (locally or on the remote). If it exists, switch to it (`git checkout spec/<type>-<name>`). If it doesn't, create it off the current branch (`git checkout -b spec/<type>-<name>`).
-3. **Stage only the new spec.** `git add .claude/specs/<type>/<name>.md` — never `git add -A` or `git add .` here, even if other dirty files were already ruled out in step 1.
-4. **Commit.** `git commit -m "Draft spec: <type>/<name>"`.
-5. **Ask before pushing.** Explicitly ask the user yes/no whether to push now. Only on "yes", run `git push -u origin spec/<type>-<name>`. Never push automatically or infer consent.
-6. **No PR.** Do not run `gh pr create` or open a pull request at this stage under any circumstance — that happens only after a separate, manual Draft → Locked transition.
+1. **Check status first.** Run `git status`. If there are uncommitted changes to files *other than* the spec file just written, stop here, warn the user which files are dirty, and do not proceed to commit — let them stash or commit those separately first.
+2. **Stage only the new spec.** `git add .claude/specs/<type>/<name>.md` — never `git add -A` or `git add .` here, even if other dirty files were already ruled out in step 1.
+3. **Commit.** `git commit -m "Draft spec: <type>/<name>"` on the current branch.
+4. **Ask before pushing.** Explicitly ask the user yes/no whether to push now. Only on "yes", run `git push` (or `git push -u origin <branch>` if the current branch has no upstream yet). Never push automatically or infer consent.
+5. **No PR.** Do not run `gh pr create` or open a pull request at this stage under any circumstance — that happens only after a separate, manual Draft → Locked transition.
 
 ## After writing
 
-Report back: the file path written, the inferred type if one was inferred, the branch it was committed to, and a one-line reminder that this is a Draft — it needs Review & Lock before anything builds against it (and before a PR is opened).
+Report back: the file path written, the inferred type if one was inferred, the branch it was committed to (normally `main`), and a one-line reminder that this is a Draft — it needs Review & Lock before anything builds against it (and before a PR is opened).
