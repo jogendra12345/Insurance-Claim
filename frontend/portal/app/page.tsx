@@ -84,7 +84,7 @@ export default function HomePage() {
           <p style={{ margin: 0, color: "var(--text-muted)" }}>
             Every claim submitted through the portal — tracked from intake to decision, with AI-assisted triage and a human always in the loop.
           </p>
-          {user?.role === "admin" && (
+          {(user?.role === "admin" || user?.role === "claimant") && (
           <a
             href="/claims/new"
             className="transition btn-press"
