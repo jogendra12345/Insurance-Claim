@@ -14,6 +14,7 @@ export function PolicySelect({
   onPolicySelect,
   id,
   style,
+  disabled: externallyDisabled,
 }: {
   value: string;
   onChange: (policyNumber: string) => void;
@@ -21,6 +22,8 @@ export function PolicySelect({
   onPolicySelect?: (policy: Policy | undefined) => void;
   id?: string;
   style?: React.CSSProperties;
+  /** Claimants get a pre-selected, locked-in policy — only admins can pick a different one. */
+  disabled?: boolean;
 }) {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [state, setState] = useState<LoadState>("loading");
@@ -40,11 +43,6 @@ export function PolicySelect({
         const active = data.filter((p) => p.status === "active");
         setPolicies(active);
         setState("loaded");
-        if (value) {
-          const match = active.find((p) => p.policyNumber === value);
-          if (match) setQuery(displayLabel(match));
-          onPolicySelect?.(match);
-        }
       })
       .catch(() => {
         if (!cancelled) setState("error");
@@ -52,9 +50,28 @@ export function PolicySelect({
     return () => {
       cancelled = true;
     };
-    // Only re-run on mount — `value`/`onPolicySelect` are read for the initial prefill only.
+    // Only re-run on mount — the effect below handles keeping `query` in
+    // sync with `value` for both this initial load and any later change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Syncs the displayed text with an externally-set `value` — needed both
+  // for the initial prefill (once policies finish loading) and for a value
+  // set *after* mount, e.g. ClaimForm auto-selecting a claimant's own policy
+  // once its own fetch resolves. Only fires when `value` is non-empty, so it
+  // never fights with `handleInputChange` (which always clears `value` to ""
+  // while the claimant is typing).
+  useEffect(() => {
+    if (state !== "loaded" || !value) return;
+    const match = policies.find((p) => p.policyNumber === value);
+    if (match) {
+      setQuery(displayLabel(match));
+      onPolicySelect?.(match);
+    }
+    // onPolicySelect intentionally omitted — callers pass a fresh function
+    // each render, and only `value`/`state`/`policies` should trigger a resync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, state, policies]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -107,7 +124,7 @@ export function PolicySelect({
     }
   }
 
-  const disabled = state !== "loaded";
+  const disabled = state !== "loaded" || externallyDisabled;
 
   return (
     <div ref={containerRef} style={{ position: "relative", width: "100%" }}>

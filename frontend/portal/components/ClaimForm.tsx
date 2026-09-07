@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ApiError, submitClaim } from "@/lib/api";
+import { ApiError, fetchPolicies, submitClaim } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
 import { PolicySelect } from "./PolicySelect";
 import { ProviderSelect } from "./ProviderSelect";
@@ -48,6 +49,8 @@ const STEPS = ["Policy", "About the incident", "Diagnosis, Procedure & Provider"
 export function ClaimForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const isClaimant = user?.role === "claimant";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(0);
@@ -61,6 +64,33 @@ export function ClaimForm() {
   const [documents, setDocuments] = useState<File[]>([]);
   const [coverageAmount, setCoverageAmount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Claimants file against their own policy only — pre-select it and lock
+  // the picker (PolicySelect's `disabled` prop below) so they can't type in
+  // someone else's policy number. GET /api/policies is already scoped
+  // server-side to the caller's own policies for role=claimant, so the
+  // first result here is always one they're authorized on.
+  useEffect(() => {
+    if (!isClaimant || policyNumber) return;
+    let cancelled = false;
+    fetchPolicies()
+      .then((policies) => {
+        if (cancelled) return;
+        const own = policies.find((p) => p.status === "active") ?? policies[0];
+        if (own) {
+          setPolicyNumber(own.policyNumber);
+          setClaimantName(own.policyholderName);
+          setCoverageAmount(own.coverageAmount);
+        }
+      })
+      .catch(() => {
+        // Leave the field empty on failure — the picker (disabled for
+        // claimants) will just show nothing to select rather than error.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isClaimant, policyNumber]);
 
   const [diagnosisCode, setDiagnosisCode] = useState("");
   const [procedureCode, setProcedureCode] = useState("");
@@ -329,7 +359,11 @@ export function ClaimForm() {
       <div key={step} className="animate-fade-in-up" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
         {step === 0 && (
           <>
-            <Field label="Policy number" error={fieldErrors.policyNumber}>
+            <Field
+              label="Policy number"
+              error={fieldErrors.policyNumber}
+              hint={isClaimant ? "Filed against your policy" : undefined}
+            >
               <PolicySelect
                 value={policyNumber}
                 onChange={setPolicyNumber}
@@ -337,7 +371,8 @@ export function ClaimForm() {
                   setClaimantName(policy?.policyholderName ?? "");
                   setCoverageAmount(policy?.coverageAmount ?? null);
                 }}
-                style={inputStyle}
+                style={isClaimant ? disabledInputStyle : inputStyle}
+                disabled={isClaimant}
               />
             </Field>
 
