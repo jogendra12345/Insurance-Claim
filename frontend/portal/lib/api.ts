@@ -1,4 +1,4 @@
-import type { AuthUser, Claim, NewClaimInput, NewPolicyInput, Policy, Provider, Task } from "./types";
+import type { AuthUser, Claim, NewClaimInput, NewPolicyInput, Policy, Provider, Role, Task } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -160,6 +160,20 @@ export async function login(input: { email: string; password: string }): Promise
   });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Login failed (${res.status}).`));
+  }
+  return res.json();
+}
+
+// POST /api/auth/register-staff — admin-only, creates a non-claimant account.
+export async function registerStaff(input: { email: string; password: string; role: Role }): Promise<AuthUser> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/register-staff`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    ...withCredentials,
+  });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Registering the user failed (${res.status}).`));
   }
   return res.json();
 }

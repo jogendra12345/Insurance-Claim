@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, fetchActiveClaimsByPolicy, fetchAllClaims } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { ACTIVE_STATUSES, type Claim, type ClaimStatus } from "@/lib/types";
 import { ClaimTable } from "@/components/ClaimTable";
 import { EmptyState } from "@/components/EmptyState";
@@ -23,6 +24,7 @@ const STAT_FILTER_LABEL: Record<Exclude<StatFilter, null>, string> = {
 };
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [policyFilter, setPolicyFilter] = useState("");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [state, setState] = useState<LoadState>("loading");
@@ -82,6 +84,7 @@ export default function HomePage() {
           <p style={{ margin: 0, color: "var(--text-muted)" }}>
             Every claim submitted through the portal — tracked from intake to decision, with AI-assisted triage and a human always in the loop.
           </p>
+          {user?.role === "admin" && (
           <a
             href="/claims/new"
             className="transition btn-press"
@@ -100,6 +103,7 @@ export default function HomePage() {
           >
             Submit a Claim
           </a>
+          )}
         </div>
         <div aria-hidden="true" style={{ display: "flex", alignItems: "flex-end", gap: "0.9rem", flexShrink: 0 }}>
           <ShieldCheckIllustration className="float-icon" />

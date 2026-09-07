@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db";
-import { clearSessionCookie, hashPassword, setSessionCookie, verifyPassword } from "../auth";
+import { clearSessionCookie, hashPassword, requireRole, setSessionCookie, STAFF_ROLES, verifyPassword } from "../auth";
 
 export const authRouter = Router();
 
@@ -58,6 +58,39 @@ authRouter.post("/signup", async (req, res) => {
       return res.status(409).json({ message: "An account with that email already exists." });
     }
     console.error("POST /api/auth/signup failed:", err);
+    res.status(500).json({ message: "Couldn't create the account." });
+  }
+});
+
+// POST /api/auth/register-staff — admin-only. Creates a non-claimant
+// (staff) account directly, the app-level equivalent of the seeded staff
+// rows described in ROADMAP.md ("no admin UI in this pass") — this is that
+// admin UI. Deliberately separate from /signup: no policy-match gate, and
+// the role is caller-chosen rather than hardcoded to 'claimant'.
+authRouter.post("/register-staff", requireRole("admin"), async (req, res) => {
+  const { email, password, role } = req.body ?? {};
+  if (!email || !password || !role) {
+    return res.status(400).json({ message: "Email, password, and role are all required." });
+  }
+  if (typeof password !== "string" || password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+  if (!STAFF_ROLES.includes(role)) {
+    return res.status(400).json({ message: "Role must be a staff role." });
+  }
+
+  try {
+    const passwordHash = await hashPassword(password);
+    const { rows } = await pool.query(
+      `INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING *`,
+      [email, passwordHash, role]
+    );
+    res.status(201).json(serializeUser(rows[0]));
+  } catch (err: any) {
+    if (err.code === "23505") {
+      return res.status(409).json({ message: "An account with that email already exists." });
+    }
+    console.error("POST /api/auth/register-staff failed:", err);
     res.status(500).json({ message: "Couldn't create the account." });
   }
 });

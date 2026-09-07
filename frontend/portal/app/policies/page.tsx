@@ -198,7 +198,7 @@ export default function PoliciesPage() {
           <p style={{ margin: 0, color: "var(--text-muted)" }}>
             {policies.length} on file — coverage, dependents, and everything a claim can be filed against.
           </p>
-          {user?.role !== "claimant" && (
+          {user?.role === "admin" && (
           <button
             onClick={() => {
               if (showAddForm) {

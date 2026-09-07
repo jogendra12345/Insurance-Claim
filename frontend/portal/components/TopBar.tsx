@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { STAFF_ROLES } from "@/lib/types";
@@ -15,10 +16,130 @@ const TABS = (policyLabel: string) => [
 
 const STAFF_TAB = { href: "/tasks", label: "Tasks", match: (path: string) => path.startsWith("/tasks") };
 
+function initialsFor(email: string): string {
+  const local = email.split("@")[0] ?? email;
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  const letters = parts.length >= 2 ? parts[0][0] + parts[1][0] : local.slice(0, 2);
+  return letters.toUpperCase();
+}
+
+function UserMenu({ email, role, isAdmin }: { email: string; role: string; isAdmin: boolean }) {
+  const router = useRouter();
+  const { logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Account menu"
+        aria-expanded={open}
+        className="transition btn-press"
+        style={{
+          width: "32px",
+          height: "32px",
+          borderRadius: "50%",
+          border: "none",
+          background: "linear-gradient(135deg, var(--primary), var(--accent))",
+          color: "var(--primary-contrast)",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >
+        {initialsFor(email)}
+      </button>
+
+      {open && (
+        <div
+          className="animate-scale-in"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 0.5rem)",
+            right: 0,
+            minWidth: "220px",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+            boxShadow: "var(--shadow-card)",
+            padding: "0.5rem",
+            zIndex: 40,
+          }}
+        >
+          <div style={{ padding: "0.5rem 0.6rem 0.65rem", borderBottom: "1px solid var(--border)", marginBottom: "0.35rem" }}>
+            <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {email}
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "capitalize" }}>{role}</div>
+          </div>
+
+          {isAdmin && (
+            <a
+              href="/admin/register"
+              onClick={() => setOpen(false)}
+              className="transition"
+              style={{
+                display: "block",
+                padding: "0.5rem 0.6rem",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                color: "var(--text)",
+                textDecoration: "none",
+              }}
+            >
+              Register new user
+            </a>
+          )}
+
+          <button
+            onClick={async () => {
+              setOpen(false);
+              await logout();
+              router.push("/login");
+            }}
+            className="transition"
+            style={{
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "0.5rem 0.6rem",
+              borderRadius: "var(--radius-sm)",
+              border: "none",
+              background: "none",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            Log out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TopBar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
 
   const isStaff = !!user && STAFF_ROLES.includes(user.role);
   const isClaimant = user?.role === "claimant";
@@ -104,26 +225,7 @@ export function TopBar() {
           {!loading && (
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.85rem" }}>
               {user ? (
-                <>
-                  <span style={{ color: "var(--text-muted)" }}>{user.email}</span>
-                  <button
-                    onClick={async () => {
-                      await logout();
-                      router.push("/login");
-                    }}
-                    className="transition"
-                    style={{
-                      border: "none",
-                      background: "none",
-                      color: "var(--text)",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
-                  >
-                    Log out
-                  </button>
-                </>
+                <UserMenu email={user.email} role={user.role} isAdmin={user.role === "admin"} />
               ) : (
                 <a href="/login" className="transition" style={{ color: "var(--text)", fontWeight: 600, textDecoration: "none" }}>
                   Log in
