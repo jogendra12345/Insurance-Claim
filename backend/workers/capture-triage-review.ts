@@ -3,6 +3,7 @@ import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
 import { notifyRole } from "../shared/reviewer-notifications";
+import { computeBusinessDeadline } from "../shared/business-days";
 
 // SPEC.md §12 — capture-triage-review. Bridges Triage Review's output onto
 // `claims` — a human (Tasklist) completion has no way to write to Postgres
@@ -43,6 +44,7 @@ const JOB_TYPE = "capture-triage-review";
 
 interface CaptureTriageReviewOutput {
   decision?: "deny";
+  slaDeadline?: string;
 }
 
 zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, CaptureTriageReviewOutput>({
@@ -100,15 +102,21 @@ zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, 
       CONFIRMED_ROLE_TO_TASK_LABEL[confirmedRole]
     );
 
+    // .claude/specs/generic/sla-review-escalation.md — the role-specific
+    // review this opens (Adjuster/Investigator/Legal Review) has its own
+    // interrupting timer boundary event reading this via a `timeDate` FEEL
+    // expression; auto-escalate-review fires if nobody completes it in time.
+    const slaDeadline = computeBusinessDeadline(new Date()).toISOString();
+
     await writeAuditLog({
       claimId,
       actorType: "human",
       actorId: "tasklist",
       action: "triage_confirmed",
-      detail: { confirmedRole, assignedRole, overridden: confirmedRole !== assignedRole, reviewersNotified },
+      detail: { confirmedRole, assignedRole, overridden: confirmedRole !== assignedRole, reviewersNotified, slaDeadline },
     });
 
-    return job.complete({});
+    return job.complete({ slaDeadline });
   },
 });
 

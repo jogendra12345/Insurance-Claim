@@ -14,3 +14,6 @@ import "./trigger-settlement";
 import "./draft-denial-letter";
 import "./notify-claimant";
 import "./close-case";
+import "./auto-reject-validation-exception";
+import "./auto-confirm-triage";
+import "./auto-escalate-review";

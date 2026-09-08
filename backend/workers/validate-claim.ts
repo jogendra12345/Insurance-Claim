@@ -4,6 +4,7 @@ import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
 import { getInsuranceTypeConfig } from "../shared/insurance-types/health";
 import { notifyRole } from "../shared/reviewer-notifications";
+import { computeBusinessDeadline } from "../shared/business-days";
 
 // SPEC.md §12 — validate-claim.
 interface ValidateClaimVariables {
@@ -26,6 +27,7 @@ interface ValidateClaimOutput {
   // from prose. null when there's no matched policy to compare against.
   daysSincePolicyEffective: number | null;
   claimantClaimCountLast12Months: number;
+  slaDeadline: string | null;
 }
 
 const JOB_TYPE = "validate-claim";
@@ -142,6 +144,12 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       ? null
       : (await notifyRole("triage-team", claimId, "Validation Exception Review")).notifiedCount;
 
+    // .claude/specs/generic/sla-review-escalation.md — only relevant on the
+    // failure branch, since Validation Exception Review only opens then;
+    // its interrupting timer boundary event reads this via a `timeDate`
+    // FEEL expression.
+    const slaDeadline = validationPassed ? null : computeBusinessDeadline(new Date()).toISOString();
+
     await writeAuditLog({
       claimId,
       actorType: "system",
@@ -157,6 +165,7 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
         daysSincePolicyEffective,
         claimantClaimCountLast12Months,
         reviewersNotified,
+        slaDeadline,
       },
     });
 
@@ -168,6 +177,7 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       authorizedClaimant,
       daysSincePolicyEffective,
       claimantClaimCountLast12Months,
+      slaDeadline,
     });
   },
 });

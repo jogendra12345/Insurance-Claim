@@ -25,7 +25,16 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export async function notifyRole(role: string, claimId: string, taskLabel: string): Promise<{ notifiedCount: number }> {
+// .claude/specs/generic/sla-review-escalation.md — when a task opens because
+// an SLA timer escalated it rather than the normal DMN/triage routing, pass
+// the task it escalated *from* here so the email says so explicitly instead
+// of reading like any other "task is waiting" notice.
+export async function notifyRole(
+  role: string,
+  claimId: string,
+  taskLabel: string,
+  escalatedFrom?: string
+): Promise<{ notifiedCount: number }> {
   try {
     const { rows } = await pool.query(`SELECT email FROM users WHERE role = $1`, [role]);
     if (rows.length === 0) {
@@ -33,13 +42,20 @@ export async function notifyRole(role: string, claimId: string, taskLabel: strin
     }
 
     const tasksUrl = `${FRONTEND_URL}/tasks`;
-    const subject = `${taskLabel} task waiting — claim ${claimId}`;
+    const subject = escalatedFrom
+      ? `Task Escalated — claim ${claimId}`
+      : `${taskLabel} task waiting — claim ${claimId}`;
+    const bodyLine = escalatedFrom
+      ? `A task has been escalated from <strong>${escapeHtml(escalatedFrom)}</strong> to <strong>${escapeHtml(taskLabel)}</strong>. Please check the tasklist. Claim: <strong>${escapeHtml(claimId)}</strong>.`
+      : `A new <strong>${escapeHtml(taskLabel)}</strong> task is waiting on claim <strong>${escapeHtml(claimId)}</strong>.`;
     const html = `
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#111827;">
-  <p>A new <strong>${escapeHtml(taskLabel)}</strong> task is waiting on claim <strong>${escapeHtml(claimId)}</strong>.</p>
+  <p>${bodyLine}</p>
   <p><a href="${tasksUrl}" style="color:#2563eb;">Open your tasks</a></p>
 </div>`.trim();
-    const text = `A new ${taskLabel} task is waiting on claim ${claimId}.\n\nOpen your tasks: ${tasksUrl}`;
+    const text = escalatedFrom
+      ? `A task has been escalated from ${escalatedFrom} to ${taskLabel}. Please check the tasklist. Claim: ${claimId}.\n\nOpen your tasks: ${tasksUrl}`
+      : `A new ${taskLabel} task is waiting on claim ${claimId}.\n\nOpen your tasks: ${tasksUrl}`;
 
     await Promise.all(
       rows.map((row: { email: string }) =>
