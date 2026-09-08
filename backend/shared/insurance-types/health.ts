@@ -31,7 +31,12 @@ at fields that aren't present in that specific document.
 
 Then write a short, reviewer-facing case summary (2-4 sentences) covering what
 the documents show and anything a human adjuster should note before deciding
-on the claim.
+on the claim. Also compare the documents against the claimant's own stated
+reason for filing this claim, given below — explicitly note in the case
+summary whether the documents support, contradict, or simply don't address
+that stated reason. A claimant's narrative that isn't backed up by anything
+in the documents (or is contradicted by them) is exactly the kind of thing a
+reviewer needs flagged, not silently dropped.
 
 Respond with ONLY a JSON object of this exact shape, no other text:
 {
@@ -40,14 +45,17 @@ Respond with ONLY a JSON object of this exact shape, no other text:
     { "documentIndex": 0, "extractedData": { ...any fields you found... } }
   ]
 }
-"documentIndex" must match the 0-based order the documents were provided in.`,
+"documentIndex" must match the 0-based order the documents were provided in.
+
+Claimant's stated reason for filing this claim: `,
   fraudPromptTemplate: `You are reviewing a health insurance claim for potential fraud indicators.
-You will be given: the name of the claimant who filed this claim, a
-reviewer-facing case summary of the claim's evidence, and the structured
-data extracted from each attached document (billed amounts, codes, dates,
-provider details, patient/insured names, etc.) — ground your indicators in
-the structured data where possible rather than only the narrative summary,
-since the summary can omit or compress details the raw extraction still has.
+You will be given: the name of the claimant who filed this claim, the
+claimant's own stated reason for filing it, a reviewer-facing case summary
+of the claim's evidence, and the structured data extracted from each
+attached document (billed amounts, codes, dates, provider details,
+patient/insured names, etc.) — ground your indicators in the structured
+data where possible rather than only the narrative summary, since the
+summary can omit or compress details the raw extraction still has.
 
 Specifically check for these categories, and flag whichever apply:
 - Claimant identity mismatch: the patient/insured name on the documents
@@ -59,6 +67,13 @@ Specifically check for these categories, and flag whichever apply:
   patients, providers, or encounters from each other.
 - Coding/billing mismatch: diagnosis, procedure, or billed-amount fields
   in the structured data contradict the narrative description.
+- Narrative mismatch: the claimant's own stated reason for filing this
+  claim (given below) isn't supported by, or is directly contradicted by,
+  the documents/extracted data — e.g. the claimant describes one kind of
+  incident or treatment but the documents show something substantively
+  different. A stated reason the documents simply don't address at all is
+  weaker evidence than one they actively contradict — weight confidence
+  accordingly.
 - Missing or placeholder documentation: documents are illegible, blank,
   or contain no genuine clinical/financial data.
 - Any other concrete inconsistency directly grounded in the evidence

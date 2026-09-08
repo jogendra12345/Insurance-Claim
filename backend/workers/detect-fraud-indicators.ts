@@ -25,7 +25,7 @@ interface FraudDetectionResult {
 }
 
 const JOB_TYPE = "detect-fraud-indicators";
-const PROMPT_VERSION = "v3-claimant-identity-check";
+const PROMPT_VERSION = "v4-narrative-mismatch-check";
 
 // Below this, an indicator is stored for the record but not counted toward
 // fraudIndicatorCount / DMN routing — a single low-confidence guess
@@ -51,8 +51,18 @@ zeebeClient.createWorker<DetectFraudIndicatorsVariables, Record<string, unknown>
         ? `\n\nExtracted document data:\n${JSON.stringify(documents.map((d) => d.extracted_data))}`
         : "";
 
+    // The claimant's own stated reason (SPEC.md §9's incident_description) —
+    // sent directly, not just relying on caseSummary to have preserved it,
+    // so the "narrative mismatch" category above has something concrete to
+    // compare against extractedDataBlock.
+    const { rows: claimRows } = await pool.query<{ incident_description: string }>(
+      `SELECT incident_description FROM claims WHERE id = $1`,
+      [claimId]
+    );
+    const incidentDescription = claimRows[0]?.incident_description ?? "";
+
     const responseText = await generateContent(
-      `${config.fraudPromptTemplate}${claimantName}\n\nCase summary:\n${caseSummary}${extractedDataBlock}`
+      `${config.fraudPromptTemplate}${claimantName}\n\nClaimant's stated reason for filing this claim:\n${incidentDescription}\n\nCase summary:\n${caseSummary}${extractedDataBlock}`
     );
     const result = parseJsonResponse<FraudDetectionResult>(responseText);
 

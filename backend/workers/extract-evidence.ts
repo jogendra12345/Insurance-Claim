@@ -21,7 +21,7 @@ interface ExtractionResult {
 }
 
 const JOB_TYPE = "extract-evidence";
-const PROMPT_VERSION = "v1";
+const PROMPT_VERSION = "v2-narrative-cross-check";
 
 zeebeClient.createWorker<ExtractEvidenceVariables, Record<string, unknown>, ExtractEvidenceOutput>({
   taskType: JOB_TYPE,
@@ -33,6 +33,16 @@ zeebeClient.createWorker<ExtractEvidenceVariables, Record<string, unknown>, Extr
       `SELECT id, file_url FROM claim_documents WHERE claim_id = $1 ORDER BY created_at`,
       [claimId]
     );
+
+    // The claimant's own stated reason for filing (SPEC.md §9's
+    // incident_description) — without this, extraction only ever compares
+    // documents against each other, never against what the claimant actually
+    // said happened.
+    const { rows: claimRows } = await pool.query<{ incident_description: string }>(
+      `SELECT incident_description FROM claims WHERE id = $1`,
+      [claimId]
+    );
+    const incidentDescription = claimRows[0]?.incident_description ?? "";
 
     if (documents.length === 0) {
       const caseSummary = "No documents were attached to this claim.";
@@ -51,7 +61,7 @@ zeebeClient.createWorker<ExtractEvidenceVariables, Record<string, unknown>, Extr
     }
 
     const parts = await Promise.all(documents.map((doc) => fetchAsInlinePart(doc.file_url)));
-    const responseText = await generateContent(config.promptTemplate, parts);
+    const responseText = await generateContent(`${config.promptTemplate}${incidentDescription}`, parts);
     const result = parseJsonResponse<ExtractionResult>(responseText);
 
     await pool.query(`UPDATE claims SET case_summary = $1, updated_at = now() WHERE id = $2`, [
