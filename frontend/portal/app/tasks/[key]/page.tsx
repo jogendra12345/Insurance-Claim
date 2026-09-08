@@ -32,7 +32,11 @@ function isPdf(url: string): boolean {
 // Same field sets as process/forms/{triage-review,review-decision,
 // validation-exception-review}.form — completed here through the
 // backend/api proxy instead of stock Camunda Tasklist. Supervisor Sign-off
-// has no form (a plain confirm).
+// has no form (a plain confirm). Supervisor Review (the SLA-escalation
+// fallback when Legal Review times out — generic/sla-review-escalation.md)
+// shares ReviewDecisionForm with Adjuster/Investigator/Legal Review, same as
+// every other role review, so it falls through TaskForm's default case below
+// rather than needing its own branch.
 const REVIEW_ROLES = ["adjuster", "investigator", "legal"] as const;
 
 export default function TaskDetailPage() {
@@ -264,7 +268,7 @@ function TaskForm({
       </button>
     );
   }
-  // Adjuster / Investigator / Legal Review all share ReviewDecisionForm.
+  // Adjuster / Investigator / Legal / Supervisor Review all share ReviewDecisionForm.
   return <ReviewDecisionForm busy={busy} onComplete={onComplete} />;
 }
 
