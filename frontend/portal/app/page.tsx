@@ -8,7 +8,7 @@ import { ClaimTable } from "@/components/ClaimTable";
 import { EmptyState } from "@/components/EmptyState";
 import { PolicySelect } from "@/components/PolicySelect";
 import { STATUS_META } from "@/components/StatusBadge";
-import { ShieldCheckIllustration, DocumentIllustration } from "@/components/HeroIllustrations";
+import { ShieldCheckIllustration, DocumentIllustration, IdCardIllustration } from "@/components/HeroIllustrations";
 
 const ALL_STATUSES: ClaimStatus[] = ["submitted", "validating", "triage", "in_review", "awaiting_info", "approved", "denied"];
 
@@ -24,7 +24,7 @@ const STAT_FILTER_LABEL: Record<Exclude<StatFilter, null>, string> = {
 };
 
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [policyFilter, setPolicyFilter] = useState("");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [state, setState] = useState<LoadState>("loading");
@@ -46,10 +46,24 @@ export default function HomePage() {
     }
   }, []);
 
+  // generic/public-landing-page.md — an anonymous visitor never reaches
+  // fetchAllClaims()/fetchActiveClaimsByPolicy() at all (both require a
+  // session, so this would otherwise 401), and never sees the claims UI.
   useEffect(() => {
+    if (authLoading || !user) return;
     void load("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, user]);
+
+  if (authLoading) {
+    // Avoids a flash of landing content for an already-logged-in user whose
+    // session just hasn't resolved yet.
+    return null;
+  }
+
+  if (!user) {
+    return <LandingPage />;
+  }
 
   const totalClaims = claims.length;
   const activeClaims = claims.filter((c) => ACTIVE_STATUSES.includes(c.status)).length;
@@ -262,6 +276,87 @@ export default function HomePage() {
       {state === "loaded" && visibleClaims.length > 0 && (
         <ClaimTable claims={pagedClaims} page={page} pageSize={PAGE_SIZE} total={visibleClaims.length} onPageChange={setPage} />
       )}
+    </main>
+  );
+}
+
+const LANDING_STEPS: Array<{ label: string; body: string; Icon: (props: { className?: string }) => React.JSX.Element }> = [
+  { label: "Submit", body: "File a claim with your policy details and supporting documents.", Icon: DocumentIllustration },
+  { label: "AI triage", body: "Documents are read and the claim is scored and routed automatically.", Icon: IdCardIllustration },
+  { label: "Human decision", body: "A reviewer confirms the routing and makes the final call — always.", Icon: ShieldCheckIllustration },
+];
+
+/** generic/public-landing-page.md — shown at `/` instead of the claims list for anyone not logged in. No data fetching. */
+function LandingPage() {
+  return (
+    <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "2.5rem" }}>
+      <section
+        className="hero animate-fade-in-up"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1.5rem", flexWrap: "wrap", padding: "2.5rem 2.25rem" }}
+      >
+        <span className="hero-orb hero-orb--a" aria-hidden="true" />
+        <span className="hero-orb hero-orb--b" aria-hidden="true" />
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: "560px" }}>
+          <h1 style={{ margin: 0, fontSize: "2.1rem" }}>ClaimFlow AI</h1>
+          <p style={{ margin: 0, color: "var(--text-muted)" }}>
+            AI-assisted claims triage that reads your documents, flags what needs a closer look, and routes the
+            claim to the right reviewer — but a human always confirms the routing and makes the final decision.
+          </p>
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.5rem", flexWrap: "wrap" }}>
+            <a
+              href="/login"
+              className="transition btn-press"
+              style={{
+                padding: "0.6rem 1.2rem",
+                borderRadius: "var(--radius-sm)",
+                border: "none",
+                background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
+                color: "var(--primary-contrast)",
+                fontWeight: 600,
+                textDecoration: "none",
+                boxShadow: "0 2px 10px var(--primary-glow)",
+              }}
+            >
+              Log in
+            </a>
+            <a href="/signup" className="transition" style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>
+              Sign up
+            </a>
+          </div>
+        </div>
+        <div aria-hidden="true" style={{ display: "flex", alignItems: "flex-end", gap: "0.9rem", flexShrink: 0 }}>
+          <ShieldCheckIllustration className="float-icon" />
+          <DocumentIllustration className="float-icon-delay" />
+        </div>
+      </section>
+
+      <div className="stagger-list" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
+        {LANDING_STEPS.map(({ label, body, Icon }, i) => (
+          <div
+            key={label}
+            className="card-lift transition"
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              background: "var(--surface)",
+              boxShadow: "var(--shadow-card)",
+              padding: "1.25rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.6rem",
+            }}
+          >
+            <div aria-hidden="true" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "56px" }}>
+              <Icon />
+            </div>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>
+              Step {i + 1}
+            </span>
+            <span style={{ fontFamily: "var(--font-display)", fontSize: "1.05rem", fontWeight: 600 }}>{label}</span>
+            <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-muted)" }}>{body}</p>
+          </div>
+        ))}
+      </div>
     </main>
   );
 }

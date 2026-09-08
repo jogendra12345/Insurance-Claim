@@ -143,7 +143,12 @@ export function TopBar() {
 
   const isStaff = !!user && STAFF_ROLES.includes(user.role);
   const isClaimant = user?.role === "claimant";
-  const tabs = isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
+  // generic/public-landing-page.md — the landing page (unauthenticated, at
+  // "/") already has its own "Log in"/"Sign up" CTAs; Policies/Claims/Log in
+  // in the nav would just be dead links (both require a session) or a
+  // redundant second way to reach the same login page.
+  const isAnonymousLanding = !loading && !user && pathname === "/";
+  const tabs = isAnonymousLanding ? [] : isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
 
   return (
     <header
@@ -222,7 +227,7 @@ export function TopBar() {
         </nav>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "1rem" }}>
-          {!loading && (
+          {!loading && !isAnonymousLanding && (
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.85rem" }}>
               {user ? (
                 <UserMenu email={user.email} role={user.role} isAdmin={user.role === "admin"} />
