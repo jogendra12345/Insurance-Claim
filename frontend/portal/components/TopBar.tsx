@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { STAFF_ROLES } from "@/lib/types";
 import { ThemeToggle } from "./ThemeToggle";
+import { LandingTopNav } from "./landing/TopNav";
 
 // A claimant only ever has the one policy summary behind this tab
 // (app/policies/page.tsx redirects them straight to it), so the tab reads
@@ -144,11 +145,13 @@ export function TopBar() {
   const isStaff = !!user && STAFF_ROLES.includes(user.role);
   const isClaimant = user?.role === "claimant";
   // generic/public-landing-page.md — the landing page (unauthenticated, at
-  // "/") already has its own "Log in"/"Sign up" CTAs; Policies/Claims/Log in
-  // in the nav would just be dead links (both require a session) or a
-  // redundant second way to reach the same login page.
+  // "/") gets its own dedicated header entirely (design-reference/landing.html),
+  // not a filtered version of the app's normal Policies/Claims/Tasks nav.
   const isAnonymousLanding = !loading && !user && pathname === "/";
-  const tabs = isAnonymousLanding ? [] : isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
+  if (isAnonymousLanding) {
+    return <LandingTopNav />;
+  }
+  const tabs = isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
 
   return (
     <header
@@ -227,7 +230,7 @@ export function TopBar() {
         </nav>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "1rem" }}>
-          {!loading && !isAnonymousLanding && (
+          {!loading && (
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.85rem" }}>
               {user ? (
                 <UserMenu email={user.email} role={user.role} isAdmin={user.role === "admin"} />

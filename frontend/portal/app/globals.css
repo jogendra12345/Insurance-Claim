@@ -91,6 +91,36 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
+/* "Claims ledger" theme — design-reference/landing.html. A second, fixed
+   (non-dark-mode-reactive) palette alongside the app's existing warm-neutral
+   theme above, not a replacement for it — the landing page is the first
+   surface built against it, with Policies/Claim Detail intended to follow
+   later, hence living here as shared tokens rather than page-scoped styles.
+   font-display/font-body intentionally reused from above (already
+   Fraunces/IBM Plex Sans) rather than redefined; --font-mono is genuinely
+   new, nothing in the existing theme names a monospace stack. */
+:root {
+  --ink: #16233f;
+  --ink-soft: #2b3b5c;
+  --paper: #fbf9f4;
+  --paper-raised: #ffffff;
+  --paper-2: #f1ecdf;
+  --rule: #ddd5c2;
+  --rule-soft: #eae4d5;
+  --slate: #5b6472;
+  --slate-soft: #8b92a0;
+  --amber: #9c6b0b;
+  --amber-bg: #fbf0da;
+  --amber-line: #e7c783;
+  --crimson: #9a2a20;
+  --crimson-bg: #fbebe8;
+  --crimson-line: #e7b6ae;
+  --forest: #2c6b49;
+  --forest-bg: #e9f3ec;
+
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -563,4 +593,167 @@ textarea:focus {
   58% { opacity: 0.55; }
   72% { opacity: 1; }
   100% { opacity: 1; }
+}
+
+/* ============================================================
+   Landing page — "claims ledger" redesign
+   (design-reference/landing.html, generic/public-landing-page.md)
+   Structural/layout rules only, kept out of inline styles because they
+   need real media queries. All class names are landing-*-prefixed to
+   avoid colliding with existing bare names (.hero in particular is
+   already used by the authenticated dashboard's own hero banner).
+   ============================================================ */
+
+.landing-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 20px 56px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-raised);
+}
+
+.landing-nav-cta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.landing-topnav {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+}
+
+.landing-content {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 56px;
+}
+
+.landing-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 60px;
+  padding: 76px 0 64px;
+}
+
+.landing-hero-left {
+  flex: 1 1 420px;
+  min-width: 320px;
+  max-width: 560px;
+}
+
+.landing-hero-right {
+  position: relative;
+  flex: 1 1 320px;
+  min-width: 280px;
+  display: flex;
+  justify-content: center;
+}
+
+.landing-ledger-steps {
+  display: flex;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 80px;
+}
+
+.landing-ledger-step {
+  flex: 1;
+  padding: 28px 26px 30px;
+}
+
+.landing-ledger-step:not(:last-child) {
+  border-right: 1px solid var(--rule);
+}
+
+.landing-value-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 80px;
+}
+
+.landing-value-item {
+  width: 50%;
+  padding: 20px 30px 20px 0;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.landing-value-item:nth-child(odd) {
+  padding-right: 40px;
+}
+
+.landing-value-item:nth-child(even) {
+  padding-left: 40px;
+  border-left: 1px solid var(--rule-soft);
+}
+
+.landing-cta-band {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 56px 64px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.landing-footer {
+  border-top: 1px solid var(--rule);
+  padding: 28px 56px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Hero: single column below ~900px, per spec. */
+@media (max-width: 900px) {
+  .landing-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 40px;
+    padding: 48px 0 40px;
+  }
+  .landing-hero-left {
+    max-width: 100%;
+  }
+  .landing-hero-right {
+    width: 100%;
+  }
+}
+
+/* Value props: single column below ~700px, per spec. Narrower screens
+   also get tighter page padding throughout, rather than keeping the
+   desktop mockup's 56-64px edge padding on a phone-width viewport. */
+@media (max-width: 700px) {
+  .landing-value-grid {
+    flex-direction: column;
+  }
+  .landing-value-item {
+    width: 100%;
+    padding: 20px 0;
+    border-left: none;
+  }
+  .landing-topbar,
+  .landing-content,
+  .landing-cta-band,
+  .landing-footer {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .landing-cta-band {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-top: 40px;
+    padding-bottom: 40px;
+  }
 }
