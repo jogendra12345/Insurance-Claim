@@ -6,7 +6,7 @@
 
 Every review task in the process today (§10 steps 3, 9, 12) can sit open indefinitely — nothing prevents a claim stalling for days waiting on `Validation Exception Review`, `Triage Review`, or a role-specific review if the assigned team just doesn't get to it. This spec adds a wall-clock SLA to each of those tasks: **24 hours** after any of them opens, if it's still not completed by a human, a system-triggered action fires automatically so the claim keeps moving instead of silently stalling.
 
-This is a distinct, complementary mechanism to `[[cross-role-escalation]]` (already drafted): that spec is a **human choosing** to hand an investigator's in-progress review to legal. This spec is a **timer firing** because nobody acted at all, on three different task types, with three different automatic outcomes depending on which task timed out. Both can coexist — an investigator can still manually escalate at any point inside the 24-hour window; if neither a manual escalate nor a normal decision happens before the window closes, the timer takes over.
+Escalation here is **automatic only** — there is no human "escalate" button on any review task. An earlier draft (`generic/cross-role-escalation`) explored a manual, human-initiated investigator→legal escalate option; it was dropped in favor of this timer-only mechanism, so all cross-role movement in this app happens exclusively through the timeout paths below, on three different task types, with three different automatic outcomes depending on which task timed out.
 
 ## Scope
 
@@ -16,7 +16,7 @@ This is a distinct, complementary mechanism to `[[cross-role-escalation]]` (alre
   - `Validation Exception Review` → **auto-reject** (same shape as the existing manual `reject` branch), with a fixed, canned `denialReason`.
   - `Triage Review` → **auto-confirm** the AI's `assignedRole` as `confirmedRole` (equivalent to a human choosing `triageAction = "review"` and accepting the suggestion as-is), then continues to the appropriate role-specific review exactly as today.
   - `Adjuster Review` → auto-escalates to `Investigator Review`.
-  - `Investigator Review` → auto-escalates to `Legal Review` (same destination task as `[[cross-role-escalation]]`'s manual path, but a distinct `audit_log.action` — see Design).
+  - `Investigator Review` → auto-escalates to `Legal Review`.
   - `Legal Review` → auto-escalates to a **new** `Supervisor Review` task (candidate group `supervisors`) — legal is the DMN's top tier (§11), so there's no further role to hand off to; supervisor is the last-resort fallback for this one case only.
 - `Supervisor Review`: a new User Task, distinct from the existing `Supervisor Sign-off` (§10 step 15). Reuses `ReviewDecisionForm` (`approve`/`deny`/`moreInfo`, same as the three role reviews) so a supervisor picking up an SLA-orphaned claim has the same real decision authority a role reviewer would have had — not the rubber-stamp `Supervisor Sign-off` does today.
 - All five auto-actions write `audit_log` with `actor_type = "system"` (not `human`) and a distinct `action` value per outcome, so `/case-trace` and any future audit view (`BUILD-PLAN.md` #33) can tell an SLA timeout apart from a human decision at a glance.
@@ -38,10 +38,10 @@ Five new **interrupting Timer Boundary Events**, each attached to one existing U
 
 | Attached to | On fire → Service Task | Then flows into |
 |---|---|---|
-| `Validation Exception Review` | `auto-reject-validation-exception` | Denial path (step 16) — same shared node `Task_DraftDenialLetter` the manual `reject` branch and `[[cross-role-escalation]]`-adjacent paths already merge into (§10 step 11's pattern) |
+| `Validation Exception Review` | `auto-reject-validation-exception` | Denial path (step 16) — same shared node `Task_DraftDenialLetter` the manual `reject` branch already merges into (§10 step 11's pattern) |
 | `Triage Review` | `auto-confirm-triage` | `Route by Confirmed Role` gateway (§10 step 12), same as the manual `"review"` branch |
 | `Adjuster Review` | `auto-escalate-review` (`fromRole="adjuster"`, `toRole="investigator"`) | `Investigator Review` (new incoming flow onto that existing task node) |
-| `Investigator Review` | `auto-escalate-review` (`fromRole="investigator"`, `toRole="legal"`) | `Legal Review` (same task node `[[cross-role-escalation]]`'s manual escalate already loops into — now three incoming flows: DMN-routed, manually escalated, SLA-escalated) |
+| `Investigator Review` | `auto-escalate-review` (`fromRole="investigator"`, `toRole="legal"`) | `Legal Review` (new incoming flow onto that existing task node, alongside the DMN-routed one) |
 | `Legal Review` | `auto-escalate-review` (`fromRole="legal"`, `toRole="supervisor"`) | New **User Task** `Supervisor Review` (candidate group `supervisors`, form `ReviewDecisionForm`) → same `capture-review-decision`/`Decision` gateway flow every other role review already feeds (§10 step 13-14) |
 
 No changes to any non-timer sequence flow — every task's normal (human-completed) path is untouched.
@@ -52,7 +52,7 @@ No changes to any non-timer sequence flow — every task's normal (human-complet
 |---|---|---|---|
 | `auto-reject-validation-exception` | `claimId` | Writes `claims.decision = 'deny'`, `claims.denial_reason = "Auto-rejected: validation exception unresolved after 24 hours"` (fixed string), sets `claims.status = 'denied'`; writes `audit_log` (`actor_type: "system"`, `action: "validation_exception_auto_rejected"`, `detail: { slaHours: 24 }`). No `notifyRole()` call — this denies the claim rather than opening a new review task, matching why `notify-claimant` (not a reviewer notification) already handles the denial path. | — |
 | `auto-confirm-triage` | `claimId`, `assignedRole` | Writes `claims.confirmed_role = assignedRole`, sets `claims.status = 'in_review'`; writes `audit_log` (`actor_type: "system"`, `action: "triage_auto_confirmed"`, `detail: { slaHours: 24, confirmedRole: assignedRole }`); best-effort calls `notifyRole()` for whichever role-specific review task this opens (same `confirmedRole` → `users.role` mapping `[[reviewer_task_notification_test_mode]]` already defines — `adjuster`→`adjuster`, `investigator`→`investigator`, `legal`→`legal-reviewer`). This duplicates `capture-triage-review`'s own hook point rather than reusing it, since `auto-confirm-triage` is a separate worker that never calls `capture-triage-review`. | `confirmedRole` (= `assignedRole`, so the downstream `Route by Confirmed Role` gateway reads it the same way it reads a human-set value) |
-| `auto-escalate-review` | `claimId`, `fromRole`, `toRole` | Writes `claims.confirmed_role = toRole`; writes `audit_log` (`actor_type: "system"`, `action: "review_sla_escalated"`, `detail: { slaHours: 24, fromRole, toRole }`) — deliberately a different `action` string from `[[cross-role-escalation]]`'s manual `capture-escalation` (`"escalated_to_legal"`), so the two are distinguishable in `audit_log`/`/case-trace` even though `investigator→legal` can be reached either way; best-effort calls `notifyRole()` for `toRole` (mapped to the `users.role` string per the table above — `investigator`→`investigator`, `legal`→`legal-reviewer`, `supervisor`→`supervisor`), pointing the newly-responsible reviewer(s) at the task they've just inherited | — |
+| `auto-escalate-review` | `claimId`, `fromRole`, `toRole` | Writes `claims.confirmed_role = toRole`; writes `audit_log` (`actor_type: "system"`, `action: "review_sla_escalated"`, `detail: { slaHours: 24, fromRole, toRole }`); best-effort calls `notifyRole()` for `toRole` (mapped to the `users.role` string per the table above — `investigator`→`investigator`, `legal`→`legal-reviewer`, `supervisor`→`supervisor`), pointing the newly-responsible reviewer(s) at the task they've just inherited | — |
 
 All three follow the same best-effort contract `[[reviewer_task_notification_test_mode]]` already established (§ that spec's "Failure isolation"): a `try/catch` around lookup+send that only `console.error`s on failure, never throws — a notification outage can't turn a working SLA timeout into a failed job/Operate incident. Same test-mode caveat applies too: while `[[reviewer_task_notification_test_mode]]` stays in test mode, every one of these escalation emails also lands at the fixed test address, not the real reviewer's inbox.
 
@@ -61,7 +61,7 @@ All three are plain `capture-*`-style workers (no AI call, no external I/O) — 
 ### `Supervisor Review` (new User Task)
 
 - Candidate group `supervisors` (already exists as a role/group per §8's roles table — reused, not new).
-- Form: `ReviewDecisionForm`, same as `Adjuster Review`/`Investigator Review`/`Legal Review` — `decision` (`approve`/`deny`/`moreInfo`) + `denialReason` when denying. No `escalate` option (§`[[cross-role-escalation]]`'s scope is investigator-only, and there's no role above supervisor to hand off to regardless).
+- Form: `ReviewDecisionForm`, same as `Adjuster Review`/`Investigator Review`/`Legal Review` — `decision` (`approve`/`deny`/`moreInfo`) only, same three outcomes every role review already has. No escalate option here either — supervisor is the last tier, nowhere further to hand off to.
 - Feeds the same `capture-review-decision` → `Decision` gateway → approve/deny/moreInfo paths every other role review already uses (§10 steps 13-14) — no new downstream branching needed.
 - In-app `/tasks` UI (`frontend/portal/app/tasks/[key]/page.tsx`) and `GET /api/tasks`'s role→candidate-group map (§14 auth design) both need `supervisor` added as a task type they can list/complete, alongside the existing `adjuster`/`investigator`/`legal-reviewer` role reviews — today supervisors only ever see `Supervisor Sign-off` tasks there.
 
