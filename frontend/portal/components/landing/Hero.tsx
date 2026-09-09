@@ -34,7 +34,7 @@ export function Hero() {
           AI-Assisted Claims Triage
         </div>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: "42px", lineHeight: 1.18, letterSpacing: "-0.5px", margin: "14px 0 20px" }}>
-          Claims triage that reads the file — so reviewers don&rsquo;t start blind.
+          Intelligent triage, accountable decisions.
         </h1>
         <p style={{ fontSize: "15.5px", lineHeight: 1.65, color: "var(--slate)", margin: "0 0 30px", maxWidth: "500px" }}>
           ClaimFlow AI reads every submitted document, flags what needs a closer look, and routes each claim to the
