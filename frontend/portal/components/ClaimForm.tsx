@@ -92,6 +92,17 @@ export function ClaimForm() {
     };
   }, [isClaimant, policyNumber]);
 
+  // Claimants' own logged-in account email, not typed by hand — GET
+  // /api/claims scopes "my claims" to lower(claimant_email) = lower(the
+  // session's email), so a hand-typed email that doesn't exactly match the
+  // account (a typo, or a different address entirely) makes a submitted
+  // claim invisible in the claimant's own claims list even though it was
+  // submitted successfully. Locking it here (disabled below) closes that off.
+  useEffect(() => {
+    if (!isClaimant || !user?.email || claimantEmail) return;
+    setClaimantEmail(user.email);
+  }, [isClaimant, user?.email, claimantEmail]);
+
   const [diagnosisCode, setDiagnosisCode] = useState("");
   const [procedureCode, setProcedureCode] = useState("");
   const [providerNpi, setProviderNpi] = useState("");
@@ -399,13 +410,18 @@ export function ClaimForm() {
               />
             </Field>
 
-            <Field label="Email" error={fieldErrors.claimantEmail}>
+            <Field
+              label="Email"
+              error={fieldErrors.claimantEmail}
+              hint={isClaimant ? "Your account email — claims are matched to your account by this address." : undefined}
+            >
               <input
                 type="email"
                 value={claimantEmail}
                 onChange={(e) => setClaimantEmail(e.target.value)}
                 placeholder="Start typing your email..."
-                style={inputStyle}
+                disabled={isClaimant}
+                style={isClaimant ? disabledInputStyle : inputStyle}
               />
             </Field>
 

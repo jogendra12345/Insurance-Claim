@@ -59,7 +59,7 @@ authRouter.post("/signup", async (req, res) => {
     const passwordHash = await hashPassword(password);
     const { rows } = await pool.query(
       `INSERT INTO users (email, password_hash, role) VALUES ($1, $2, 'claimant') RETURNING *`,
-      [email, passwordHash]
+      [String(email).trim(), passwordHash]
     );
     const user = rows[0];
     setSessionCookie(res, { userId: user.id, email: user.email, role: user.role });
@@ -94,7 +94,7 @@ authRouter.post("/register-staff", requireRole("admin"), async (req, res) => {
     const passwordHash = await hashPassword(password);
     const { rows } = await pool.query(
       `INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING *`,
-      [email, passwordHash, role]
+      [String(email).trim(), passwordHash, role]
     );
     res.status(201).json(serializeUser(rows[0]));
   } catch (err: any) {

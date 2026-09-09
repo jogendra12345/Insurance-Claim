@@ -41,6 +41,13 @@ export const mockNotificationProvider: NotificationProvider = {
 // the inverse direction), so introduced here.
 const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
+// Test-mode override (mirrors reviewer-notifications.ts's TEST_RECIPIENT,
+// same 2026-09-07 lock note): this is a small internal test app, and seeded
+// claimant accounts use @example.com addresses that can't receive mail, so
+// every claimant notification is redirected here instead of claims.claimant_email.
+// Change this one constant to restore real per-claimant delivery.
+const TEST_RECIPIENT = "ayanchou2015@gmail.com";
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -122,7 +129,7 @@ function buildEmail(context: NotificationContext): { subject: string; html: stri
 export const resendNotificationProvider: NotificationProvider = {
   async send(context) {
     const { subject, html, text } = buildEmail(context);
-    await sendViaResend({ to: context.claimantEmail, subject, html, text });
+    await sendViaResend({ to: TEST_RECIPIENT, subject: `[${context.claimantEmail}] ${subject}`, html, text });
     return { notificationSent: true };
   },
 };
@@ -139,7 +146,7 @@ export const resendNotificationProvider: NotificationProvider = {
 export const gmailNotificationProvider: NotificationProvider = {
   async send(context) {
     const { subject, html, text } = buildEmail(context);
-    await sendViaGmail({ to: context.claimantEmail, subject, html, text });
+    await sendViaGmail({ to: TEST_RECIPIENT, subject: `[${context.claimantEmail}] ${subject}`, html, text });
     return { notificationSent: true };
   },
 };
