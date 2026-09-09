@@ -359,15 +359,29 @@ export function ClaimForm() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-      <Stepper current={step} />
-
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+    <Stepper current={step} />
+    <div style={{ display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: "2rem", alignItems: "start" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", order: 2 }}>
       <form
         onSubmit={handleSubmit}
-        style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
+        style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
         noValidate
       >
-      <div key={step} className="animate-fade-in-up" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <div
+        key={step}
+        className="animate-fade-in-up"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.75rem",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-md)",
+          boxShadow: "var(--shadow-card)",
+          padding: "1.25rem 1.4rem",
+        }}
+      >
         {step === 0 && (
           <>
             <Field
@@ -439,7 +453,7 @@ export function ClaimForm() {
               <textarea
                 value={incidentDescription}
                 onChange={(e) => setIncidentDescription(e.target.value)}
-                rows={4}
+                rows={3}
                 placeholder="Briefly describe what happened, when, and where."
                 style={{ ...inputStyle, resize: "vertical" }}
               />
@@ -859,55 +873,147 @@ export function ClaimForm() {
         </div>
       </form>
     </div>
+
+      <LiveSummaryPanel
+        step={step}
+        policyNumber={policyNumber}
+        claimType={CLAIM_TYPES.find((t) => t.value === claimType)?.label ?? claimType}
+        claimantName={claimantName}
+        incidentDate={incidentDate}
+        claimAmount={claimAmount}
+        coverageAmount={coverageAmount}
+        diagnosisCode={diagnosisCode}
+        procedureCode={procedureCode}
+        facilityName={facilityName}
+        documentCount={documents.length}
+      />
+    </div>
+    </div>
   );
 }
 
 function Stepper({ current }: { current: number }) {
   return (
-    <ol style={{ display: "flex", alignItems: "center", padding: 0, margin: 0, listStyle: "none" }}>
-      {STEPS.map((label, i) => {
-        const done = i < current;
-        const active = i === current;
-        return (
-          <li key={label} style={{ display: "flex", alignItems: "center" }}>
-            <span
-              className="transition"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "24px",
-                height: "24px",
-                borderRadius: "50%",
-                fontSize: "0.78rem",
-                fontWeight: 700,
-                flexShrink: 0,
-                background: done || active ? "var(--primary)" : "var(--surface-2)",
-                color: done || active ? "var(--primary-contrast)" : "var(--text-muted)",
-                transform: active ? "scale(1.15)" : "scale(1)",
-              }}
-              aria-hidden="true"
-            >
-              {done ? "✓" : i + 1}
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)" }}>
+          Step {current + 1} of {STEPS.length}: {STEPS[current]}
+        </span>
+        <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+          {Math.round(((current + 1) / STEPS.length) * 100)}%
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: "0.3rem" }} role="progressbar" aria-valuenow={current + 1} aria-valuemin={1} aria-valuemax={STEPS.length}>
+        {STEPS.map((label, i) => (
+          <span
+            key={label}
+            className="transition"
+            title={label}
+            style={{
+              flex: 1,
+              height: "4px",
+              borderRadius: "2px",
+              background: i <= current ? "var(--primary)" : "var(--surface-2)",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", padding: "0.4rem 0", borderBottom: "1px solid var(--border)", fontSize: "0.78rem" }}>
+      <span style={{ color: "var(--text-muted)" }}>{label}</span>
+      <span style={{ fontWeight: 600, textAlign: "right", color: value === "—" ? "var(--text-muted)" : "var(--text)" }}>{value}</span>
+    </div>
+  );
+}
+
+/** Sticky sidebar mirroring the form's own state back as data instead of decoration — read-only, no inputs of its own. */
+function LiveSummaryPanel({
+  step,
+  policyNumber,
+  claimType,
+  claimantName,
+  incidentDate,
+  claimAmount,
+  coverageAmount,
+  diagnosisCode,
+  procedureCode,
+  facilityName,
+  documentCount,
+}: {
+  step: number;
+  policyNumber: string;
+  claimType: string;
+  claimantName: string;
+  incidentDate: string;
+  claimAmount: string;
+  coverageAmount: number | null;
+  diagnosisCode: string;
+  procedureCode: string;
+  facilityName: string;
+  documentCount: number;
+}) {
+  const amountValue = Number(claimAmount);
+  const overCoverage = coverageAmount !== null && amountValue > 0 && amountValue > coverageAmount;
+
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: "2.5rem",
+        order: 1,
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-md)",
+        boxShadow: "var(--shadow-card)",
+        padding: "1.25rem 1.4rem",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.9rem",
+      }}
+    >
+      <div>
+        <span style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+          Claim summary
+        </span>
+      </div>
+
+      <div>
+        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: "0.15rem" }}>Requested amount</div>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", fontWeight: 600, color: overCoverage ? "var(--danger-fg)" : "var(--text)" }}>
+          {amountValue > 0 ? amountValue.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "—"}
+        </div>
+        {overCoverage && (
+          <div style={{ fontSize: "0.72rem", color: "var(--danger-fg)", marginTop: "0.2rem" }}>Exceeds policy coverage</div>
+        )}
+      </div>
+
+      <div>
+        <SummaryRow label="Policy" value={policyNumber || "—"} />
+        <SummaryRow label="Claim type" value={claimType || "—"} />
+        <SummaryRow label="Claimant" value={claimantName || "—"} />
+        <SummaryRow label="Incident date" value={incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"} />
+        {step >= 2 && <SummaryRow label="Diagnosis" value={diagnosisCode || "—"} />}
+        {step >= 2 && <SummaryRow label="Procedure" value={procedureCode || "—"} />}
+        {step >= 2 && <SummaryRow label="Provider" value={facilityName || "—"} />}
+        {step >= 3 && <SummaryRow label="Documents" value={documentCount > 0 ? `${documentCount} attached` : "None yet"} />}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+        {STEPS.map((label, i) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: i < step ? "var(--text)" : i === step ? "var(--primary)" : "var(--text-muted)" }}>
+            <span aria-hidden="true" style={{ width: "14px", flexShrink: 0 }}>
+              {i < step ? "✓" : i === step ? "●" : "○"}
             </span>
-            <span
-              style={{
-                marginLeft: "0.5rem",
-                fontSize: "0.82rem",
-                fontWeight: active ? 600 : 500,
-                color: active ? "var(--text)" : "var(--text-muted)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {label}
-            </span>
-            {i < STEPS.length - 1 && (
-              <span style={{ width: "2.5rem", flexShrink: 0, height: "1px", background: "var(--border)", margin: "0 0.75rem" }} />
-            )}
-          </li>
-        );
-      })}
-    </ol>
+            {label}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -953,19 +1059,21 @@ function ReviewSummary({
         ? new Date(serviceDateFrom).toLocaleDateString()
         : "—";
 
-  const rows: [string, string][] = [
+  // [label, value, full-width?] — the two free-text fields run long enough
+  // to need the full row; everything else pairs up two-per-row.
+  const rows: [string, string, boolean?][] = [
     ["Policy number", policyNumber],
     ["Claim type", claimType],
     ["Your name", claimantName],
     ["Email", claimantEmail],
     ["Incident date", incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"],
-    ["What happened", incidentDescription],
     [
       "Requested claim amount",
       claimAmount
         ? Number(claimAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
         : "—",
     ],
+    ["What happened", incidentDescription, true],
     ["Diagnosis code", diagnosisCode || "—"],
     ["Procedure code", procedureCode || "—"],
     ["Date(s) of service", serviceDates],
@@ -984,18 +1092,18 @@ function ReviewSummary({
     <div
       style={{
         border: "1px solid var(--border)",
-        borderRadius: "var(--radius-md)",
+        borderRadius: "var(--radius-sm)",
         background: "var(--surface-2)",
-        padding: "1rem 1.25rem",
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.65rem",
+        padding: "0.75rem 0.9rem",
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "0.5rem 1.25rem",
       }}
     >
-      {rows.map(([label, value]) => (
-        <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.9rem" }}>
-          <span style={{ color: "var(--text-muted)" }}>{label}</span>
-          <span style={{ textAlign: "right", maxWidth: "60%" }}>{value}</span>
+      {rows.map(([label, value, fullWidth]) => (
+        <div key={label} style={{ gridColumn: fullWidth ? "1 / -1" : undefined, minWidth: 0 }}>
+          <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{label}</div>
+          <div style={{ fontSize: "0.8rem", fontWeight: 600, wordBreak: "break-word" }}>{value}</div>
         </div>
       ))}
     </div>
@@ -1076,15 +1184,15 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", fontWeight: 600 }}>
+    <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600 }}>
         {label}
         {tooltip && <InfoTooltip text={tooltip} />}
       </span>
       {children}
-      {hint && !error && <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{hint}</span>}
+      {hint && !error && <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{hint}</span>}
       {error && (
-        <span style={{ fontSize: "0.78rem", color: "var(--danger-fg)" }} role="alert">
+        <span style={{ fontSize: "0.7rem", color: "var(--danger-fg)" }} role="alert">
           {error}
         </span>
       )}
@@ -1093,7 +1201,8 @@ function Field({
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: "0.65rem 0.8rem",
+  padding: "0.3rem 0.5rem",
+  fontSize: "0.8rem",
   borderRadius: "var(--radius-sm)",
   border: "1px solid var(--border)",
   background: "var(--surface)",

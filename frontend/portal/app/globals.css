@@ -613,6 +613,9 @@ textarea:focus {
   padding: 20px 56px;
   border-bottom: 1px solid var(--rule);
   background: var(--paper-raised);
+  position: sticky;
+  top: 0;
+  z-index: 30;
 }
 
 .landing-nav-cta {
