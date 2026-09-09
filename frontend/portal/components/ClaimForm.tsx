@@ -453,7 +453,11 @@ export function ClaimForm() {
 
         {step === 2 && (
           <>
-            <Field label="Diagnosis code (ICD-10)" error={fieldErrors.diagnosisCode}>
+            <Field
+              label="Diagnosis code (ICD-10)"
+              error={fieldErrors.diagnosisCode}
+              tooltip="The standardized medical code your provider assigned for your diagnosis, e.g. E11.9 for type 2 diabetes. Find it on your bill or discharge summary."
+            >
               <IcdCodeSelect
                 value={diagnosisCode}
                 onChange={setDiagnosisCode}
@@ -462,7 +466,11 @@ export function ClaimForm() {
               />
             </Field>
 
-            <Field label="Procedure code (CPT/HCPCS)" error={fieldErrors.procedureCode}>
+            <Field
+              label="Procedure code (CPT/HCPCS)"
+              error={fieldErrors.procedureCode}
+              tooltip="The code for the service or procedure you received, e.g. 99213 for an office visit. Also found on your provider's bill."
+            >
               <input
                 value={procedureCode}
                 onChange={(e) => setProcedureCode(e.target.value)}
@@ -509,7 +517,11 @@ export function ClaimForm() {
               />
             </Field>
 
-            <Field label="Do you have other health insurance coverage that might also pay for this claim?" error={fieldErrors.coordinationOfBenefits}>
+            <Field
+              label="Do you have other health insurance coverage that might also pay for this claim?"
+              error={fieldErrors.coordinationOfBenefits}
+              tooltip="Known as 'coordination of benefits' — if you're covered by more than one health plan (e.g. through a spouse's employer), insurers coordinate to determine who pays first."
+            >
               <div style={{ display: "flex", gap: "0.6rem" }}>
                 {(["Yes", "No"] as const).map((label) => {
                   const value = label === "Yes";
@@ -540,7 +552,12 @@ export function ClaimForm() {
 
             <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "0.25rem" }}>Provider / facility</div>
 
-            <Field label="Provider NPI" error={fieldErrors.providerNpi} hint="Search by NPI or facility name — selecting one fills in the details below. Type a new 10-digit NPI to register a provider that isn't listed yet.">
+            <Field
+              label="Provider NPI"
+              error={fieldErrors.providerNpi}
+              hint="Search by NPI or facility name — selecting one fills in the details below. Type a new 10-digit NPI to register a provider that isn't listed yet."
+              tooltip="National Provider Identifier — a unique 10-digit ID for your healthcare provider. Find it on your bill, or search your provider's name above."
+            >
               <ProviderSelect value={providerNpi} onChange={setProviderNpi} onProviderSelect={handleProviderSelect} style={inputStyle} />
             </Field>
 
@@ -548,6 +565,7 @@ export function ClaimForm() {
               label="Provider tax ID"
               error={fieldErrors.providerTaxId}
               hint={selectedProvider ? "Locked to the selected provider." : undefined}
+              tooltip="Your provider's federal Employer Identification Number (EIN), used to identify the billing entity for tax and payment purposes."
             >
               <input
                 value={providerTaxId}
@@ -968,20 +986,85 @@ function ReviewSummary({
   );
 }
 
+function InfoTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label={text}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={(e) => e.preventDefault()}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "15px",
+          height: "15px",
+          borderRadius: "50%",
+          border: "1px solid var(--text-muted)",
+          background: "none",
+          color: "var(--text-muted)",
+          fontSize: "10px",
+          fontWeight: 700,
+          lineHeight: 1,
+          padding: 0,
+          cursor: "help",
+        }}
+      >
+        i
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "220px",
+            padding: "0.5rem 0.65rem",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--text)",
+            color: "var(--surface)",
+            fontSize: "0.75rem",
+            fontWeight: 400,
+            lineHeight: 1.4,
+            boxShadow: "var(--shadow-card-hover)",
+            zIndex: 10,
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Field({
   label,
   hint,
   error,
+  tooltip,
   children,
 }: {
   label: string;
   hint?: string;
   error?: string;
+  tooltip?: string;
   children: React.ReactNode;
 }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-      <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{label}</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", fontWeight: 600 }}>
+        {label}
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </span>
       {children}
       {hint && !error && <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{hint}</span>}
       {error && (
