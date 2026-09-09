@@ -404,7 +404,7 @@ export function ClaimForm() {
                 type="email"
                 value={claimantEmail}
                 onChange={(e) => setClaimantEmail(e.target.value)}
-                placeholder="jane.doe@example.com"
+                placeholder="Start typing your email..."
                 style={inputStyle}
               />
             </Field>
