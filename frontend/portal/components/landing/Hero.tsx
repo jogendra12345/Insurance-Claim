@@ -6,7 +6,7 @@ import type { AssignedRole, Claim } from "@/lib/types";
 // invented, so this reads as "a real claim" would on the actual Claim
 // Detail page. Values match the mockup's own example exactly.
 const EXAMPLE_CLAIM: Pick<Claim, "claimantName" | "policyNumber" | "claimAmount" | "riskScore" | "fraudIndicatorCount" | "confirmedRole"> = {
-  claimantName: "Omar Haddad",
+  claimantName: "John Doe",
   policyNumber: "POL-100002",
   claimAmount: 500,
   riskScore: 65,
@@ -78,14 +78,42 @@ export function Hero() {
             width: "300px",
             background: "var(--paper-raised)",
             border: "1px solid var(--rule)",
-            boxShadow: "8px 8px 0 var(--paper-2), 0 1px 3px rgba(22,35,63,0.08)",
-            padding: "20px 22px",
+            borderTop: "4px solid var(--forest)",
+            boxShadow: "8px 8px 0 var(--paper-2), 0 2px 10px rgba(22,35,63,0.10)",
+            padding: "22px 24px",
             transform: "rotate(2deg)",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: "1px solid var(--rule-soft)", paddingBottom: "10px", marginBottom: "12px" }}>
-            <span style={{ fontFamily: "var(--font-display)", fontSize: "15px", fontWeight: 700 }}>{c.claimantName}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10.5px", letterSpacing: "1.5px", textTransform: "uppercase", color: "var(--forest)", fontWeight: 700 }}>
+              Claim Form
+            </span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--slate-soft)" }}>{c.policyNumber}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", borderBottom: "1px solid var(--rule-soft)", paddingBottom: "14px", marginBottom: "6px" }}>
+            <div
+              aria-hidden="true"
+              style={{
+                width: "34px",
+                height: "34px",
+                borderRadius: "50%",
+                background: "var(--forest-bg)",
+                color: "var(--forest)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontFamily: "var(--font-display)",
+                fontSize: "14px",
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {c.claimantName.split(" ").map((n) => n[0]).join("")}
+            </div>
+            <div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: "16px", fontWeight: 700, lineHeight: 1.2 }}>{c.claimantName}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--slate-soft)" }}>Claimant</div>
+            </div>
           </div>
           <MiniRow label="Claim amount" value={currency(c.claimAmount)} />
           <MiniRow label="Risk score" badge={{ tone: "amber", text: `${c.riskScore} · High` }} />
@@ -128,7 +156,7 @@ function TrustItem({ color, label }: { color: string; label: string }) {
 
 function MiniRow({ label, value, badge }: { label: string; value?: string; badge?: { tone: "amber" | "crimson"; text: string } }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", fontSize: "12px" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: "12px", borderBottom: "1px solid var(--rule-soft)" }}>
       <span style={{ color: "var(--slate)" }}>{label}</span>
       {badge ? (
         <span
