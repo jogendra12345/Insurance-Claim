@@ -25,7 +25,7 @@
       "showOutline": true,
       "components": [
         {
-          "text": "{{caseSummary}}\n\n**Risk score:** {{riskScore}} / 100\n**Risk reasoning:** {{riskReasoning}}\n**Fraud indicators flagged:** {{fraudIndicatorCount}}\n**Handled by:** {{confirmedRole}}",
+          "text": "{{caseSummary}}\n\n**Risk score:** {{riskScore}} / 100\n**Risk reasoning:** {{riskReasoning}}\n**Fraud indicators flagged:** {{fraudIndicatorCount}}\n**Handled by:** {{confirmedRole}}\n\n{{= if triageNote != null and triageNote != \"\" then \"**Note from triage:** \" + triageNote else \"\"}}",
           "type": "text",
           "id": "AiSummaryText"
         }

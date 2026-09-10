@@ -20,6 +20,7 @@ export function serializeClaim(row: any) {
     fraudIndicatorCount: row.fraud_indicator_count,
     assignedRole: row.assigned_role,
     confirmedRole: row.confirmed_role,
+    triageNote: row.triage_note,
     decision: row.decision,
     denialReason: row.denial_reason,
     processInstanceKey: row.process_instance_key,

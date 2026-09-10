@@ -166,6 +166,14 @@ export default function TaskDetailPage() {
               <DetailRow label="Risk score" value={task.claim.riskScore !== null ? `${task.claim.riskScore} / 100` : "—"} />
               <DetailRow label="Fraud indicators" value={String(task.claim.fraudIndicatorCount)} />
               <DetailRow label="AI-suggested role" value={task.claim.assignedRole ?? "—"} />
+              {task.claim.triageNote && (
+                <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border)" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.25rem" }}>
+                    Note from triage
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.9rem" }}>{task.claim.triageNote}</p>
+                </div>
+              )}
             </Section>
           )}
 
@@ -276,6 +284,7 @@ function TriageReviewForm({ busy, onComplete }: { busy: boolean; onComplete: (va
   const [triageAction, setTriageAction] = useState<"review" | "reject">("review");
   const [confirmedRole, setConfirmedRole] = useState<"adjuster" | "investigator" | "legal">("adjuster");
   const [denialReason, setDenialReason] = useState("");
+  const [triageNote, setTriageNote] = useState("");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -286,15 +295,25 @@ function TriageReviewForm({ busy, onComplete }: { busy: boolean; onComplete: (va
         </select>
       </FormRow>
       {triageAction === "review" && (
-        <FormRow label="Confirmed role">
-          <select value={confirmedRole} onChange={(e) => setConfirmedRole(e.target.value as typeof confirmedRole)} style={inputStyle}>
-            {REVIEW_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {role[0].toUpperCase() + role.slice(1)}
-              </option>
-            ))}
-          </select>
-        </FormRow>
+        <>
+          <FormRow label="Confirmed role">
+            <select value={confirmedRole} onChange={(e) => setConfirmedRole(e.target.value as typeof confirmedRole)} style={inputStyle}>
+              {REVIEW_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {role[0].toUpperCase() + role.slice(1)}
+                </option>
+              ))}
+            </select>
+          </FormRow>
+          <FormRow label="Note for reviewer (optional)">
+            <textarea
+              value={triageNote}
+              onChange={(e) => setTriageNote(e.target.value)}
+              placeholder="Anything the adjuster/investigator/legal reviewer should know before they pick this up."
+              style={{ ...inputStyle, minHeight: "70px" }}
+            />
+          </FormRow>
+        </>
       )}
       {triageAction === "reject" && (
         <FormRow label="Denial reason">
@@ -304,7 +323,9 @@ function TriageReviewForm({ busy, onComplete }: { busy: boolean; onComplete: (va
       <button
         onClick={() =>
           onComplete(
-            triageAction === "review" ? { triageAction, confirmedRole } : { triageAction, denialReason }
+            triageAction === "review"
+              ? { triageAction, confirmedRole, ...(triageNote.trim() ? { triageNote: triageNote.trim() } : {}) }
+              : { triageAction, denialReason }
           )
         }
         disabled={busy || (triageAction === "reject" && !denialReason.trim())}

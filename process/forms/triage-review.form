@@ -133,6 +133,15 @@
           ]
         },
         {
+          "label": "Note for reviewer (optional)",
+          "type": "textarea",
+          "id": "TriageNoteField",
+          "key": "triageNote",
+          "conditional": {
+            "hide": "=triageAction = \"reject\""
+          }
+        },
+        {
           "label": "Rejection reason",
           "type": "textarea",
           "id": "DenialReasonField",

@@ -35,6 +35,7 @@ export interface Claim {
   fraudIndicatorCount: number;
   assignedRole: AssignedRole | null;
   confirmedRole: AssignedRole | null;
+  triageNote: string | null;
   decision: Decision | null;
   denialReason: string | null;
   processInstanceKey: string | null;

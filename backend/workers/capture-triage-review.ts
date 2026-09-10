@@ -23,6 +23,7 @@ interface CaptureTriageReviewVariables {
   confirmedRole?: string;
   assignedRole: string;
   denialReason?: string;
+  triageNote?: string;
 }
 
 const VALID_ROLES = ["adjuster", "investigator", "legal"];
@@ -50,7 +51,7 @@ interface CaptureTriageReviewOutput {
 zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, CaptureTriageReviewOutput>({
   taskType: JOB_TYPE,
   taskHandler: async (job) => {
-    const { claimId, triageAction, confirmedRole, assignedRole, denialReason } = job.variables;
+    const { claimId, triageAction, confirmedRole, assignedRole, denialReason, triageNote } = job.variables;
 
     if (triageAction === "reject") {
       // The form requires denialReason when rejecting, but form-js can't
@@ -92,8 +93,8 @@ zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, 
     }
 
     await pool.query(
-      `UPDATE claims SET confirmed_role = $1, status = 'in_review', updated_at = now() WHERE id = $2`,
-      [confirmedRole, claimId]
+      `UPDATE claims SET confirmed_role = $1, triage_note = $2, status = 'in_review', updated_at = now() WHERE id = $3`,
+      [confirmedRole, triageNote || null, claimId]
     );
 
     const { notifiedCount: reviewersNotified } = await notifyRole(
@@ -113,7 +114,14 @@ zeebeClient.createWorker<CaptureTriageReviewVariables, Record<string, unknown>, 
       actorType: "human",
       actorId: "tasklist",
       action: "triage_confirmed",
-      detail: { confirmedRole, assignedRole, overridden: confirmedRole !== assignedRole, reviewersNotified, slaDeadline },
+      detail: {
+        confirmedRole,
+        assignedRole,
+        overridden: confirmedRole !== assignedRole,
+        reviewersNotified,
+        slaDeadline,
+        ...(triageNote ? { triageNote } : {}),
+      },
     });
 
     return job.complete({ slaDeadline });
