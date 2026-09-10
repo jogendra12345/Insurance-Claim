@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Lottie from "lottie-react";
+import familyInsuranceAnimation from "@/lib/animations/family-insurance.json";
 import { ApiError, fetchPolicies, submitClaim } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
@@ -361,7 +363,7 @@ export function ClaimForm() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
     <Stepper current={step} />
-    <div style={{ display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: "2rem", alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 560px)", gap: "2rem", alignItems: "start" }}>
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", order: 2 }}>
       <form
         onSubmit={handleSubmit}
@@ -874,19 +876,7 @@ export function ClaimForm() {
       </form>
     </div>
 
-      <LiveSummaryPanel
-        step={step}
-        policyNumber={policyNumber}
-        claimType={CLAIM_TYPES.find((t) => t.value === claimType)?.label ?? claimType}
-        claimantName={claimantName}
-        incidentDate={incidentDate}
-        claimAmount={claimAmount}
-        coverageAmount={coverageAmount}
-        diagnosisCode={diagnosisCode}
-        procedureCode={procedureCode}
-        facilityName={facilityName}
-        documentCount={documents.length}
-      />
+      <ClaimSidePanel />
     </div>
     </div>
   );
@@ -922,97 +912,55 @@ function Stepper({ current }: { current: number }) {
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", padding: "0.4rem 0", borderBottom: "1px solid var(--border)", fontSize: "0.78rem" }}>
-      <span style={{ color: "var(--text-muted)" }}>{label}</span>
-      <span style={{ fontWeight: 600, textAlign: "right", color: value === "—" ? "var(--text-muted)" : "var(--text)" }}>{value}</span>
-    </div>
-  );
-}
+const TRUST_POINTS = [
+  "AI reviews your documents — a person always makes the final call",
+  "Every action is logged the moment it happens",
+  "Your uploads are encrypted and never shared off the record",
+];
 
-/** Sticky sidebar mirroring the form's own state back as data instead of decoration — read-only, no inputs of its own. */
-function LiveSummaryPanel({
-  step,
-  policyNumber,
-  claimType,
-  claimantName,
-  incidentDate,
-  claimAmount,
-  coverageAmount,
-  diagnosisCode,
-  procedureCode,
-  facilityName,
-  documentCount,
-}: {
-  step: number;
-  policyNumber: string;
-  claimType: string;
-  claimantName: string;
-  incidentDate: string;
-  claimAmount: string;
-  coverageAmount: number | null;
-  diagnosisCode: string;
-  procedureCode: string;
-  facilityName: string;
-  documentCount: number;
-}) {
-  const amountValue = Number(claimAmount);
-  const overCoverage = coverageAmount !== null && amountValue > 0 && amountValue > coverageAmount;
-
+/** Static brand/reassurance panel — no form state, just sets the tone next to the fields. */
+function ClaimSidePanel() {
   return (
     <div
       style={{
         position: "sticky",
         top: "2.5rem",
         order: 1,
-        background: "var(--surface)",
+        background: "var(--primary-soft)",
         border: "1px solid var(--border)",
-        borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-card)",
-        padding: "1.25rem 1.4rem",
+        borderRadius: "var(--radius-lg)",
+        padding: "1.75rem 1.5rem",
         display: "flex",
         flexDirection: "column",
-        gap: "0.9rem",
+        alignItems: "center",
+        gap: "1rem",
+        textAlign: "center",
       }}
     >
-      <div>
-        <span style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-          Claim summary
-        </span>
-      </div>
+      <Lottie
+        animationData={familyInsuranceAnimation}
+        loop
+        style={{ width: "100%", maxWidth: "190px", height: "auto" }}
+        aria-hidden="true"
+      />
 
       <div>
-        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: "0.15rem" }}>Requested amount</div>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", fontWeight: 600, color: overCoverage ? "var(--danger-fg)" : "var(--text)" }}>
-          {amountValue > 0 ? amountValue.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "—"}
-        </div>
-        {overCoverage && (
-          <div style={{ fontSize: "0.72rem", color: "var(--danger-fg)", marginTop: "0.2rem" }}>Exceeds policy coverage</div>
-        )}
+        <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "1.15rem", color: "var(--text)" }}>
+          We&apos;ve got you covered
+        </h2>
+        <p style={{ margin: "0.4rem 0 0", fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+          Submit once, then track every step until it&apos;s resolved.
+        </p>
       </div>
 
-      <div>
-        <SummaryRow label="Policy" value={policyNumber || "—"} />
-        <SummaryRow label="Claim type" value={claimType || "—"} />
-        <SummaryRow label="Claimant" value={claimantName || "—"} />
-        <SummaryRow label="Incident date" value={incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"} />
-        {step >= 2 && <SummaryRow label="Diagnosis" value={diagnosisCode || "—"} />}
-        {step >= 2 && <SummaryRow label="Procedure" value={procedureCode || "—"} />}
-        {step >= 2 && <SummaryRow label="Provider" value={facilityName || "—"} />}
-        {step >= 3 && <SummaryRow label="Documents" value={documentCount > 0 ? `${documentCount} attached` : "None yet"} />}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-        {STEPS.map((label, i) => (
-          <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: i < step ? "var(--text)" : i === step ? "var(--primary)" : "var(--text-muted)" }}>
-            <span aria-hidden="true" style={{ width: "14px", flexShrink: 0 }}>
-              {i < step ? "✓" : i === step ? "●" : "○"}
-            </span>
-            {label}
-          </div>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.6rem", width: "100%", textAlign: "left" }}>
+        {TRUST_POINTS.map((point) => (
+          <li key={point} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.78rem", color: "var(--text)", lineHeight: 1.4 }}>
+            <span aria-hidden="true" style={{ color: "var(--primary)", flexShrink: 0 }}>✓</span>
+            {point}
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
