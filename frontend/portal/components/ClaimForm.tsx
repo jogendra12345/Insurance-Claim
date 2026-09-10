@@ -4,12 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Lottie from "lottie-react";
 import familyInsuranceAnimation from "@/lib/animations/family-insurance.json";
-import { ApiError, fetchPolicies, submitClaim } from "@/lib/api";
+import { ApiError, fetchPolicies, fetchPolicy, submitClaim } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
 import { PolicySelect } from "./PolicySelect";
 import { ProviderSelect } from "./ProviderSelect";
 import { IcdCodeSelect } from "./IcdCodeSelect";
+
+const RELATIONSHIP_LABELS: Record<"spouse" | "child" | "other", string> = {
+  spouse: "Spouse",
+  child: "Child",
+  other: "Dependent",
+};
 
 const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
   { value: "outpatient", label: "Outpatient" },
@@ -66,6 +72,7 @@ export function ClaimForm() {
   const [documents, setDocuments] = useState<File[]>([]);
   const [coverageAmount, setCoverageAmount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [filedAsLabel, setFiledAsLabel] = useState<string | null>(null);
 
   // Claimants file against their own policy only — pre-select it and lock
   // the picker (PolicySelect's `disabled` prop below) so they can't type in
@@ -83,6 +90,25 @@ export function ClaimForm() {
           setPolicyNumber(own.policyNumber);
           setClaimantName(own.policyholderName);
           setCoverageAmount(own.coverageAmount);
+
+          // Best-effort "filed as" hint (SPEC.md §9 authorized claimants) —
+          // policyholder is known without another request; a dependent's
+          // relationship needs the detail endpoint (list responses omit it).
+          if (user?.email && own.policyholderEmail.toLowerCase() === user.email.toLowerCase()) {
+            setFiledAsLabel("Policyholder");
+          } else if (user?.email) {
+            fetchPolicy(own.id)
+              .then((detail) => {
+                if (cancelled) return;
+                const dependent = detail.dependents?.find((d) => d.email.toLowerCase() === user.email.toLowerCase());
+                if (dependent) {
+                  setFiledAsLabel(`${RELATIONSHIP_LABELS[dependent.relationship]} of policyholder`);
+                }
+              })
+              .catch(() => {
+                // No relationship hint if this lookup fails — not worth blocking the form over.
+              });
+          }
         }
       })
       .catch(() => {
@@ -92,7 +118,7 @@ export function ClaimForm() {
     return () => {
       cancelled = true;
     };
-  }, [isClaimant, policyNumber]);
+  }, [isClaimant, policyNumber, user?.email]);
 
   // Claimants' own logged-in account email, not typed by hand — GET
   // /api/claims scopes "my claims" to lower(claimant_email) = lower(the
@@ -397,6 +423,7 @@ export function ClaimForm() {
                 onPolicySelect={(policy) => {
                   setClaimantName(policy?.policyholderName ?? "");
                   setCoverageAmount(policy?.coverageAmount ?? null);
+                  setFiledAsLabel(null);
                 }}
                 style={isClaimant ? disabledInputStyle : inputStyle}
                 disabled={isClaimant}
@@ -412,12 +439,8 @@ export function ClaimForm() {
                 ))}
               </select>
             </Field>
-          </>
-        )}
 
-        {step === 1 && (
-          <>
-            <Field label="Your name" error={fieldErrors.claimantName}>
+            <Field label="Your name" error={fieldErrors.claimantName} hint={filedAsLabel ? `Filing as: ${filedAsLabel}` : undefined}>
               <input
                 value={claimantName}
                 onChange={(e) => setClaimantName(e.target.value)}
@@ -440,7 +463,11 @@ export function ClaimForm() {
                 style={isClaimant ? disabledInputStyle : inputStyle}
               />
             </Field>
+          </>
+        )}
 
+        {step === 1 && (
+          <>
             <Field label="Incident date" error={fieldErrors.incidentDate}>
               <input
                 type="date"
@@ -455,7 +482,7 @@ export function ClaimForm() {
               <textarea
                 value={incidentDescription}
                 onChange={(e) => setIncidentDescription(e.target.value)}
-                rows={3}
+                rows={6}
                 placeholder="Briefly describe what happened, when, and where."
                 style={{ ...inputStyle, resize: "vertical" }}
               />
