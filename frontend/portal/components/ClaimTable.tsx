@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Claim } from "@/lib/types";
 import { STATUS_META, StatusBadge } from "./StatusBadge";
 import { relativeTime, absoluteDate } from "@/lib/time";
+import { shortClaimId } from "@/lib/claim-id";
 import { Pagination } from "./Pagination";
 
 const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
@@ -21,11 +22,6 @@ const ROLE_LABEL: Record<NonNullable<Claim["confirmedRole"]>, string> = {
   legal: "Legal",
   auto: "Auto-approved",
 };
-
-/** Short, stable reference shown in the list — the full uuid is still the title/href target. */
-function shortClaimId(id: string) {
-  return `#${id.slice(0, 8)}`;
-}
 
 function ProgressStepper({ stage, status }: { stage: 1 | 2 | 3; status: Claim["status"] }) {
   const isBad = status === "denied";

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Lottie from "lottie-react";
 import familyInsuranceAnimation from "@/lib/animations/family-insurance.json";
 import { ApiError, fetchPolicies, submitClaim } from "@/lib/api";
+import { shortClaimId } from "@/lib/claim-id";
 import { useAuth } from "@/lib/auth-context";
 import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
 import { PolicySelect } from "./PolicySelect";
@@ -335,7 +336,7 @@ export function ClaimForm() {
         </svg>
         <h2 style={{ margin: 0, fontSize: "1.25rem", fontFamily: "var(--font-display)" }}>Claim submitted</h2>
         <p style={{ margin: 0, color: "var(--text)" }}>
-          Reference: <strong style={{ fontVariantNumeric: "tabular-nums" }}>{confirmedId}</strong>
+          Reference: <strong style={{ fontVariantNumeric: "tabular-nums" }} title={confirmedId}>{shortClaimId(confirmedId)}</strong>
         </p>
         <p style={{ margin: 0, color: "var(--text-muted)" }}>
           We&apos;ll review this and update its status — check back on your claims list any time.
