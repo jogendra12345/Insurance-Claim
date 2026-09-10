@@ -4,18 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Lottie from "lottie-react";
 import familyInsuranceAnimation from "@/lib/animations/family-insurance.json";
-import { ApiError, fetchPolicies, fetchPolicy, submitClaim } from "@/lib/api";
+import { ApiError, fetchPolicies, submitClaim } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
 import { PolicySelect } from "./PolicySelect";
 import { ProviderSelect } from "./ProviderSelect";
 import { IcdCodeSelect } from "./IcdCodeSelect";
-
-const RELATIONSHIP_LABELS: Record<"spouse" | "child" | "other", string> = {
-  spouse: "Spouse",
-  child: "Child",
-  other: "Dependent",
-};
 
 const CLAIM_TYPES: { value: ClaimType; label: string }[] = [
   { value: "outpatient", label: "Outpatient" },
@@ -72,7 +66,6 @@ export function ClaimForm() {
   const [documents, setDocuments] = useState<File[]>([]);
   const [coverageAmount, setCoverageAmount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [filedAsLabel, setFiledAsLabel] = useState<string | null>(null);
 
   // Claimants file against their own policy only — pre-select it and lock
   // the picker (PolicySelect's `disabled` prop below) so they can't type in
@@ -90,25 +83,6 @@ export function ClaimForm() {
           setPolicyNumber(own.policyNumber);
           setClaimantName(own.policyholderName);
           setCoverageAmount(own.coverageAmount);
-
-          // Best-effort "filed as" hint (SPEC.md §9 authorized claimants) —
-          // policyholder is known without another request; a dependent's
-          // relationship needs the detail endpoint (list responses omit it).
-          if (user?.email && own.policyholderEmail.toLowerCase() === user.email.toLowerCase()) {
-            setFiledAsLabel("Policyholder");
-          } else if (user?.email) {
-            fetchPolicy(own.id)
-              .then((detail) => {
-                if (cancelled) return;
-                const dependent = detail.dependents?.find((d) => d.email.toLowerCase() === user.email.toLowerCase());
-                if (dependent) {
-                  setFiledAsLabel(`${RELATIONSHIP_LABELS[dependent.relationship]} of policyholder`);
-                }
-              })
-              .catch(() => {
-                // No relationship hint if this lookup fails — not worth blocking the form over.
-              });
-          }
         }
       })
       .catch(() => {
@@ -118,7 +92,7 @@ export function ClaimForm() {
     return () => {
       cancelled = true;
     };
-  }, [isClaimant, policyNumber, user?.email]);
+  }, [isClaimant, policyNumber]);
 
   // Claimants' own logged-in account email, not typed by hand — GET
   // /api/claims scopes "my claims" to lower(claimant_email) = lower(the
@@ -387,29 +361,16 @@ export function ClaimForm() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-    <Stepper current={step} />
-    <div style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 560px)", gap: "2rem", alignItems: "start" }}>
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", order: 2 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 7fr) 3fr", gap: "2rem", alignItems: "start" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+      <Stepper current={step} />
+
       <form
         onSubmit={handleSubmit}
-        style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+        style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
         noValidate
       >
-      <div
-        key={step}
-        className="animate-fade-in-up"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.75rem",
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-md)",
-          boxShadow: "var(--shadow-card)",
-          padding: "1.25rem 1.4rem",
-        }}
-      >
+      <div key={step} className="animate-fade-in-up" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
         {step === 0 && (
           <>
             <Field
@@ -423,7 +384,6 @@ export function ClaimForm() {
                 onPolicySelect={(policy) => {
                   setClaimantName(policy?.policyholderName ?? "");
                   setCoverageAmount(policy?.coverageAmount ?? null);
-                  setFiledAsLabel(null);
                 }}
                 style={isClaimant ? disabledInputStyle : inputStyle}
                 disabled={isClaimant}
@@ -439,8 +399,12 @@ export function ClaimForm() {
                 ))}
               </select>
             </Field>
+          </>
+        )}
 
-            <Field label="Your name" error={fieldErrors.claimantName} hint={filedAsLabel ? `Filing as: ${filedAsLabel}` : undefined}>
+        {step === 1 && (
+          <>
+            <Field label="Your name" error={fieldErrors.claimantName}>
               <input
                 value={claimantName}
                 onChange={(e) => setClaimantName(e.target.value)}
@@ -463,11 +427,7 @@ export function ClaimForm() {
                 style={isClaimant ? disabledInputStyle : inputStyle}
               />
             </Field>
-          </>
-        )}
 
-        {step === 1 && (
-          <>
             <Field label="Incident date" error={fieldErrors.incidentDate}>
               <input
                 type="date"
@@ -482,7 +442,7 @@ export function ClaimForm() {
               <textarea
                 value={incidentDescription}
                 onChange={(e) => setIncidentDescription(e.target.value)}
-                rows={6}
+                rows={4}
                 placeholder="Briefly describe what happened, when, and where."
                 style={{ ...inputStyle, resize: "vertical" }}
               />
@@ -903,7 +863,20 @@ export function ClaimForm() {
       </form>
     </div>
 
-      <ClaimSidePanel />
+    <div
+      style={{
+        position: "sticky",
+        top: "2.5rem",
+        display: "flex",
+        justifyContent: "center",
+      }}
+    >
+      <Lottie
+        animationData={familyInsuranceAnimation}
+        loop
+        style={{ width: "100%", maxWidth: "320px", height: "auto" }}
+        aria-hidden="true"
+      />
     </div>
     </div>
   );
@@ -911,84 +884,57 @@ export function ClaimForm() {
 
 function Stepper({ current }: { current: number }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)" }}>
-          Step {current + 1} of {STEPS.length}: {STEPS[current]}
-        </span>
-        <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-          {Math.round(((current + 1) / STEPS.length) * 100)}%
-        </span>
-      </div>
-      <div style={{ display: "flex", gap: "0.3rem" }} role="progressbar" aria-valuenow={current + 1} aria-valuemin={1} aria-valuemax={STEPS.length}>
-        {STEPS.map((label, i) => (
-          <span
+    <ol style={{ display: "flex", alignItems: "center", padding: 0, margin: 0, listStyle: "none", width: "100%" }}>
+      {STEPS.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <li
             key={label}
-            className="transition"
-            title={label}
             style={{
-              flex: 1,
-              height: "4px",
-              borderRadius: "2px",
-              background: i <= current ? "var(--primary)" : "var(--surface-2)",
+              display: "flex",
+              alignItems: "center",
+              flex: i < STEPS.length - 1 ? 1 : "0 0 auto",
             }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const TRUST_POINTS = [
-  "AI reviews your documents — a person always makes the final call",
-  "Every action is logged the moment it happens",
-  "Your uploads are encrypted and never shared off the record",
-];
-
-/** Static brand/reassurance panel — no form state, just sets the tone next to the fields. */
-function ClaimSidePanel() {
-  return (
-    <div
-      style={{
-        position: "sticky",
-        top: "2.5rem",
-        order: 1,
-        background: "var(--primary-soft)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        padding: "1.75rem 1.5rem",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "1rem",
-        textAlign: "center",
-      }}
-    >
-      <Lottie
-        animationData={familyInsuranceAnimation}
-        loop
-        style={{ width: "100%", maxWidth: "190px", height: "auto" }}
-        aria-hidden="true"
-      />
-
-      <div>
-        <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "1.15rem", color: "var(--text)" }}>
-          We&apos;ve got you covered
-        </h2>
-        <p style={{ margin: "0.4rem 0 0", fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-          Submit once, then track every step until it&apos;s resolved.
-        </p>
-      </div>
-
-      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.6rem", width: "100%", textAlign: "left" }}>
-        {TRUST_POINTS.map((point) => (
-          <li key={point} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.78rem", color: "var(--text)", lineHeight: 1.4 }}>
-            <span aria-hidden="true" style={{ color: "var(--primary)", flexShrink: 0 }}>✓</span>
-            {point}
+          >
+            <span
+              className="transition"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "24px",
+                height: "24px",
+                borderRadius: "50%",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                flexShrink: 0,
+                background: done || active ? "var(--primary)" : "var(--surface-2)",
+                color: done || active ? "var(--primary-contrast)" : "var(--text-muted)",
+                transform: active ? "scale(1.15)" : "scale(1)",
+              }}
+              aria-hidden="true"
+            >
+              {done ? "✓" : i + 1}
+            </span>
+            <span
+              style={{
+                marginLeft: "0.5rem",
+                fontSize: "0.82rem",
+                fontWeight: active ? 600 : 500,
+                color: active ? "var(--text)" : "var(--text-muted)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {label}
+            </span>
+            {i < STEPS.length - 1 && (
+              <span style={{ flex: 1, minWidth: "1rem", height: "1px", background: "var(--border)", margin: "0 0.75rem" }} />
+            )}
           </li>
-        ))}
-      </ul>
-    </div>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -1034,21 +980,19 @@ function ReviewSummary({
         ? new Date(serviceDateFrom).toLocaleDateString()
         : "—";
 
-  // [label, value, full-width?] — the two free-text fields run long enough
-  // to need the full row; everything else pairs up two-per-row.
-  const rows: [string, string, boolean?][] = [
+  const rows: [string, string][] = [
     ["Policy number", policyNumber],
     ["Claim type", claimType],
     ["Your name", claimantName],
     ["Email", claimantEmail],
     ["Incident date", incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"],
+    ["What happened", incidentDescription],
     [
       "Requested claim amount",
       claimAmount
         ? Number(claimAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
         : "—",
     ],
-    ["What happened", incidentDescription, true],
     ["Diagnosis code", diagnosisCode || "—"],
     ["Procedure code", procedureCode || "—"],
     ["Date(s) of service", serviceDates],
@@ -1067,18 +1011,18 @@ function ReviewSummary({
     <div
       style={{
         border: "1px solid var(--border)",
-        borderRadius: "var(--radius-sm)",
+        borderRadius: "var(--radius-md)",
         background: "var(--surface-2)",
-        padding: "0.75rem 0.9rem",
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: "0.5rem 1.25rem",
+        padding: "1rem 1.25rem",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.65rem",
       }}
     >
-      {rows.map(([label, value, fullWidth]) => (
-        <div key={label} style={{ gridColumn: fullWidth ? "1 / -1" : undefined, minWidth: 0 }}>
-          <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{label}</div>
-          <div style={{ fontSize: "0.8rem", fontWeight: 600, wordBreak: "break-word" }}>{value}</div>
+      {rows.map(([label, value]) => (
+        <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.9rem" }}>
+          <span style={{ color: "var(--text-muted)" }}>{label}</span>
+          <span style={{ textAlign: "right", maxWidth: "60%" }}>{value}</span>
         </div>
       ))}
     </div>
@@ -1159,15 +1103,15 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600 }}>
+    <label style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", fontWeight: 600 }}>
         {label}
         {tooltip && <InfoTooltip text={tooltip} />}
       </span>
       {children}
-      {hint && !error && <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{hint}</span>}
+      {hint && !error && <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{hint}</span>}
       {error && (
-        <span style={{ fontSize: "0.7rem", color: "var(--danger-fg)" }} role="alert">
+        <span style={{ fontSize: "0.78rem", color: "var(--danger-fg)" }} role="alert">
           {error}
         </span>
       )}
@@ -1176,8 +1120,7 @@ function Field({
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: "0.3rem 0.5rem",
-  fontSize: "0.8rem",
+  padding: "0.65rem 0.8rem",
   borderRadius: "var(--radius-sm)",
   border: "1px solid var(--border)",
   background: "var(--surface)",
