@@ -2,7 +2,7 @@ const STEPS = [
   {
     no: "STEP 01",
     title: "Submit",
-    body: "The claimant files a claim with their policy details and supporting documents — bills, discharge summaries, lab reports.",
+    body: "The claimant files a claim with their policy details and supporting documents: bills, discharge summaries, lab reports.",
   },
   {
     no: "STEP 02",
@@ -12,7 +12,7 @@ const STEPS = [
   {
     no: "STEP 03",
     title: "Human decision",
-    body: "A reviewer confirms the routing, checks the AI's reasoning, and makes the final call — every time, without exception.",
+    body: "A reviewer confirms the routing, checks the AI's reasoning, and makes the final call every time, without exception.",
   },
 ];
 

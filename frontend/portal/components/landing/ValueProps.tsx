@@ -1,7 +1,7 @@
 const VALUES = [
   {
     title: "Nothing happens off the record",
-    body: "Every automated and human action is written to an audit trail the moment it happens — not reconstructed after the fact.",
+    body: "Every automated and human action is written to an audit trail the moment it happens, not reconstructed after the fact.",
   },
   {
     title: "AI recommends, it doesn't decide",
