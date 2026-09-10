@@ -151,7 +151,7 @@ export function TopBar() {
   if (isAnonymousLanding) {
     return <LandingTopNav />;
   }
-  const tabs = isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
+  const tabs = !user ? [] : isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
 
   return (
     <header

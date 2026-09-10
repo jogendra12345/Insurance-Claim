@@ -7,7 +7,7 @@ const STEPS = [
   {
     no: "STEP 02",
     title: "AI triage",
-    body: "Documents are read automatically. The claim is scored for risk, checked for fraud indicators, and routed to the right reviewer role.",
+    body: "We scan your documents right away, check everything's in order, and send your claim to the reviewer best suited to handle it.",
   },
   {
     no: "STEP 03",

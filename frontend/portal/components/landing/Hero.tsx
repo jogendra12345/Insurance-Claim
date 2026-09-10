@@ -37,8 +37,8 @@ export function Hero() {
           Intelligent triage, accountable decisions.
         </h1>
         <p style={{ fontSize: "15.5px", lineHeight: 1.65, color: "var(--slate)", margin: "0 0 30px", maxWidth: "500px" }}>
-          ClaimFlow AI reads every submitted document, flags what needs a closer look, and routes each claim to the
-          right reviewer. A human always confirms the routing and makes the final decision.
+          We read every document you send, spot what needs a closer look, and get your claim to the right person
+          fast. A real human always reviews it and makes the final call.
         </p>
         <div style={{ display: "flex", alignItems: "center", marginBottom: "26px", gap: "26px", flexWrap: "wrap" }}>
           <a

@@ -700,7 +700,7 @@ textarea:focus {
 .landing-cta-band {
   background: var(--ink);
   color: var(--paper);
-  padding: 56px 64px;
+  padding: 56px 64px 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -710,7 +710,7 @@ textarea:focus {
 
 .landing-footer {
   border-top: 1px solid var(--rule);
-  padding: 28px 56px 40px;
+  padding: 16px 56px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
