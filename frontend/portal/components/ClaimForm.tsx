@@ -980,49 +980,92 @@ function ReviewSummary({
         ? new Date(serviceDateFrom).toLocaleDateString()
         : "—";
 
-  const rows: [string, string][] = [
-    ["Policy number", policyNumber],
-    ["Claim type", claimType],
-    ["Your name", claimantName],
-    ["Email", claimantEmail],
-    ["Incident date", incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"],
-    ["What happened", incidentDescription],
-    [
-      "Requested claim amount",
-      claimAmount
-        ? Number(claimAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
-        : "—",
-    ],
-    ["Diagnosis code", diagnosisCode || "—"],
-    ["Procedure code", procedureCode || "—"],
-    ["Date(s) of service", serviceDates],
-    [
-      "Total billed amount",
-      totalBilledAmount
-        ? Number(totalBilledAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
-        : "—",
-    ],
-    ["Other coverage (COB)", coordinationOfBenefits === null ? "—" : coordinationOfBenefits ? "Yes" : "No"],
-    ["Provider", facilityName ? `${facilityName} (NPI ${providerNpi})` : "—"],
-    ["Documents", documentCount > 0 ? `${documentCount} attached` : "None attached"],
+  // Grouped to mirror the form's own steps — [label, value, full-width?]
+  // within each section; the two free-text fields run long enough to need
+  // the full row, everything else pairs up two-per-row.
+  const sections: { title: string; rows: [string, string, boolean?][] }[] = [
+    {
+      title: "Policy & claimant",
+      rows: [
+        ["Policy number", policyNumber],
+        ["Claim type", claimType],
+        ["Your name", claimantName],
+        ["Email", claimantEmail],
+      ],
+    },
+    {
+      title: "Incident",
+      rows: [
+        ["Incident date", incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"],
+        [
+          "Requested claim amount",
+          claimAmount
+            ? Number(claimAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
+            : "—",
+        ],
+        ["What happened", incidentDescription, true],
+      ],
+    },
+    {
+      title: "Diagnosis, procedure & provider",
+      rows: [
+        ["Diagnosis code", diagnosisCode || "—"],
+        ["Procedure code", procedureCode || "—"],
+        ["Date(s) of service", serviceDates],
+        [
+          "Total billed amount",
+          totalBilledAmount
+            ? Number(totalBilledAmount).toLocaleString(undefined, { style: "currency", currency: "USD" })
+            : "—",
+        ],
+        ["Other coverage (COB)", coordinationOfBenefits === null ? "—" : coordinationOfBenefits ? "Yes" : "No"],
+        ["Provider", facilityName ? `${facilityName} (NPI ${providerNpi})` : "—"],
+      ],
+    },
+    {
+      title: "Documents",
+      rows: [["Documents", documentCount > 0 ? `${documentCount} attached` : "None attached"]],
+    },
   ];
 
   return (
     <div
       style={{
         border: "1px solid var(--border)",
-        borderRadius: "var(--radius-md)",
+        borderRadius: "var(--radius-sm)",
         background: "var(--surface-2)",
-        padding: "1rem 1.25rem",
         display: "flex",
         flexDirection: "column",
-        gap: "0.65rem",
       }}
     >
-      {rows.map(([label, value]) => (
-        <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.9rem" }}>
-          <span style={{ color: "var(--text-muted)" }}>{label}</span>
-          <span style={{ textAlign: "right", maxWidth: "60%" }}>{value}</span>
+      {sections.map((section, i) => (
+        <div
+          key={section.title}
+          style={{
+            padding: "0.75rem 0.9rem",
+            borderTop: i > 0 ? "1px solid var(--border)" : undefined,
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.66rem",
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--accent)",
+              marginBottom: "0.5rem",
+            }}
+          >
+            {section.title}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem 1.25rem" }}>
+            {section.rows.map(([label, value, fullWidth]) => (
+              <div key={label} style={{ gridColumn: fullWidth ? "1 / -1" : undefined, minWidth: 0 }}>
+                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{label}</div>
+                <div style={{ fontSize: "0.8rem", fontWeight: 600, wordBreak: "break-word" }}>{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
       ))}
     </div>
