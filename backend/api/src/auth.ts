@@ -76,10 +76,12 @@ export function verifySessionCookie(cookieValue: string | undefined): SessionUse
 }
 
 export function setSessionCookie(res: Response, user: SessionUser) {
+  // No maxAge — a browser-session cookie, cleared when the browser closes,
+  // so closing the app actually logs the user out instead of leaving a
+  // week-long standing login.
   res.cookie(COOKIE_NAME, createSessionCookie(user), {
     httpOnly: true,
     sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 }
 
