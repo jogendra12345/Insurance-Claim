@@ -14,8 +14,9 @@ export interface NotificationContext {
   claimId: string;
   claimantName: string;
   claimantEmail: string;
-  decision: "approve" | "deny";
+  decision: "approve" | "deny" | "moreInfo";
   denialLetterText?: string | null;
+  infoRequestedReason?: string | null;
   policyNumber: string;
   claimType: string;
   claimAmount: number;
@@ -70,16 +71,25 @@ function formatDate(isoDate: string): string {
 // email clients don't reliably support <style> blocks.
 function buildEmail(context: NotificationContext): { subject: string; html: string; text: string } {
   const isDeny = context.decision === "deny";
-  const subject = isDeny ? "Update on your insurance claim" : "Your insurance claim has been approved";
-  const statusColor = isDeny ? "#b91c1c" : "#15803d";
-  const statusLabel = isDeny ? "Claim Denied" : "Claim Approved";
+  const isMoreInfo = context.decision === "moreInfo";
+  const subject = isDeny
+    ? "Update on your insurance claim"
+    : isMoreInfo
+      ? "We need more information about your claim"
+      : "Your insurance claim has been approved";
+  const statusColor = isDeny ? "#b91c1c" : isMoreInfo ? "#b45309" : "#15803d";
+  const statusLabel = isDeny ? "Claim Denied" : isMoreInfo ? "More Information Needed" : "Claim Approved";
   const claimUrl = `${FRONTEND_URL}/claims/${context.claimId}`;
 
   const bodyParagraph = isDeny
     ? escapeHtml(
         context.denialLetterText ?? `We're sorry to inform you that your claim has been denied.`
       ).replace(/\n/g, "<br/>")
-    : `Good news — your claim has been approved and settlement is being processed.`;
+    : isMoreInfo
+      ? `A reviewer needs more information before your claim can move forward: ${escapeHtml(
+          context.infoRequestedReason ?? "Please see your claim page for details."
+        )}`
+      : `Good news — your claim has been approved and settlement is being processed.`;
 
   const detailRows: Array<[string, string]> = [
     ["Claim ID", context.claimId],
@@ -89,7 +99,7 @@ function buildEmail(context: NotificationContext): { subject: string; html: stri
     ["Incident Date", formatDate(context.incidentDate)],
     ["Incident Description", context.incidentDescription],
   ];
-  if (!isDeny) {
+  if (!isDeny && !isMoreInfo) {
     detailRows.push(["Settlement ID", context.settlementId ?? "—"]);
   }
 
@@ -112,7 +122,7 @@ function buildEmail(context: NotificationContext): { subject: string; html: stri
   <p style="color:${statusColor};font-weight:bold;">${statusLabel}</p>
   <p>${bodyParagraph}</p>
   <table style="border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;">${detailRowsHtml}</table>
-  <p><a href="${claimUrl}" style="color:#2563eb;">View your claim</a></p>
+  <p><a href="${claimUrl}" style="color:#2563eb;">${isMoreInfo ? "View your claim and provide the requested information" : "View your claim"}</a></p>
   <p style="color:#6b7280;font-size:13px;">If you have any questions, please contact us and reference your claim ID above.</p>
   <p>Sincerely,<br/>Claims Department<br/>ClaimFlow AI Insurance Services</p>
 </div>`.trim();
@@ -120,7 +130,9 @@ function buildEmail(context: NotificationContext): { subject: string; html: stri
   const textDetailLines = detailRows.map(([label, value]) => `${label}: ${value}`).join("\n");
   const textBodyParagraph = isDeny
     ? context.denialLetterText ?? `We're sorry to inform you that your claim has been denied.`
-    : `Good news — your claim has been approved. Settlement is being processed.`;
+    : isMoreInfo
+      ? `A reviewer needs more information before your claim can move forward: ${context.infoRequestedReason ?? "Please see your claim page for details."}`
+      : `Good news — your claim has been approved. Settlement is being processed.`;
   const text = `Dear ${context.claimantName},\n\n${textBodyParagraph}\n\n${textDetailLines}\n\nView your claim: ${claimUrl}`;
 
   return { subject, html, text };

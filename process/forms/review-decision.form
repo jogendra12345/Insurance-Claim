@@ -126,6 +126,18 @@
           "conditional": {
             "hide": "=decision != \"deny\""
           }
+        },
+        {
+          "label": "Reason more info is needed",
+          "type": "textarea",
+          "id": "InfoRequestedReasonField",
+          "key": "infoRequestedReason",
+          "validate": {
+            "required": true
+          },
+          "conditional": {
+            "hide": "=decision != \"moreInfo\""
+          }
         }
       ]
     }

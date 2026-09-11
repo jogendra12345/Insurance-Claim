@@ -25,7 +25,7 @@ Verified live, 2026-08-31/09-01 (see `audit_log` trails and Operate for these pr
 - [x] Every path above leaves a complete, correctly-ordered `audit_log` trail from intake to resolution
 
 Still open:
-- [ ] `moreInfo` outcome (Decision gateway's third branch, terminal end event per §14) — never exercised
+- [ ] `moreInfo` outcome — no longer a terminal end event as of 2026-09-11 (`.claude/specs/generic/claimant-more-info-resubmission.md`, Locked); loops back to the reviewing role via a new claimant user task. Needs a live walkthrough (moreInfo decision → claimant resubmits → same role's task reopens → that reviewer's next decision) before checking off.
 - [ ] Investigator role specifically denying via role-specific review (adjuster and legal denial paths are confirmed on the same `capture-review-decision` code path; investigator-deny wasn't literally run, low risk but unconfirmed)
 - [ ] A full walkthrough with real distinct Tasklist users per candidate group, not just `demo` claiming everything (depends on Step 6's open decision)
 

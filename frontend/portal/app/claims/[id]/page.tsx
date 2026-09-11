@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ApiError, fetchClaim, fetchPolicies } from "@/lib/api";
-import type { Claim } from "@/lib/types";
+import { ApiError, fetchClaim, fetchPendingTask, fetchPolicies, resubmitClaim } from "@/lib/api";
+import type { Claim, PendingTask } from "@/lib/types";
 import { StatusBadge, STATUS_META } from "@/components/StatusBadge";
 
 const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
@@ -66,8 +66,9 @@ export default function ClaimDetailPage() {
   const [documentsVisible, setDocumentsVisible] = useState(false);
   const [incidentExpanded, setIncidentExpanded] = useState(false);
   const [policyholderName, setPolicyholderName] = useState<string | null>(null);
+  const [pendingTask, setPendingTask] = useState<PendingTask | null>(null);
 
-  useEffect(() => {
+  const loadClaim = useCallback(() => {
     let cancelled = false;
     setIncidentExpanded(false);
     setPolicyholderName(null);
@@ -76,6 +77,19 @@ export default function ClaimDetailPage() {
         if (!cancelled) {
           setClaim(c);
           setState("loaded");
+        }
+        // Non-critical, same as the fetchPolicies call below — a claim not
+        // awaiting info just never shows the resubmission card.
+        if (c.status === "awaiting_info") {
+          fetchPendingTask(c.id)
+            .then((task) => {
+              if (!cancelled) setPendingTask(task);
+            })
+            .catch(() => {
+              if (!cancelled) setPendingTask(null);
+            });
+        } else {
+          setPendingTask(null);
         }
         // No GET /api/policies/:id endpoint exists yet — the list is small
         // enough in this demo to fetch and match by policyNumber client-side.
@@ -99,6 +113,8 @@ export default function ClaimDetailPage() {
       cancelled = true;
     };
   }, [params.id]);
+
+  useEffect(() => loadClaim(), [loadClaim]);
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
@@ -174,6 +190,10 @@ export default function ClaimDetailPage() {
               </span>
               <span style={{ fontSize: "0.9rem" }}>{claim.denialReason}</span>
             </div>
+          )}
+
+          {claim.status === "awaiting_info" && pendingTask && (
+            <ResubmissionCard claimId={claim.id} task={pendingTask} onSubmitted={loadClaim} />
           )}
 
           <div className="claim-grid">
@@ -446,6 +466,129 @@ export default function ClaimDetailPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/** .claude/specs/generic/claimant-more-info-resubmission.md — task-grid
+    card (styled like the staff /tasks list's rows) that expands inline into
+    a resubmission form. No navigation away from the claim page. */
+function ResubmissionCard({ claimId, task, onSubmitted }: { claimId: string; task: PendingTask; onSubmitted: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await resubmitClaim(claimId, { documents: files, note });
+      setOpen(false);
+      setFiles([]);
+      setNote("");
+      onSubmitted();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Submitting your update failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="animate-fade-in-up"
+      style={{
+        border: "1px solid var(--status-attention-border, var(--border))",
+        borderRadius: "var(--radius-md)",
+        background: "var(--status-attention-bg)",
+        color: "var(--status-attention-fg)",
+        boxShadow: "var(--shadow-card)",
+        overflow: "hidden",
+      }}
+    >
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="transition"
+        style={{
+          width: "100%",
+          textAlign: "left",
+          border: "none",
+          background: "transparent",
+          color: "inherit",
+          cursor: "pointer",
+          padding: "1rem 1.25rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "1rem",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            More information needed
+          </span>
+          <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>{task.reason ?? "A reviewer requested more information on this claim."}</span>
+        </div>
+        <span style={{ fontSize: "0.85rem", fontWeight: 600, flexShrink: 0 }}>{open ? "Hide" : "Provide info"}</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 1.25rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {error && (
+            <div role="alert" style={{ padding: "0.6rem 0.8rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger-fg)", fontSize: "0.85rem" }}>
+              {error}
+            </div>
+          )}
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 600 }}>
+            Documents
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              style={{ fontSize: "0.85rem" }}
+            />
+          </label>
+          {files.length > 0 && (
+            <span style={{ fontSize: "0.8rem" }}>{files.length} file{files.length === 1 ? "" : "s"} selected</span>
+          )}
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 600 }}>
+            Note (optional)
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              style={{
+                padding: "0.55rem 0.7rem",
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                color: "var(--text)",
+                minHeight: "70px",
+              }}
+            />
+          </label>
+          <button
+            onClick={handleSubmit}
+            disabled={busy || files.length === 0}
+            className="transition btn-press"
+            style={{
+              alignSelf: "flex-start",
+              padding: "0.6rem 1.1rem",
+              borderRadius: "var(--radius-sm)",
+              border: "none",
+              background: "linear-gradient(135deg, var(--primary), var(--primary-hover))",
+              color: "var(--primary-contrast)",
+              fontWeight: 600,
+              cursor: busy ? "default" : "pointer",
+              opacity: busy || files.length === 0 ? 0.7 : 1,
+            }}
+          >
+            {busy ? "Submitting…" : "Submit"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

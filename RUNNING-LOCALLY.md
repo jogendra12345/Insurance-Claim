@@ -162,10 +162,11 @@ cd backend/workers
 npm run dev
 ```
 
-Starts all 13 workers (`validate-claim`, `extract-evidence`,
+Starts all 17 workers (`validate-claim`, `extract-evidence`,
 `detect-fraud-indicators`, `score-risk`, `trigger-settlement`,
-`draft-denial-letter`, `notify-claimant`, `close-case`, and the 5
-`capture-*` workers) — they hot-reload on file changes via `tsx watch`.
+`draft-denial-letter`, `notify-claimant`, `close-case`, the 3 `auto-*`
+SLA workers, and the 6 `capture-*` workers) — they hot-reload on file
+changes via `tsx watch`.
 Requires `backend/workers/.env` to exist — create it with:
 
 ```

@@ -1,4 +1,4 @@
-import type { AuthUser, Claim, NewClaimInput, NewPolicyInput, Policy, Provider, Role, Task } from "./types";
+import type { AuthUser, Claim, NewClaimInput, NewPolicyInput, PendingTask, Policy, Provider, Role, Task } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -129,6 +129,32 @@ export async function submitClaim(input: NewClaimInput): Promise<Claim> {
   const res = await fetch(`${API_BASE_URL}/api/claims`, { method: "POST", body, ...withCredentials });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Submitting the claim failed (${res.status}).`));
+  }
+  return res.json();
+}
+
+// --- Claimant resubmission (.claude/specs/generic/claimant-more-info-resubmission.md) ---
+
+// GET /api/claims/:id/pending-task
+export async function fetchPendingTask(claimId: string): Promise<PendingTask | null> {
+  const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}/pending-task`, { cache: "no-store", ...withCredentials });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Couldn't check for a pending task (${res.status}).`));
+  }
+  const data = await res.json();
+  return data.task ?? null;
+}
+
+// POST /api/claims/:id/resubmit
+export async function resubmitClaim(claimId: string, input: { documents: File[]; note: string }): Promise<Claim> {
+  const body = new FormData();
+  body.set("note", input.note);
+  for (const file of input.documents) {
+    body.append("documents", file);
+  }
+  const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}/resubmit`, { method: "POST", body, ...withCredentials });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Submitting your update failed (${res.status}).`));
   }
   return res.json();
 }

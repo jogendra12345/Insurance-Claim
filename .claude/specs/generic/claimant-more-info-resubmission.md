@@ -2,7 +2,9 @@
 
 # generic/claimant-more-info-resubmission
 
-**Status:** Draft
+**Status:** Locked (2026-09-11)
+
+**Lock note (2026-09-11):** Open Questions resolved — (1) multi-file resubmission, reusing the same widget shape as the original claim form; (2) yes, `capture-claimant-resubmission` calls `notifyRole()` for the reopened reviewing role, same as `auto-escalate-review` already does; (3) confirmed — no cap or SLA/timeout on this loop, a claimant who never responds leaves the claim in `awaiting_info` indefinitely. Built the same day: migration `0014_add_info_requested_reason.sql`; BPMN `Task_ClaimantProvideMoreInfo` → `capture-claimant-resubmission` → `Gateway_RouteBackByConfirmedRole` replacing `EndEvent_AwaitingMoreInfo`; `capture-review-decision` validates/writes `infoRequestedReason`; `notify-claimant` widened to a third `decision = "moreInfo"` case (two new call sites: the BPMN more-info-requested email, and a synchronous confirmation email from the resubmit endpoint); `GET /api/claims/:id/pending-task` and `POST /api/claims/:id/resubmit`, both claimant-scoped and ownership-checked; claim-detail-page task-grid card + inline resubmission form (adapted to this app's existing card/section visual language — there was no separate reusable `TaskCard` component to extract from the staff `/tasks` table, which renders as table rows, not cards). `SPEC.md` §9/§10/§12/§14 updated to match.
 
 ## Purpose
 

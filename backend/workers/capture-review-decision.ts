@@ -20,6 +20,7 @@ interface CaptureReviewDecisionVariables {
   claimId: string;
   decision: "approve" | "deny" | "moreInfo";
   denialReason?: string;
+  infoRequestedReason?: string;
   confirmedRole: string;
 }
 
@@ -34,13 +35,14 @@ const JOB_TYPE = "capture-review-decision";
 zeebeClient.createWorker<CaptureReviewDecisionVariables, Record<string, unknown>, Record<string, never>>({
   taskType: JOB_TYPE,
   taskHandler: async (job) => {
-    const { claimId, decision, denialReason, confirmedRole } = job.variables;
+    const { claimId, decision, denialReason, infoRequestedReason, confirmedRole } = job.variables;
     const status = STATUS_BY_DECISION[decision];
 
     // The review task's form requires `decision` and `denialReason` (when
-    // denying), but fail loudly into a visible Operate incident rather than
-    // writing an invalid/incomplete row if it's ever missing anyway — e.g.
-    // someone completes the task via the raw API instead of the form.
+    // denying) or `infoRequestedReason` (when requesting more info), but
+    // fail loudly into a visible Operate incident rather than writing an
+    // invalid/incomplete row if it's ever missing anyway — e.g. someone
+    // completes the task via the raw API instead of the form.
     if (!status) {
       throw new Error(
         `capture-review-decision: decision must be one of ${Object.keys(STATUS_BY_DECISION).join(", ")}, got ${JSON.stringify(decision)}`
@@ -49,10 +51,13 @@ zeebeClient.createWorker<CaptureReviewDecisionVariables, Record<string, unknown>
     if (decision === "deny" && !denialReason) {
       throw new Error("capture-review-decision: denialReason is required when decision is 'deny'");
     }
+    if (decision === "moreInfo" && !infoRequestedReason) {
+      throw new Error("capture-review-decision: infoRequestedReason is required when decision is 'moreInfo'");
+    }
 
     await pool.query(
-      `UPDATE claims SET decision = $1, denial_reason = $2, status = $3, updated_at = now() WHERE id = $4`,
-      [decision, denialReason ?? null, status, claimId]
+      `UPDATE claims SET decision = $1, denial_reason = $2, info_requested_reason = $3, status = $4, updated_at = now() WHERE id = $5`,
+      [decision, denialReason ?? null, infoRequestedReason ?? null, status, claimId]
     );
 
     let reviewersNotified: number | null = null;
@@ -69,7 +74,13 @@ zeebeClient.createWorker<CaptureReviewDecisionVariables, Record<string, unknown>
       actorType: "human",
       actorId: "tasklist",
       action: "decision_recorded",
-      detail: { decision, denialReason: denialReason ?? null, confirmedRole, reviewersNotified },
+      detail: {
+        decision,
+        denialReason: denialReason ?? null,
+        infoRequestedReason: infoRequestedReason ?? null,
+        confirmedRole,
+        reviewersNotified,
+      },
     });
 
     return job.complete({});

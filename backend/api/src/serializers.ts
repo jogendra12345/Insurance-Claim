@@ -23,6 +23,7 @@ export function serializeClaim(row: any) {
     triageNote: row.triage_note,
     decision: row.decision,
     denialReason: row.denial_reason,
+    infoRequestedReason: row.info_requested_reason,
     processInstanceKey: row.process_instance_key,
     diagnosisCode: row.diagnosis_code,
     procedureCode: row.procedure_code,

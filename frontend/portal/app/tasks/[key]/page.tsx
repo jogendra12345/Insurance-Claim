@@ -341,6 +341,7 @@ function TriageReviewForm({ busy, onComplete }: { busy: boolean; onComplete: (va
 function ReviewDecisionForm({ busy, onComplete }: { busy: boolean; onComplete: (variables: Record<string, unknown>) => void }) {
   const [decision, setDecision] = useState<"approve" | "deny" | "moreInfo">("approve");
   const [denialReason, setDenialReason] = useState("");
+  const [infoRequestedReason, setInfoRequestedReason] = useState("");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -356,9 +357,31 @@ function ReviewDecisionForm({ busy, onComplete }: { busy: boolean; onComplete: (
           <textarea value={denialReason} onChange={(e) => setDenialReason(e.target.value)} style={{ ...inputStyle, minHeight: "70px" }} />
         </FormRow>
       )}
+      {decision === "moreInfo" && (
+        <FormRow label="Reason more info is needed">
+          <textarea
+            value={infoRequestedReason}
+            onChange={(e) => setInfoRequestedReason(e.target.value)}
+            placeholder="What does the claimant need to provide before this can move forward?"
+            style={{ ...inputStyle, minHeight: "70px" }}
+          />
+        </FormRow>
+      )}
       <button
-        onClick={() => onComplete(decision === "deny" ? { decision, denialReason } : { decision })}
-        disabled={busy || (decision === "deny" && !denialReason.trim())}
+        onClick={() =>
+          onComplete(
+            decision === "deny"
+              ? { decision, denialReason }
+              : decision === "moreInfo"
+                ? { decision, infoRequestedReason }
+                : { decision }
+          )
+        }
+        disabled={
+          busy ||
+          (decision === "deny" && !denialReason.trim()) ||
+          (decision === "moreInfo" && !infoRequestedReason.trim())
+        }
         className="transition btn-press"
         style={primaryButtonStyle(busy)}
       >

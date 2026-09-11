@@ -150,6 +150,7 @@
         <zeebe:formDefinition formId="ReviewDecisionForm" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Role_Adjuster</bpmn:incoming>
+      <bpmn:incoming>Flow_RouteBack_Adjuster</bpmn:incoming>
       <bpmn:outgoing>Flow_Adjuster_ToDecision</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:boundaryEvent id="BoundaryEvent_AdjusterSla" attachedToRef="Task_AdjusterReview" cancelActivity="true">
@@ -177,6 +178,7 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Role_Investigator</bpmn:incoming>
       <bpmn:incoming>Flow_AutoEscalateAdjuster_ToInvestigatorReview</bpmn:incoming>
+      <bpmn:incoming>Flow_RouteBack_Investigator</bpmn:incoming>
       <bpmn:outgoing>Flow_Investigator_ToDecision</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:boundaryEvent id="BoundaryEvent_InvestigatorSla" attachedToRef="Task_InvestigatorReview" cancelActivity="true">
@@ -204,6 +206,7 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_Role_Legal</bpmn:incoming>
       <bpmn:incoming>Flow_AutoEscalateInvestigator_ToLegalReview</bpmn:incoming>
+      <bpmn:incoming>Flow_RouteBack_Legal</bpmn:incoming>
       <bpmn:outgoing>Flow_Legal_ToDecision</bpmn:outgoing>
     </bpmn:userTask>
     <!-- Legal is the DMN's top tier (SPEC.md §11) — its timeout falls back
@@ -236,6 +239,7 @@
         <zeebe:formDefinition formId="ReviewDecisionForm" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_AutoEscalateLegal_ToSupervisorReview</bpmn:incoming>
+      <bpmn:incoming>Flow_RouteBack_Supervisor</bpmn:incoming>
       <bpmn:outgoing>Flow_SupervisorReview_ToCaptureReviewDecision</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:serviceTask id="Task_CaptureReviewDecision" name="capture-review-decision">
@@ -254,9 +258,38 @@
       <bpmn:outgoing>Flow_Decision_Deny</bpmn:outgoing>
       <bpmn:outgoing>Flow_Decision_MoreInfo</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:endEvent id="EndEvent_AwaitingMoreInfo" name="Awaiting More Information">
+    <!-- .claude/specs/generic/claimant-more-info-resubmission.md — replaces
+         the earlier terminal EndEvent_AwaitingMoreInfo. Loops back to the
+         same reviewing role's task instead of intake, so AI extraction/
+         scoring doesn't rerun needlessly. -->
+    <bpmn:serviceTask id="Task_NotifyClaimant_MoreInfo" name="notify-claimant">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="notify-claimant" />
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_Decision_MoreInfo</bpmn:incoming>
-    </bpmn:endEvent>
+      <bpmn:outgoing>Flow_ToClaimantProvideMoreInfo</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_ClaimantProvideMoreInfo" name="Claimant Provide More Info">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToClaimantProvideMoreInfo</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCaptureClaimantResubmission</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_CaptureClaimantResubmission" name="capture-claimant-resubmission">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="capture-claimant-resubmission" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToCaptureClaimantResubmission</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToRouteBackByConfirmedRole</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_RouteBackByConfirmedRole" name="Route Back by Confirmed Role" default="Flow_RouteBack_Adjuster">
+      <bpmn:incoming>Flow_ToRouteBackByConfirmedRole</bpmn:incoming>
+      <bpmn:outgoing>Flow_RouteBack_Adjuster</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RouteBack_Investigator</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RouteBack_Legal</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RouteBack_Supervisor</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
     <bpmn:exclusiveGateway id="Gateway_NeedsSecondSignoff" name="Needs Second Sign-off?" default="Flow_Signoff_No">
       <bpmn:incoming>Flow_Decision_Approve</bpmn:incoming>
       <bpmn:outgoing>Flow_Signoff_Yes</bpmn:outgoing>
@@ -369,8 +402,23 @@
     <bpmn:sequenceFlow id="Flow_Decision_Deny" name="deny" sourceRef="Gateway_Decision" targetRef="Task_DraftDenialLetter">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=decision = "deny"</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_Decision_MoreInfo" name="more info" sourceRef="Gateway_Decision" targetRef="EndEvent_AwaitingMoreInfo">
+    <bpmn:sequenceFlow id="Flow_Decision_MoreInfo" name="more info" sourceRef="Gateway_Decision" targetRef="Task_NotifyClaimant_MoreInfo">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=decision = "moreInfo"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToClaimantProvideMoreInfo" sourceRef="Task_NotifyClaimant_MoreInfo" targetRef="Task_ClaimantProvideMoreInfo" />
+    <bpmn:sequenceFlow id="Flow_ToCaptureClaimantResubmission" sourceRef="Task_ClaimantProvideMoreInfo" targetRef="Task_CaptureClaimantResubmission" />
+    <bpmn:sequenceFlow id="Flow_ToRouteBackByConfirmedRole" sourceRef="Task_CaptureClaimantResubmission" targetRef="Gateway_RouteBackByConfirmedRole" />
+    <bpmn:sequenceFlow id="Flow_RouteBack_Adjuster" name="adjuster" sourceRef="Gateway_RouteBackByConfirmedRole" targetRef="Task_AdjusterReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=confirmedRole = "adjuster"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_RouteBack_Investigator" name="investigator" sourceRef="Gateway_RouteBackByConfirmedRole" targetRef="Task_InvestigatorReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=confirmedRole = "investigator"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_RouteBack_Legal" name="legal" sourceRef="Gateway_RouteBackByConfirmedRole" targetRef="Task_LegalReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=confirmedRole = "legal"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_RouteBack_Supervisor" name="supervisor" sourceRef="Gateway_RouteBackByConfirmedRole" targetRef="Task_SupervisorReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=confirmedRole = "supervisor"</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_Signoff_Yes" name="yes" sourceRef="Gateway_NeedsSecondSignoff" targetRef="Task_SupervisorSignoff">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=claimAmount &gt; 50000</bpmn:conditionExpression>
@@ -492,8 +540,17 @@
       <bpmndi:BPMNShape id="Task_LegalReview_di" bpmnElement="Task_LegalReview">
         <dc:Bounds x="1825" y="310" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="EndEvent_AwaitingMoreInfo_di" bpmnElement="EndEvent_AwaitingMoreInfo">
-        <dc:Bounds x="57" y="472" width="36" height="36" />
+      <bpmndi:BPMNShape id="Task_NotifyClaimant_MoreInfo_di" bpmnElement="Task_NotifyClaimant_MoreInfo">
+        <dc:Bounds x="2125" y="900" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ClaimantProvideMoreInfo_di" bpmnElement="Task_ClaimantProvideMoreInfo">
+        <dc:Bounds x="2275" y="900" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CaptureClaimantResubmission_di" bpmnElement="Task_CaptureClaimantResubmission">
+        <dc:Bounds x="2425" y="900" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_RouteBackByConfirmedRole_di" bpmnElement="Gateway_RouteBackByConfirmedRole" isMarkerVisible="true">
+        <dc:Bounds x="2600" y="915" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BoundaryEvent_ValidationExceptionSla_di" bpmnElement="BoundaryEvent_ValidationExceptionSla">
         <dc:Bounds x="507" y="232" width="36" height="36" />
@@ -616,10 +673,44 @@
         <di:waypoint x="3525" y="110" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Decision_MoreInfo_di" bpmnElement="Flow_Decision_MoreInfo">
-        <di:waypoint x="2175" y="45" />
-        <di:waypoint x="2175" y="0" />
-        <di:waypoint x="75" y="0" />
-        <di:waypoint x="75" y="472" />
+        <di:waypoint x="2175" y="95" />
+        <di:waypoint x="2175" y="940" />
+        <di:waypoint x="2125" y="940" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToClaimantProvideMoreInfo_di" bpmnElement="Flow_ToClaimantProvideMoreInfo">
+        <di:waypoint x="2225" y="940" />
+        <di:waypoint x="2275" y="940" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToCaptureClaimantResubmission_di" bpmnElement="Flow_ToCaptureClaimantResubmission">
+        <di:waypoint x="2375" y="940" />
+        <di:waypoint x="2425" y="940" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToRouteBackByConfirmedRole_di" bpmnElement="Flow_ToRouteBackByConfirmedRole">
+        <di:waypoint x="2525" y="940" />
+        <di:waypoint x="2600" y="940" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RouteBack_Adjuster_di" bpmnElement="Flow_RouteBack_Adjuster">
+        <di:waypoint x="2625" y="915" />
+        <di:waypoint x="2625" y="850" />
+        <di:waypoint x="1875" y="850" />
+        <di:waypoint x="1875" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RouteBack_Investigator_di" bpmnElement="Flow_RouteBack_Investigator">
+        <di:waypoint x="2600" y="950" />
+        <di:waypoint x="2175" y="1000" />
+        <di:waypoint x="2175" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RouteBack_Legal_di" bpmnElement="Flow_RouteBack_Legal">
+        <di:waypoint x="2650" y="940" />
+        <di:waypoint x="2650" y="1050" />
+        <di:waypoint x="1875" y="1050" />
+        <di:waypoint x="1875" y="390" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RouteBack_Supervisor_di" bpmnElement="Flow_RouteBack_Supervisor">
+        <di:waypoint x="2625" y="965" />
+        <di:waypoint x="2625" y="1100" />
+        <di:waypoint x="2025" y="1100" />
+        <di:waypoint x="2025" y="780" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Signoff_Yes_di" bpmnElement="Flow_Signoff_Yes">
         <di:waypoint x="2350" y="70" />

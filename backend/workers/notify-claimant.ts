@@ -13,7 +13,7 @@ import { gmailNotificationProvider, mockNotificationProvider, resendNotification
 // incident info, settlement/denial content), not just claimId/decision.
 interface NotifyClaimantVariables {
   claimId: string;
-  decision: "approve" | "deny";
+  decision: "approve" | "deny" | "moreInfo";
 }
 
 interface NotifyClaimantOutput {
@@ -49,6 +49,7 @@ zeebeClient.createWorker<NotifyClaimantVariables, Record<string, unknown>, Notif
       claimant_name: string;
       claimant_email: string;
       denial_letter_text: string | null;
+      info_requested_reason: string | null;
       policy_number: string;
       claim_type: string;
       claim_amount: string;
@@ -56,7 +57,7 @@ zeebeClient.createWorker<NotifyClaimantVariables, Record<string, unknown>, Notif
       incident_description: string;
       settlement_id: string | null;
     }>(
-      `SELECT claimant_name, claimant_email, denial_letter_text, policy_number, claim_type,
+      `SELECT claimant_name, claimant_email, denial_letter_text, info_requested_reason, policy_number, claim_type,
               claim_amount, incident_date, incident_description, settlement_id
        FROM claims WHERE id = $1`,
       [claimId]
@@ -72,6 +73,7 @@ zeebeClient.createWorker<NotifyClaimantVariables, Record<string, unknown>, Notif
       claimantEmail: claim.claimant_email,
       decision,
       denialLetterText: decision === "deny" ? claim.denial_letter_text : null,
+      infoRequestedReason: decision === "moreInfo" ? claim.info_requested_reason : null,
       policyNumber: claim.policy_number,
       claimType: claim.claim_type,
       claimAmount: Number(claim.claim_amount),

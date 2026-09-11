@@ -3,6 +3,7 @@ import { Router } from "express";
 import multer from "multer";
 import { requireAuth } from "../auth";
 import { pool } from "../db";
+import { sendEmail } from "../../../shared/email-sender";
 import { serializeClaim, serializeClaimDocument, serializeFraudIndicator } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
 import { CLAIM_CASE_PROCESS_ID, camundaRestClient, zeebeClient } from "../zeebe";
@@ -126,6 +127,161 @@ claimsRouter.get("/:id", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("GET /api/claims/:id failed:", err);
     res.status(500).json({ message: "Couldn't load that claim." });
+  }
+});
+
+// .claude/specs/generic/claimant-more-info-resubmission.md — the BPMN
+// element ID of the claimant-facing user task, located by processInstanceKey
+// rather than through the staff /api/tasks candidate-group proxy (this task
+// carries no candidate group at all — see the spec's Design section).
+const CLAIMANT_PROVIDE_MORE_INFO_ELEMENT_ID = "Task_ClaimantProvideMoreInfo";
+
+function ensureOwnClaim(req: Request, claim: { claimant_email: string } | undefined, res: Response): boolean {
+  if (!claim) {
+    res.status(404).json({ message: "Claim not found." });
+    return false;
+  }
+  if (req.user!.role !== "claimant" || claim.claimant_email.toLowerCase() !== req.user!.email.toLowerCase()) {
+    res.status(403).json({ message: "Not allowed for this claim." });
+    return false;
+  }
+  return true;
+}
+
+// GET /api/claims/:id/pending-task — claimant-only. Returns the open
+// Task_ClaimantProvideMoreInfo task for this claim (if any), or null.
+claimsRouter.get("/:id/pending-task", requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT claimant_email, status, process_instance_key, info_requested_reason FROM claims WHERE id = $1`, [
+      req.params.id,
+    ]);
+    if (!ensureOwnClaim(req, rows[0], res)) return;
+    const claim = rows[0];
+
+    if (claim.status !== "awaiting_info" || !claim.process_instance_key) {
+      return res.json({ task: null });
+    }
+
+    const { items } = await camundaRestClient.searchUserTasks({
+      filter: {
+        state: "CREATED",
+        processInstanceKey: claim.process_instance_key,
+        elementId: CLAIMANT_PROVIDE_MORE_INFO_ELEMENT_ID,
+      },
+    });
+    const task = items[0];
+    if (!task) {
+      return res.json({ task: null });
+    }
+    res.json({
+      task: {
+        taskKey: task.userTaskKey,
+        reason: claim.info_requested_reason,
+        openedAt: task.creationDate,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/claims/:id/pending-task failed:", err);
+    res.status(500).json({ message: "Couldn't check for a pending task." });
+  }
+});
+
+// POST /api/claims/:id/resubmit — claimant-only. Adds documents (and an
+// optional note) to a claim awaiting more info, then completes the
+// underlying Zeebe user task so the process resumes back to the reviewing
+// role that asked.
+claimsRouter.post("/:id/resubmit", uploadDocuments, async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "Login required." });
+  }
+
+  const client = await pool.connect();
+  try {
+    const claimResult = await client.query(
+      `SELECT claimant_email, status, process_instance_key, confirmed_role, info_requested_reason FROM claims WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!ensureOwnClaim(req, claimResult.rows[0], res)) {
+      return;
+    }
+    const claim = claimResult.rows[0];
+
+    if (claim.status !== "awaiting_info" || !claim.process_instance_key) {
+      return res.status(400).json({ message: "This claim isn't waiting on more information right now." });
+    }
+
+    const { items } = await camundaRestClient.searchUserTasks({
+      filter: {
+        state: "CREATED",
+        processInstanceKey: claim.process_instance_key,
+        elementId: CLAIMANT_PROVIDE_MORE_INFO_ELEMENT_ID,
+      },
+    });
+    const task = items[0];
+    if (!task) {
+      return res.status(400).json({ message: "There's no open request for more information on this claim." });
+    }
+
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
+
+    await client.query("BEGIN");
+    for (const file of files) {
+      const objectKey = `${Date.now()}-${file.originalname}`;
+      await minioClient.putObject(BUCKET, objectKey, file.buffer, file.size, {
+        "Content-Type": file.mimetype,
+      });
+      await client.query(`INSERT INTO claim_documents (claim_id, file_url) VALUES ($1, $2)`, [
+        req.params.id,
+        publicUrl(objectKey),
+      ]);
+    }
+
+    // SPEC.md §13 — the API-layer act of submitting the resubmission gets
+    // its own audit_log row, distinct from capture-claimant-resubmission's
+    // process-layer row for the BPMN task completing.
+    await client.query(
+      `INSERT INTO audit_log (claim_id, actor_type, actor_id, action, detail)
+       VALUES ($1, 'human', $2, 'claimant_resubmission_submitted', $3)`,
+      [req.params.id, req.user.userId, JSON.stringify({ note: note || null, documentCount: files.length })]
+    );
+    await client.query("COMMIT");
+
+    await camundaRestClient.completeUserTask({
+      userTaskKey: task.userTaskKey,
+      variables: {
+        claimId: req.params.id,
+        resubmittedByUserId: req.user.userId,
+        documentCount: files.length,
+      },
+    });
+
+    // Best-effort confirmation email — a failed send doesn't block the
+    // resubmission itself, same posture notify-claimant already takes on
+    // provider failures.
+    try {
+      const claimUrl = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/claims/${req.params.id}`;
+      const claimantResult = await pool.query(`SELECT claimant_name, claimant_email FROM claims WHERE id = $1`, [req.params.id]);
+      const claimant = claimantResult.rows[0];
+      const testRecipient = "ayanchou2015@gmail.com";
+      await sendEmail({
+        to: testRecipient,
+        subject: `[${claimant.claimant_email}] Your claim resubmission was received`,
+        html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#111827;"><p>Dear ${claimant.claimant_name},</p><p>We received the information you submitted, and your claim is back under review.</p><p><a href="${claimUrl}" style="color:#2563eb;">View your claim</a></p></div>`,
+        text: `Dear ${claimant.claimant_name},\n\nWe received the information you submitted, and your claim is back under review.\n\nView your claim: ${claimUrl}`,
+      });
+    } catch (emailErr) {
+      console.error(`Resubmission confirmation email failed for claim ${req.params.id}:`, emailErr);
+    }
+
+    const updatedResult = await pool.query(`${CLAIM_SELECT_WITH_PROVIDER} WHERE claims.id = $1`, [req.params.id]);
+    res.json(serializeClaim(updatedResult.rows[0]));
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("POST /api/claims/:id/resubmit failed:", err);
+    res.status(500).json({ message: "Submitting your update failed." });
+  } finally {
+    client.release();
   }
 });
 

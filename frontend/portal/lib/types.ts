@@ -38,6 +38,7 @@ export interface Claim {
   triageNote: string | null;
   decision: Decision | null;
   denialReason: string | null;
+  infoRequestedReason: string | null;
   processInstanceKey: string | null;
   diagnosisCode: string;
   procedureCode: string;
@@ -179,6 +180,14 @@ export interface Task {
   assignee: string | null;
   creationDate: string;
   claim: Claim | null;
+}
+
+/** GET /api/claims/:id/pending-task — the open Task_ClaimantProvideMoreInfo
+    task for this claim, if any (.claude/specs/generic/claimant-more-info-resubmission.md). */
+export interface PendingTask {
+  taskKey: string;
+  reason: string | null;
+  openedAt: string;
 }
 
 export interface NewClaimInput {
