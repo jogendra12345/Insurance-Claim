@@ -352,21 +352,23 @@ function TriageReviewForm({ busy, onComplete }: { busy: boolean; onComplete: (va
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <FormRow label="Action">
-        <select value={triageAction} onChange={(e) => setTriageAction(e.target.value as typeof triageAction)} style={inputStyle}>
-          <option value="review">Route for specialist review</option>
-          <option value="reject">Reject claim</option>
-        </select>
+        <OptionButtons
+          value={triageAction}
+          onChange={setTriageAction}
+          options={[
+            { value: "review", label: "Route for specialist review" },
+            { value: "reject", label: "Reject claim", tone: "danger" },
+          ]}
+        />
       </FormRow>
       {triageAction === "review" && (
         <>
           <FormRow label="Confirmed role">
-            <select value={confirmedRole} onChange={(e) => setConfirmedRole(e.target.value as typeof confirmedRole)} style={inputStyle}>
-              {REVIEW_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role[0].toUpperCase() + role.slice(1)}
-                </option>
-              ))}
-            </select>
+            <OptionButtons
+              value={confirmedRole}
+              onChange={setConfirmedRole}
+              options={REVIEW_ROLES.map((role) => ({ value: role, label: role[0].toUpperCase() + role.slice(1) }))}
+            />
           </FormRow>
           <FormRow label="Note for reviewer (optional)">
             <textarea
@@ -409,11 +411,15 @@ function ReviewDecisionForm({ busy, onComplete }: { busy: boolean; onComplete: (
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <FormRow label="Decision">
-        <select value={decision} onChange={(e) => setDecision(e.target.value as typeof decision)} style={inputStyle}>
-          <option value="approve">Approve</option>
-          <option value="deny">Deny</option>
-          <option value="moreInfo">More info needed</option>
-        </select>
+        <OptionButtons
+          value={decision}
+          onChange={setDecision}
+          options={[
+            { value: "approve", label: "Approve" },
+            { value: "deny", label: "Deny", tone: "danger" },
+            { value: "moreInfo", label: "More info needed" },
+          ]}
+        />
       </FormRow>
       {decision === "deny" && (
         <FormRow label="Denial reason">
@@ -461,10 +467,14 @@ function ValidationExceptionForm({ busy, onComplete }: { busy: boolean; onComple
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <FormRow label="Resolution">
-        <select value={resolutionAction} onChange={(e) => setResolutionAction(e.target.value as typeof resolutionAction)} style={inputStyle}>
-          <option value="resolve">Approve — continue with this claim as submitted</option>
-          <option value="reject">Reject claim</option>
-        </select>
+        <OptionButtons
+          value={resolutionAction}
+          onChange={setResolutionAction}
+          options={[
+            { value: "resolve", label: "Approve — continue with this claim as submitted" },
+            { value: "reject", label: "Reject claim", tone: "danger" },
+          ]}
+        />
       </FormRow>
       {resolutionAction === "reject" && (
         <FormRow label="Denial reason">
@@ -543,6 +553,49 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
       <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>{label}</span>
       {children}
     </label>
+  );
+}
+
+/** Cascading decision buttons in place of a <select> — picking one is what
+    reveals the next step's fields below it (denial reason, etc.), same
+    conditional rendering as before, just triggered by a button press. */
+function OptionButtons<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  options: { value: T; label: string; tone?: "danger" }[];
+}) {
+  return (
+    <div role="group" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+      {options.map((opt) => {
+        const active = value === opt.value;
+        const danger = opt.tone === "danger";
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            aria-pressed={active}
+            className="transition btn-press"
+            style={{
+              border: active ? `1px solid ${danger ? "var(--danger-border)" : "var(--primary)"}` : "1px solid var(--border)",
+              background: active ? (danger ? "var(--danger-bg)" : "var(--primary)") : "var(--surface)",
+              color: active ? (danger ? "var(--danger-fg)" : "var(--primary-contrast)") : "var(--text)",
+              borderRadius: "999px",
+              padding: "0.5rem 1rem",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
