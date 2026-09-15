@@ -56,6 +56,10 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]);
 
+  useEffect(() => {
+    setPage(0);
+  }, [statFilter, statusFilter, claims]);
+
   if (authLoading) {
     // Avoids a flash of landing content for an already-logged-in user whose
     // session just hasn't resolved yet.
@@ -79,10 +83,6 @@ export default function HomePage() {
         : claims;
 
   const visibleClaims = statusFilter === "all" ? statFiltered : statFiltered.filter((c) => c.status === statusFilter);
-
-  useEffect(() => {
-    setPage(0);
-  }, [statFilter, statusFilter, claims]);
 
   const pagedClaims = visibleClaims.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
