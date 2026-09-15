@@ -172,6 +172,19 @@ export interface AuthUser {
   role: Role;
 }
 
+// audit_log.actor_type — SPEC.md §9. .claude/specs/generic/staff-audit-trail-view.md.
+export type ActorType = "system" | "ai" | "human";
+
+export interface AuditLogEntry {
+  id: string;
+  claimId: string;
+  actorType: ActorType;
+  actorId: string | null;
+  action: string;
+  detail: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface Task {
   taskKey: string;
   name: string;

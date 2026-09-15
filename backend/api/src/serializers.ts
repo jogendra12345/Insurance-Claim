@@ -67,3 +67,16 @@ export function serializeFraudIndicator(row: any) {
     createdAt: row.created_at,
   };
 }
+
+// Maps an `audit_log` row (SPEC.md §9) to camelCase — .claude/specs/generic/staff-audit-trail-view.md.
+export function serializeAuditLogEntry(row: any) {
+  return {
+    id: row.id,
+    claimId: row.claim_id,
+    actorType: row.actor_type,
+    actorId: row.actor_id,
+    action: row.action,
+    detail: row.detail,
+    createdAt: row.created_at,
+  };
+}

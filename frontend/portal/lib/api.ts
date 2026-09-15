@@ -1,4 +1,4 @@
-import type { AuthUser, Claim, NewClaimInput, NewPolicyInput, PendingTask, Policy, Provider, Role, Task } from "./types";
+import type { ActorType, AuditLogEntry, AuthUser, Claim, NewClaimInput, NewPolicyInput, PendingTask, Policy, Provider, Role, Task } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -72,6 +72,26 @@ export async function fetchAllClaims(): Promise<Claim[]> {
   const res = await fetch(`${API_BASE_URL}/api/claims`, { cache: "no-store", ...withCredentials });
   if (!res.ok) {
     throw new ApiError(`Couldn't load claims (${res.status}).`);
+  }
+  return res.json();
+}
+
+// GET /api/claims/:id/audit-log — staff-only (.claude/specs/generic/staff-audit-trail-view.md).
+export async function fetchClaimAuditLog(
+  claimId: string,
+  filters: { actorType?: ActorType; from?: string; to?: string } = {}
+): Promise<AuditLogEntry[]> {
+  const params = new URLSearchParams();
+  if (filters.actorType) params.set("actorType", filters.actorType);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  const query = params.toString();
+  const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}/audit-log${query ? `?${query}` : ""}`, {
+    cache: "no-store",
+    ...withCredentials,
+  });
+  if (!res.ok) {
+    throw new ApiError(`Couldn't load that claim's audit history (${res.status}).`);
   }
   return res.json();
 }

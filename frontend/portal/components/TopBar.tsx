@@ -16,6 +16,7 @@ const TABS = (policyLabel: string) => [
 ];
 
 const STAFF_TAB = { href: "/tasks", label: "Tasks", match: (path: string) => path.startsWith("/tasks") };
+const AUDIT_TAB = { href: "/audit", label: "Audit", match: (path: string) => path.startsWith("/audit") };
 
 function initialsFor(email: string): string {
   const local = email.split("@")[0] ?? email;
@@ -151,7 +152,7 @@ export function TopBar() {
   if (isAnonymousLanding) {
     return <LandingTopNav />;
   }
-  const tabs = !user ? [] : isStaff ? [...TABS("Policies"), STAFF_TAB] : TABS(isClaimant ? "Policy" : "Policies");
+  const tabs = !user ? [] : isStaff ? [...TABS("Policies"), STAFF_TAB, AUDIT_TAB] : TABS(isClaimant ? "Policy" : "Policies");
 
   return (
     <header

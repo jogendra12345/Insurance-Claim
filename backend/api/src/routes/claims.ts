@@ -1,10 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import multer from "multer";
-import { requireAuth } from "../auth";
+import { requireAuth, STAFF_ROLES } from "../auth";
 import { pool } from "../db";
 import { sendEmail } from "../../../shared/email-sender";
-import { serializeClaim, serializeClaimDocument, serializeFraudIndicator } from "../serializers";
+import { serializeAuditLogEntry, serializeClaim, serializeClaimDocument, serializeFraudIndicator } from "../serializers";
 import { BUCKET, minioClient, publicUrl } from "../storage";
 import { CLAIM_CASE_PROCESS_ID, camundaRestClient, zeebeClient } from "../zeebe";
 
@@ -127,6 +127,48 @@ claimsRouter.get("/:id", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("GET /api/claims/:id failed:", err);
     res.status(500).json({ message: "Couldn't load that claim." });
+  }
+});
+
+// GET /api/claims/:id/audit-log — staff-only (.claude/specs/generic/staff-audit-trail-view.md).
+// Optional ?actorType=system|ai|human and ?from=/?to= (ISO dates, inclusive,
+// filtering created_at) narrow a long-lived claim's history; omitting all
+// three returns the full trail.
+claimsRouter.get("/:id/audit-log", requireAuth, async (req, res) => {
+  if (!STAFF_ROLES.includes(req.user!.role)) {
+    return res.status(403).json({ message: "Not allowed for your role." });
+  }
+  try {
+    const claimResult = await pool.query(`SELECT id FROM claims WHERE id = $1`, [req.params.id]);
+    if (claimResult.rowCount === 0) {
+      return res.status(404).json({ message: "Claim not found." });
+    }
+    const conditions: string[] = ["claim_id = $1"];
+    const params: string[] = [req.params.id];
+    const { actorType, from, to } = req.query;
+    if (typeof actorType === "string" && actorType.trim()) {
+      params.push(actorType.trim());
+      conditions.push(`actor_type = $${params.length}`);
+    }
+    if (typeof from === "string" && from.trim()) {
+      params.push(from.trim());
+      conditions.push(`created_at >= $${params.length}`);
+    }
+    if (typeof to === "string" && to.trim()) {
+      // A plain "YYYY-MM-DD" `to` value means "through the end of that day",
+      // not midnight at its start — comparing with a plain <= would silently
+      // drop every event from that day itself.
+      params.push(to.trim());
+      conditions.push(`created_at < ($${params.length}::date + interval '1 day')`);
+    }
+    const result = await pool.query(
+      `SELECT * FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY created_at ASC`,
+      params
+    );
+    res.json(result.rows.map(serializeAuditLogEntry));
+  } catch (err) {
+    console.error("GET /api/claims/:id/audit-log failed:", err);
+    res.status(500).json({ message: "Couldn't load that claim's audit history." });
   }
 });
 
