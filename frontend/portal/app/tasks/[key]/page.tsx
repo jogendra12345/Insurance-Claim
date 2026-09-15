@@ -45,6 +45,7 @@ export default function TaskDetailPage() {
   const { user, loading: authLoading } = useAuth();
   const [task, setTask] = useState<Task | null>(null);
   const [documents, setDocuments] = useState<Claim["documents"]>(undefined);
+  const [documentsVisible, setDocumentsVisible] = useState(false);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -194,9 +195,59 @@ export default function TaskDetailPage() {
           )}
 
           {task.claim && (
-            <Section title={`Documents (${documents?.length ?? 0})`}>
+            <Section
+              title={`Documents (${documents?.length ?? 0})`}
+              headerAction={
+                documents &&
+                documents.length > 0 && (
+                  <button
+                    onClick={() => setDocumentsVisible((v) => !v)}
+                    aria-label={documentsVisible ? "Hide documents" : "Show documents"}
+                    aria-pressed={documentsVisible}
+                    className="transition btn-press"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      border: "1px solid var(--border)",
+                      background: documentsVisible ? "var(--primary-soft)" : "var(--surface)",
+                      color: documentsVisible ? "var(--primary)" : "var(--text-muted)",
+                      borderRadius: "999px",
+                      padding: "0.3rem 0.75rem",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <EyeIcon open={documentsVisible} />
+                    {documentsVisible ? "Hide" : "View"}
+                  </button>
+                )
+              }
+            >
               {!documents || documents.length === 0 ? (
                 <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-muted)" }}>No documents attached.</p>
+              ) : !documentsVisible ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                  {documents.map((doc) => (
+                    <span
+                      key={doc.id}
+                      style={{
+                        fontSize: "0.78rem",
+                        color: "var(--text-muted)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "999px",
+                        padding: "0.2rem 0.65rem",
+                        maxWidth: "220px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {fileNameFromUrl(doc.fileUrl)}
+                    </span>
+                  ))}
+                </div>
               ) : (
                 <div className="stagger-list" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                   {documents.map((doc) => (
@@ -232,7 +283,11 @@ export default function TaskDetailPage() {
                           title={fileNameFromUrl(doc.fileUrl)}
                           style={{ width: "100%", height: "320px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}
                         />
-                      ) : null}
+                      ) : (
+                        <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                          Preview not available for this file type — open the link above.
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -436,7 +491,7 @@ function ValidationExceptionForm({ busy, onComplete }: { busy: boolean; onComple
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, headerAction, children }: { title: string; headerAction?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div
       style={{
@@ -447,11 +502,48 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         overflow: "hidden",
       }}
     >
-      <div style={{ padding: "0.75rem 1.25rem", background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+      <div
+        style={{
+          padding: "0.75rem 1.25rem",
+          background: "var(--surface-2)",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "0.75rem",
+        }}
+      >
         <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>{title}</span>
+        {headerAction}
       </div>
       <div style={{ padding: "1.1rem 1.25rem" }}>{children}</div>
     </div>
+  );
+}
+
+function EyeIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {open ? (
+        <>
+          <path
+            d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+        </>
+      ) : (
+        <path
+          d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.24 4.24M6.6 6.7C4 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.7-1.2M9.5 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-2.2 3.1"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
   );
 }
 
