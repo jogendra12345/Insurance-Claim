@@ -131,9 +131,14 @@ claimsRouter.get("/:id", requireAuth, async (req, res) => {
 });
 
 // GET /api/claims/:id/audit-log — staff-only (.claude/specs/generic/staff-audit-trail-view.md).
-// Optional ?actorType=system|ai|human and ?from=/?to= (ISO dates, inclusive,
-// filtering created_at) narrow a long-lived claim's history; omitting all
-// three returns the full trail.
+// Optional ?actorType=system|ai|human and ?from=/?to= narrow a long-lived
+// claim's history; omitting all three returns the full trail. `from`/`to`
+// are full ISO instants, not bare dates — the frontend resolves the
+// caller's local calendar-day picks (a plain <input type="date">, no
+// timezone of its own) into precise UTC instants client-side, using that
+// browser's own timezone, before sending them here
+// (.claude/specs/generic/time-zone-standardization.md) — so this route just
+// compares instants directly and holds no timezone opinion of its own.
 claimsRouter.get("/:id/audit-log", requireAuth, async (req, res) => {
   if (!STAFF_ROLES.includes(req.user!.role)) {
     return res.status(403).json({ message: "Not allowed for your role." });
@@ -150,21 +155,13 @@ claimsRouter.get("/:id/audit-log", requireAuth, async (req, res) => {
       params.push(actorType.trim());
       conditions.push(`actor_type = $${params.length}`);
     }
-    // .claude/specs/generic/time-zone-standardization.md — `from`/`to` are
-    // anchored to UTC calendar days via `AT TIME ZONE 'UTC'` explicitly,
-    // rather than relying on the Postgres session's `TimeZone` GUC (this
-    // container defaults to UTC today, but that's an environment default,
-    // not a guarantee).
     if (typeof from === "string" && from.trim()) {
       params.push(from.trim());
-      conditions.push(`created_at >= ($${params.length}::date AT TIME ZONE 'UTC')`);
+      conditions.push(`created_at >= $${params.length}::timestamptz`);
     }
     if (typeof to === "string" && to.trim()) {
-      // A plain "YYYY-MM-DD" `to` value means "through the end of that UTC
-      // day", not midnight at its start — comparing with a plain <= would
-      // silently drop every event from that day itself.
       params.push(to.trim());
-      conditions.push(`created_at < (($${params.length}::date + interval '1 day') AT TIME ZONE 'UTC')`);
+      conditions.push(`created_at < $${params.length}::timestamptz`);
     }
     const result = await pool.query(
       `SELECT * FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY created_at ASC`,

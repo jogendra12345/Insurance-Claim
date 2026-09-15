@@ -1,12 +1,17 @@
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 // .claude/specs/generic/time-zone-standardization.md — every timestamp is
-// already stored/transmitted as UTC; this is the one place that pins how
-// it's *displayed*, so every viewer sees the same wall-clock time regardless
-// of their own browser's timezone. Only the `timeZone` option is pinned —
-// the `undefined` locale argument still lets date/number conventions (e.g.
-// "Sep 15" vs "15 Sep") follow the viewer's own locale.
-const DISPLAY_TIME_ZONE = "UTC";
+// stored/transmitted as UTC, but always *displayed* converted into each
+// viewer's own local timezone (read from their browser/OS) — not a single
+// fixed zone for everyone. Something logged in India shows in India's local
+// time to a viewer there, and in the US viewer's own local time to them.
+// `absoluteDate` additionally names the resolved IANA zone (e.g.
+// "Asia/Kolkata") so it's unambiguous which zone a given render is in,
+// since two different viewers' renders of the same instant are expected to
+// legitimately differ.
+function localTimeZoneName(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
 
 // Under a day old: show the clock time it was submitted at. A day or older:
 // switch to "N days/weeks/months/years ago" instead of a growing clock time.
@@ -15,7 +20,7 @@ export function relativeTime(iso: string): string {
   const diffMs = Date.now() - then;
 
   if (diffMs < ONE_DAY_MS) {
-    return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE });
+    return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 
   const diffSeconds = Math.round(diffMs / 1000);
@@ -35,12 +40,13 @@ export function relativeTime(iso: string): string {
   return rtf.format(-1, "day");
 }
 
-/** A bare calendar date — e.g. "Sep 15, 2026". No time-of-day, so no "UTC" suffix (a date has no zone ambiguity at day granularity). */
+/** A bare calendar date in the viewer's own local timezone — e.g. "Sep 15, 2026". */
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium", timeZone: DISPLAY_TIME_ZONE });
+  return new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
 }
 
-/** A date + time, explicitly labeled — e.g. "Sep 15, 2026, 2:30 PM UTC". Use for anything where same-day ordering/comparison across viewers matters (audit trails, "last acted" timestamps). */
+/** A date + time in the viewer's own local timezone, with the zone named explicitly — e.g. "Sep 15, 2026, 2:30 PM (Asia/Kolkata)". Use for anything where cross-viewer clarity matters (audit trails, "last acted" timestamps) — the named zone, not an ambiguous abbreviation like "IST" (India/Ireland/Israel all use it), is what makes it unambiguous. */
 export function absoluteDate(iso: string): string {
-  return `${new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: DISPLAY_TIME_ZONE })} UTC`;
+  const formatted = new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return `${formatted} (${localTimeZoneName()})`;
 }

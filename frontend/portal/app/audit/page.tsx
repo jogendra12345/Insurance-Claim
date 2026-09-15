@@ -29,6 +29,13 @@ function formatAction(action: string): string {
     .join(" ");
 }
 
+/** Start of the local calendar day *after* a "YYYY-MM-DD" value, in this browser's own timezone — the exclusive upper bound for "through the end of `dateStr`". Uses date-component arithmetic (not +24h in milliseconds) so DST transition days still land on the correct next midnight. */
+function startOfNextLocalDay(dateStr: string): Date {
+  const nextDay = new Date(`${dateStr}T00:00:00`);
+  nextDay.setDate(nextDay.getDate() + 1);
+  return nextDay;
+}
+
 export default function AuditPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -96,8 +103,13 @@ export default function AuditPage() {
     setEntriesError(null);
     fetchClaimAuditLog(claim.id, {
       actorType: actorType === "all" ? undefined : actorType,
-      from: from || undefined,
-      to: to || undefined,
+      // `from`/`to` come from plain <input type="date"> values ("YYYY-MM-DD")
+      // with no timezone of their own — resolved here into this browser's
+      // actual local midnight instants (start of `from`'s day, start of the
+      // day after `to`) so "From"/"To" mean the viewer's own local calendar
+      // days, matching how timestamps are now displayed (lib/time.ts).
+      from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
+      to: to ? startOfNextLocalDay(to).toISOString() : undefined,
     })
       .then((data) => {
         setEntries(data);
@@ -270,7 +282,7 @@ export default function AuditPage() {
               options={[{ value: "all", label: "All actors" }, ...ACTOR_TYPES.map((a) => ({ value: a, label: ACTOR_LABEL[a] }))]}
             />
             <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>From (UTC)</span>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>From</span>
               <input
                 type="date"
                 value={fromDate}
@@ -282,7 +294,7 @@ export default function AuditPage() {
               />
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>To (UTC)</span>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>To</span>
               <input
                 type="date"
                 value={toDate}
