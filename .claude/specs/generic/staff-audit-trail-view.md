@@ -17,12 +17,16 @@ This spec adds a staff-only audit view: a grid of policies, and — on selecting
 - Selecting a policy shows its claims, reusing the existing `GET /api/claims?policyNumber=...` endpoint (`backend/api/src/routes/claims.ts`) rather than adding a new one — it is already unscoped for staff and already supports this exact filter.
 - A new endpoint, `GET /api/claims/:id/audit-log`, returning that claim's full `audit_log` history ordered by `created_at` — staff-only (`403` for `role = "claimant"`, matching the ownership/role checks `[[claimant-more-info-resubmission]]`'s claimant-scoped endpoints use in the opposite direction). No existing endpoint currently exposes `audit_log` rows to the frontend at all.
 - Selecting a claim (from the policy's claim list) opens a history panel/page rendering that endpoint's rows as a chronological timeline: timestamp, actor (`actor_type` + `actor_id`), action, and `detail` (rendered as readable text, not raw JSON, where practical).
+- **Filters**, scoped to what's already on screen at each step (not a global cross-claim search — see Out of scope):
+  - Policy grid: filter by `status` (`policies.status`) and by `insuranceType` — both already columns on the list `GET /api/policies` returns, so these are client-side filters over the existing payload, no API change.
+  - Claims list (within a selected policy): filter by claim `status` (e.g. `in_review`, `awaiting_info`, `approved`, `denied`, `settled`) — same values `app/tasks/page.tsx`/claim-detail pages already use for status display, applied client-side over the existing `GET /api/claims?policyNumber=...` response.
+  - Claim audit timeline: filter by `actorType` (`system` / `ai` / `human`) and by a `from`/`to` date range on `created_at` — these two are the ones worth pushing server-side (see API below) since a long-lived claim's timeline is the one list in this feature likely to actually grow long enough to matter (`[[claimant-more-info-resubmission]]` loops each add several rows).
 - Read-only throughout — this view never writes to `audit_log` or any other table.
 
 **Out of scope:**
 - Any change to what writes `audit_log` rows, or to the `audit_log` schema itself — this spec only reads what already exists.
 - Merging in Camunda/Operate process-instance history the way `[[case-trace]]` does — that skill already covers cross-checking `audit_log` against Camunda for compliance gaps; this spec is the `audit_log`-only, staff-browsable UI half. Folding in live Camunda history is a possible future extension, not required here.
-- Filtering/searching across all claims by actor, action, or date range — v1 is policy → claims → one claim's timeline, not a global audit search.
+- A global, cross-claim audit search (e.g. "show every `fraud_flagged` action across all policies this month") — filters here only narrow the list already loaded at each step (one policy's claims, one claim's timeline), not a standalone search page.
 - Any change to claimant-facing pages (`app/claims/[id]/page.tsx`) — claimants still never see `audit_log` content.
 - Exporting the timeline (PDF/CSV) — out of scope until a concrete need for it comes up.
 
@@ -32,7 +36,8 @@ This spec adds a staff-only audit view: a grid of policies, and — on selecting
 
 - `401` if unauthenticated. `403` if `req.user!.role === "claimant"` — this endpoint is staff-only in both directions (unlike `[[auth-role-based-access]]`'s claim-scoping, which restricts claimants to their own claims; here claimants are excluded entirely, not just scoped).
 - `404` if the claim doesn't exist.
-- Query: `SELECT * FROM audit_log WHERE claim_id = $1 ORDER BY created_at ASC`.
+- Optional query params: `actorType` (`system` | `ai` | `human`), `from`/`to` (ISO date, inclusive, filtering on `created_at`). All optional and combinable; omitting all three returns the full history, same as before filters existed.
+- Query: `SELECT * FROM audit_log WHERE claim_id = $1 [AND actor_type = $n] [AND created_at >= $n] [AND created_at <= $n] ORDER BY created_at ASC` — conditions appended the same parameterized-query pattern `GET /api/claims` already uses for its optional `policyNumber` filter.
 - Response: an array of `{ id, actorType, actorId, action, detail, createdAt }` (camelCase per this codebase's existing `serialize*` convention in `backend/api/src/serializers.ts` — add a `serializeAuditLogEntry` there alongside `serializeClaim`/`serializeClaimDocument`/`serializeFraudIndicator`).
 
 No change to `GET /api/policies` or `GET /api/claims` — both already serve this feature's grid/list steps as-is.
@@ -43,6 +48,7 @@ No change to `GET /api/policies` or `GET /api/claims` — both already serve thi
 - Grid view: reuse the existing `/policies` list fetch and card/grid presentation already used by `app/policies/page.tsx`, rather than inventing a new policy-card component.
 - Clicking a policy card navigates to (or expands, per Open Questions) that policy's claims, fetched via `GET /api/claims?policyNumber=<policy.policyNumber>`.
 - Clicking a claim opens its audit timeline, fetched from the new `GET /api/claims/:id/audit-log` endpoint, rendered as a vertical chronological list (timestamp, actor, action, human-readable detail) — visually in this app's existing card/section language, not a raw table dump of `detail` JSON.
+- Filter controls: a status dropdown above the claims list (client-side), a status/insurance-type toggle above the policy grid (client-side), and an actor-type dropdown plus a from/to date range above the audit timeline (these two re-fetch `GET /api/claims/:id/audit-log` with query params rather than filtering client-side, per the API design above).
 
 ### Audit trail
 
