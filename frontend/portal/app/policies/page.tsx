@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ShieldCheckIllustration, IdCardIllustration } from "@/components/HeroIllustrations";
 import { Pagination } from "@/components/Pagination";
+import { formatDate } from "@/lib/time";
 
 const PAGE_SIZE = 10;
 
@@ -505,8 +506,8 @@ export default function PoliciesPage() {
                         {policy.status}
                       </span>
                     </Td>
-                    <Td muted>{new Date(policy.effectiveDate).toLocaleDateString()}</Td>
-                    <Td muted>{new Date(policy.expiryDate).toLocaleDateString()}</Td>
+                    <Td muted>{formatDate(policy.effectiveDate)}</Td>
+                    <Td muted>{formatDate(policy.expiryDate)}</Td>
                     <Td align="right">{currency(policy.premiumAmount)}</Td>
                     <Td align="right">{currency(policy.coverageAmount)}</Td>
                     <Td align="right">

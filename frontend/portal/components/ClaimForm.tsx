@@ -8,6 +8,7 @@ import { ApiError, fetchPolicies, submitClaim } from "@/lib/api";
 import { shortClaimId } from "@/lib/claim-id";
 import { useAuth } from "@/lib/auth-context";
 import type { ClaimType, NewClaimInput, Provider } from "@/lib/types";
+import { formatDate } from "@/lib/time";
 import { PolicySelect } from "./PolicySelect";
 import { ProviderSelect } from "./ProviderSelect";
 import { IcdCodeSelect } from "./IcdCodeSelect";
@@ -976,9 +977,9 @@ function ReviewSummary({
 }) {
   const serviceDates =
     serviceDateFrom && serviceDateTo && serviceDateTo !== serviceDateFrom
-      ? `${new Date(serviceDateFrom).toLocaleDateString()} – ${new Date(serviceDateTo).toLocaleDateString()}`
+      ? `${formatDate(serviceDateFrom)} – ${formatDate(serviceDateTo)}`
       : serviceDateFrom
-        ? new Date(serviceDateFrom).toLocaleDateString()
+        ? formatDate(serviceDateFrom)
         : "—";
 
   // Grouped to mirror the form's own steps — [label, value, full-width?]
@@ -997,7 +998,7 @@ function ReviewSummary({
     {
       title: "Incident",
       rows: [
-        ["Incident date", incidentDate ? new Date(incidentDate).toLocaleDateString() : "—"],
+        ["Incident date", incidentDate ? formatDate(incidentDate) : "—"],
         [
           "Requested claim amount",
           claimAmount

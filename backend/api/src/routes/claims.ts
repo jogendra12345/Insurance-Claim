@@ -150,16 +150,21 @@ claimsRouter.get("/:id/audit-log", requireAuth, async (req, res) => {
       params.push(actorType.trim());
       conditions.push(`actor_type = $${params.length}`);
     }
+    // .claude/specs/generic/time-zone-standardization.md — `from`/`to` are
+    // anchored to UTC calendar days via `AT TIME ZONE 'UTC'` explicitly,
+    // rather than relying on the Postgres session's `TimeZone` GUC (this
+    // container defaults to UTC today, but that's an environment default,
+    // not a guarantee).
     if (typeof from === "string" && from.trim()) {
       params.push(from.trim());
-      conditions.push(`created_at >= $${params.length}`);
+      conditions.push(`created_at >= ($${params.length}::date AT TIME ZONE 'UTC')`);
     }
     if (typeof to === "string" && to.trim()) {
-      // A plain "YYYY-MM-DD" `to` value means "through the end of that day",
-      // not midnight at its start — comparing with a plain <= would silently
-      // drop every event from that day itself.
+      // A plain "YYYY-MM-DD" `to` value means "through the end of that UTC
+      // day", not midnight at its start — comparing with a plain <= would
+      // silently drop every event from that day itself.
       params.push(to.trim());
-      conditions.push(`created_at < ($${params.length}::date + interval '1 day')`);
+      conditions.push(`created_at < (($${params.length}::date + interval '1 day') AT TIME ZONE 'UTC')`);
     }
     const result = await pool.query(
       `SELECT * FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY created_at ASC`,

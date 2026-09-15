@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { ApiError, fetchClaim, fetchPendingTask, fetchPolicies, resubmitClaim } from "@/lib/api";
 import type { Claim, PendingTask } from "@/lib/types";
 import { StatusBadge, STATUS_META } from "@/components/StatusBadge";
+import { absoluteDate, formatDate } from "@/lib/time";
 
 const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
   outpatient: "Outpatient",
@@ -242,8 +243,8 @@ export default function ClaimDetailPage() {
                     label="Date(s) of service"
                     value={
                       claim.serviceDateTo && claim.serviceDateTo !== claim.serviceDateFrom
-                        ? `${new Date(claim.serviceDateFrom).toLocaleDateString()} – ${new Date(claim.serviceDateTo).toLocaleDateString()}`
-                        : new Date(claim.serviceDateFrom).toLocaleDateString()
+                        ? `${formatDate(claim.serviceDateFrom)} – ${formatDate(claim.serviceDateTo)}`
+                        : formatDate(claim.serviceDateFrom)
                     }
                   />
                   <DetailRow label="Requested claim amount" value={currency(claim.claimAmount)} />
@@ -275,7 +276,7 @@ export default function ClaimDetailPage() {
 
               <Section title="Incident" icon={<CalendarIcon />}>
                 <div className="detail-rows">
-                  <DetailRow label="Incident date" value={new Date(claim.incidentDate).toLocaleDateString()} />
+                  <DetailRow label="Incident date" value={formatDate(claim.incidentDate)} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", marginTop: "0.9rem" }}>
                   <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>
@@ -326,9 +327,9 @@ export default function ClaimDetailPage() {
                     value={claim.fraudIndicatorCount > 0 ? `${claim.fraudIndicatorCount} flagged` : "None found"}
                   />
                   {claim.decision && <DetailRow label="Decision" value={DECISION_LABEL[claim.decision]} />}
-                  <DetailRow label="Attested" value={new Date(claim.attestationSignedAt).toLocaleString()} />
+                  <DetailRow label="Attested" value={absoluteDate(claim.attestationSignedAt)} />
                   {claim.lastReviewerActionAt && (
-                    <DetailRow label="Last reviewer action" value={new Date(claim.lastReviewerActionAt).toLocaleString()} />
+                    <DetailRow label="Last reviewer action" value={absoluteDate(claim.lastReviewerActionAt)} />
                   )}
                 </div>
                 {claim.riskReasoning && (

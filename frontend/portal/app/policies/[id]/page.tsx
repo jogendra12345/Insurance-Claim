@@ -6,7 +6,7 @@ import { ApiError, fetchActiveClaimsByPolicy, fetchPolicy } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { Claim, DependentRelationship, Policy } from "@/lib/types";
 import { STATUS_TONE } from "@/lib/policy-status";
-import { relativeTime, absoluteDate } from "@/lib/time";
+import { relativeTime, absoluteDate, formatDate } from "@/lib/time";
 
 const CLAIM_TYPE_LABEL: Record<Claim["claimType"], string> = {
   outpatient: "Outpatient",
@@ -140,7 +140,7 @@ export default function PolicyDetailPage() {
             <StatCard label="Coverage amount" value={currency(policy.coverageAmount)} sub="Maximum payout" />
             <StatCard label="Premium amount" value={currency(policy.premiumAmount)} sub="Per policy term" />
             <StatCard label="Claims filed" value={String(claims.length)} sub="Against this policy" />
-            <StatCard label="Expires" value={new Date(policy.expiryDate).toLocaleDateString()} sub="Policy expiry date" />
+            <StatCard label="Expires" value={formatDate(policy.expiryDate)} sub="Policy expiry date" />
           </div>
 
           <Section title="Policyholder & coverage" icon={<FileTextIcon />}>
@@ -148,8 +148,8 @@ export default function PolicyDetailPage() {
               <DetailRow label="Policyholder" value={policy.policyholderName} />
               <DetailRow label="Policyholder email" value={policy.policyholderEmail} />
               <DetailRow label="Insurance type" value={policy.insuranceType} />
-              <DetailRow label="Effective date" value={new Date(policy.effectiveDate).toLocaleDateString()} />
-              <DetailRow label="Expiry date" value={new Date(policy.expiryDate).toLocaleDateString()} />
+              <DetailRow label="Effective date" value={formatDate(policy.effectiveDate)} />
+              <DetailRow label="Expiry date" value={formatDate(policy.expiryDate)} />
             </div>
           </Section>
 

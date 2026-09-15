@@ -10,6 +10,7 @@ import { STATUS_TONE } from "@/lib/policy-status";
 import { STATUS_META } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { IdCardIllustration, ShieldCheckIllustration } from "@/components/HeroIllustrations";
+import { absoluteDate, formatDate } from "@/lib/time";
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -242,7 +243,7 @@ export default function AuditPage() {
                       </Pill>
                     </div>
                     <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                      {new Date(claim.createdAt).toLocaleDateString()} · {claim.claimType}
+                      {formatDate(claim.createdAt)} · {claim.claimType}
                     </div>
                   </Card>
                 );
@@ -269,7 +270,7 @@ export default function AuditPage() {
               options={[{ value: "all", label: "All actors" }, ...ACTOR_TYPES.map((a) => ({ value: a, label: ACTOR_LABEL[a] }))]}
             />
             <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>From</span>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>From (UTC)</span>
               <input
                 type="date"
                 value={fromDate}
@@ -281,7 +282,7 @@ export default function AuditPage() {
               />
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>To</span>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>To (UTC)</span>
               <input
                 type="date"
                 value={toDate}
@@ -334,7 +335,7 @@ export default function AuditPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 600 }}>{formatAction(entry.action)}</span>
                     <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                      {new Date(entry.createdAt).toLocaleString()}
+                      {absoluteDate(entry.createdAt)}
                     </span>
                   </div>
                   <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
