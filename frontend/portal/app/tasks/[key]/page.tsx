@@ -471,8 +471,8 @@ function ValidationExceptionForm({ busy, onComplete }: { busy: boolean; onComple
           value={resolutionAction}
           onChange={setResolutionAction}
           options={[
-            { value: "resolve", label: "Approve — continue with this claim as submitted" },
-            { value: "reject", label: "Reject claim", tone: "danger" },
+            { value: "resolve", label: "Approve" },
+            { value: "reject", label: "Reject", tone: "danger" },
           ]}
         />
       </FormRow>
@@ -485,7 +485,7 @@ function ValidationExceptionForm({ busy, onComplete }: { busy: boolean; onComple
         onClick={() => onComplete(resolutionAction === "reject" ? { resolutionAction, denialReason } : { resolutionAction })}
         disabled={busy || (resolutionAction === "reject" && !denialReason.trim())}
         className="transition btn-press"
-        style={primaryButtonStyle(busy)}
+        style={{ ...primaryButtonStyle(busy), marginTop: "0.5rem" }}
       >
         {busy ? "Submitting…" : "Submit"}
       </button>
