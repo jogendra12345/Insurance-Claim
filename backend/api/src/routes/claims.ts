@@ -139,6 +139,8 @@ claimsRouter.get("/:id", requireAuth, async (req, res) => {
 // browser's own timezone, before sending them here
 // (.claude/specs/generic/time-zone-standardization.md) — so this route just
 // compares instants directly and holds no timezone opinion of its own.
+// Newest first (most recent action at the top) — the frontend renders
+// rows in whatever order this returns, no client-side re-sort.
 claimsRouter.get("/:id/audit-log", requireAuth, async (req, res) => {
   if (!STAFF_ROLES.includes(req.user!.role)) {
     return res.status(403).json({ message: "Not allowed for your role." });
@@ -164,7 +166,7 @@ claimsRouter.get("/:id/audit-log", requireAuth, async (req, res) => {
       conditions.push(`created_at < $${params.length}::timestamptz`);
     }
     const result = await pool.query(
-      `SELECT * FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY created_at ASC`,
+      `SELECT * FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`,
       params
     );
     res.json(result.rows.map(serializeAuditLogEntry));
