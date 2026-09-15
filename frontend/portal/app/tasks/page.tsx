@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, fetchTasks } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { STAFF_ROLES } from "@/lib/types";
@@ -23,11 +23,34 @@ function shortDescription(task: Task): string {
 }
 
 export default function TasksPage() {
+  return (
+    <Suspense fallback={null}>
+      <TasksPageContent />
+    </Suspense>
+  );
+}
+
+function TasksPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+
+  // Set right after completing a task (see app/tasks/[key]/page.tsx) — hides
+  // that task locally in case Camunda's own Tasklist search index hasn't
+  // caught up to the completion yet (see the comment there). Captured once
+  // into state (not read fresh from searchParams every render) so it
+  // survives the URL cleanup below.
+  const [justCompleted] = useState(() => searchParams.get("justCompleted"));
+
+  useEffect(() => {
+    if (justCompleted) {
+      router.replace("/tasks", { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = useCallback(() => {
     setState("loading");
@@ -51,6 +74,11 @@ export default function TasksPage() {
     }
     load();
   }, [authLoading, user, router, load]);
+
+  const visibleTasks = useMemo(
+    () => (justCompleted ? tasks.filter((t) => t.taskKey !== justCompleted) : tasks),
+    [tasks, justCompleted]
+  );
 
   if (authLoading || !user) {
     return null;
@@ -88,11 +116,11 @@ export default function TasksPage() {
         </div>
       )}
 
-      {state === "loaded" && tasks.length === 0 && (
+      {state === "loaded" && visibleTasks.length === 0 && (
         <EmptyState title="No open tasks" body="Nothing waiting in your candidate group right now." />
       )}
 
-      {state === "loaded" && tasks.length > 0 && (
+      {state === "loaded" && visibleTasks.length > 0 && (
         <div
           className="animate-fade-in-up"
           style={{
@@ -113,7 +141,7 @@ export default function TasksPage() {
               </tr>
             </thead>
             <tbody className="stagger-list">
-              {tasks.map((task) => {
+              {visibleTasks.map((task) => {
                 const goTo = () => router.push(`/tasks/${task.taskKey}`);
                 return (
                   <tr

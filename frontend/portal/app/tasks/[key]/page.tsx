@@ -120,7 +120,12 @@ export default function TaskDetailPage() {
     setActionError(null);
     try {
       await completeTask(params.key, variables);
-      router.push("/tasks");
+      // Camunda Tasklist's own search index (what GET /api/tasks reads) can
+      // lag a moment behind a completion actually taking effect, so an
+      // immediate refetch can still show this task as CREATED — pass its key
+      // along so the tasks list hides it locally regardless of what the
+      // index says yet (a plain reload confirms it's really gone).
+      router.push(`/tasks?justCompleted=${params.key}`);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Couldn't complete this task.");
       setBusy(false);
