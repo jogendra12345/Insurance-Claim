@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, fetchAllClaims, fetchClaimAuditLog, fetchPolicies } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { ACTIVE_STATUSES, STAFF_ROLES } from "@/lib/types";
+import { STAFF_ROLES } from "@/lib/types";
 import type { ActorType, AuditLogEntry, Claim, ClaimStatus, Policy, PolicyStatus } from "@/lib/types";
 import { STATUS_TONE } from "@/lib/policy-status";
 import { STATUS_META } from "@/components/StatusBadge";
@@ -37,8 +37,8 @@ export default function AuditPage() {
   const [policyStatusFilter, setPolicyStatusFilter] = useState<PolicyStatus | "all">("all");
 
   // Loaded once up front (staff see every claim, unscoped) so the policy grid
-  // can be filtered to "has an active claim" and the claims grid can react to
-  // a policy selection instantly, with no per-policy round trip.
+  // can be filtered to "has at least one claim" and the claims grid can react
+  // to a policy selection instantly, with no per-policy round trip.
   const [allClaims, setAllClaims] = useState<Claim[]>([]);
   const [claimsState, setClaimsState] = useState<LoadState>("loading");
   const [claimsError, setClaimsError] = useState<string | null>(null);
@@ -115,18 +115,14 @@ export default function AuditPage() {
     loadAuditLog(claim, "all", "", "");
   }
 
-  // Only policies with at least one non-terminal claim show up in the grid —
-  // an audit trail of a policy with nothing currently moving isn't useful
-  // for a staff member browsing case-by-case.
-  const policyIdsWithActiveClaims = useMemo(
-    () => new Set(allClaims.filter((c) => ACTIVE_STATUSES.includes(c.status)).map((c) => c.policyId)),
-    [allClaims]
-  );
+  // Only policies with at least one claim raised against them show up in the
+  // grid — a policy nobody has ever filed against has no audit trail to see.
+  const policyIdsWithClaims = useMemo(() => new Set(allClaims.map((c) => c.policyId)), [allClaims]);
 
   const visiblePolicies = useMemo(() => {
-    const withActiveClaims = policies.filter((p) => policyIdsWithActiveClaims.has(p.id));
-    return policyStatusFilter === "all" ? withActiveClaims : withActiveClaims.filter((p) => p.status === policyStatusFilter);
-  }, [policies, policyIdsWithActiveClaims, policyStatusFilter]);
+    const withClaims = policies.filter((p) => policyIdsWithClaims.has(p.id));
+    return policyStatusFilter === "all" ? withClaims : withClaims.filter((p) => p.status === policyStatusFilter);
+  }, [policies, policyIdsWithClaims, policyStatusFilter]);
 
   const policyClaims = useMemo(
     () => (selectedPolicy ? allClaims.filter((c) => c.policyId === selectedPolicy.id) : []),
@@ -143,106 +139,104 @@ export default function AuditPage() {
   }
 
   return (
-    <main style={{ maxWidth: "1280px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+    <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <div>
         <h1 style={{ margin: 0, fontSize: "1.9rem" }}>Audit trail</h1>
         <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)" }}>
-          Policies with an active claim, on the left. Pick one to see its claims, then pick a claim to see who acted on it, and when.
+          Pick a policy, then a claim, to see every step recorded against it — who acted, and when.
         </p>
       </div>
 
-      {!selectedClaim && (
-        <section style={{ display: "grid", gridTemplateColumns: "minmax(260px, 1fr) minmax(260px, 1.4fr)", gap: "1.5rem", alignItems: "start" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Policies</h2>
-              <FilterSelect
-                label=""
-                value={policyStatusFilter}
-                onChange={(v) => setPolicyStatusFilter(v as PolicyStatus | "all")}
-                options={[
-                  { value: "all", label: "All statuses" },
-                  { value: "active", label: "Active" },
-                  { value: "lapsed", label: "Lapsed" },
-                  { value: "cancelled", label: "Cancelled" },
-                ]}
-              />
-            </div>
+      {!selectedPolicy && (
+        <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <FilterBar>
+            <FilterSelect
+              label="Status"
+              value={policyStatusFilter}
+              onChange={(v) => setPolicyStatusFilter(v as PolicyStatus | "all")}
+              options={[
+                { value: "all", label: "All statuses" },
+                { value: "active", label: "Active" },
+                { value: "lapsed", label: "Lapsed" },
+                { value: "cancelled", label: "Cancelled" },
+              ]}
+            />
+          </FilterBar>
 
-            {(policiesState === "loading" || claimsState === "loading") && (
-              <div className="skeleton" style={{ height: "260px" }} aria-busy="true" />
-            )}
-            {policiesState === "error" && <ErrorBanner message={policiesError ?? "Something went wrong."} />}
-            {claimsState === "error" && <ErrorBanner message={claimsError ?? "Something went wrong."} />}
-            {policiesState === "loaded" && claimsState === "loaded" && visiblePolicies.length === 0 && (
-              <EmptyState title="No policies with an active claim" body="Try a different status filter." />
-            )}
-            {policiesState === "loaded" && claimsState === "loaded" && visiblePolicies.length > 0 && (
-              <Grid>
-                {visiblePolicies.map((policy) => {
-                  const tone = STATUS_TONE[policy.status];
-                  return (
-                    <Card key={policy.id} selected={selectedPolicy?.id === policy.id} onClick={() => setSelectedPolicy(policy)}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem" }}>
-                        <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{policy.policyNumber}</span>
-                        <Pill bg={tone.bg} fg={tone.fg}>
-                          {policy.status}
-                        </Pill>
-                      </div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{policy.policyholderName}</div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", textTransform: "capitalize" }}>
-                        {policy.insuranceType}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </Grid>
-            )}
-          </div>
+          {(policiesState === "loading" || claimsState === "loading") && (
+            <div className="skeleton" style={{ height: "260px" }} aria-busy="true" />
+          )}
+          {policiesState === "error" && <ErrorBanner message={policiesError ?? "Something went wrong."} />}
+          {claimsState === "error" && <ErrorBanner message={claimsError ?? "Something went wrong."} />}
+          {policiesState === "loaded" && claimsState === "loaded" && visiblePolicies.length === 0 && (
+            <EmptyState title="No policies with claims" body="Try a different status filter, or no claims have been raised yet." />
+          )}
+          {policiesState === "loaded" && claimsState === "loaded" && visiblePolicies.length > 0 && (
+            <Grid>
+              {visiblePolicies.map((policy) => {
+                const tone = STATUS_TONE[policy.status];
+                return (
+                  <Card key={policy.id} onClick={() => setSelectedPolicy(policy)}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem" }}>
+                      <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{policy.policyNumber}</span>
+                      <Pill bg={tone.bg} fg={tone.fg}>
+                        {policy.status}
+                      </Pill>
+                    </div>
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{policy.policyholderName}</div>
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", textTransform: "capitalize" }}>
+                      {policy.insuranceType}
+                    </div>
+                  </Card>
+                );
+              })}
+            </Grid>
+          )}
+        </section>
+      )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
-                {selectedPolicy ? `Claims — ${selectedPolicy.policyNumber}` : "Claims"}
-              </h2>
-              {selectedPolicy && (
-                <FilterSelect
-                  label=""
-                  value={claimStatusFilter}
-                  onChange={(v) => setClaimStatusFilter(v as ClaimStatus | "all")}
-                  options={[
-                    { value: "all", label: "All statuses" },
-                    ...Object.entries(STATUS_META).map(([value, meta]) => ({ value, label: meta.label })),
-                  ]}
-                />
-              )}
-            </div>
+      {selectedPolicy && !selectedClaim && (
+        <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <BackLink label="All policies" onClick={() => setSelectedPolicy(null)} />
+          <h2 style={{ margin: 0, fontSize: "1.3rem" }}>
+            {selectedPolicy.policyNumber} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>— {selectedPolicy.policyholderName}</span>
+          </h2>
 
-            {!selectedPolicy && <EmptyState title="Select a policy" body="Pick a policy on the left to see its claims here." />}
-            {selectedPolicy && visibleClaims.length === 0 && (
-              <EmptyState title="No claims match" body="Try a different status filter, or this policy has no claims yet." />
-            )}
-            {selectedPolicy && visibleClaims.length > 0 && (
-              <Grid>
-                {visibleClaims.map((claim) => {
-                  const meta = STATUS_META[claim.status];
-                  return (
-                    <Card key={claim.id} onClick={() => selectClaim(claim)}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem" }}>
-                        <span style={{ fontWeight: 600 }}>{claim.claimantName}</span>
-                        <Pill bg={meta.bg} fg={meta.fg}>
-                          {meta.label}
-                        </Pill>
-                      </div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                        {new Date(claim.createdAt).toLocaleDateString()} · {claim.claimType}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </Grid>
-            )}
-          </div>
+          <FilterBar>
+            <FilterSelect
+              label="Status"
+              value={claimStatusFilter}
+              onChange={(v) => setClaimStatusFilter(v as ClaimStatus | "all")}
+              options={[
+                { value: "all", label: "All statuses" },
+                ...Object.entries(STATUS_META).map(([value, meta]) => ({ value, label: meta.label })),
+              ]}
+            />
+          </FilterBar>
+
+          {visibleClaims.length === 0 && (
+            <EmptyState title="No claims match" body="Try a different status filter, or this policy has no claims yet." />
+          )}
+          {visibleClaims.length > 0 && (
+            <Grid>
+              {visibleClaims.map((claim) => {
+                const meta = STATUS_META[claim.status];
+                return (
+                  <Card key={claim.id} onClick={() => selectClaim(claim)}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem" }}>
+                      <span style={{ fontWeight: 600 }}>{claim.claimantName}</span>
+                      <Pill bg={meta.bg} fg={meta.fg}>
+                        {meta.label}
+                      </Pill>
+                    </div>
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                      {new Date(claim.createdAt).toLocaleDateString()} · {claim.claimType}
+                    </div>
+                  </Card>
+                );
+              })}
+            </Grid>
+          )}
         </section>
       )}
 
@@ -365,7 +359,7 @@ function Grid({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Card({ children, onClick, selected }: { children: React.ReactNode; onClick: () => void; selected?: boolean }) {
+function Card({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
@@ -376,10 +370,10 @@ function Card({ children, onClick, selected }: { children: React.ReactNode; onCl
       tabIndex={0}
       className="row-hover transition"
       style={{
-        border: selected ? "1px solid var(--primary)" : "1px solid var(--border)",
+        border: "1px solid var(--border)",
         borderRadius: "var(--radius-md)",
         background: "var(--surface)",
-        boxShadow: selected ? "0 0 0 1px var(--primary), var(--shadow-card)" : "var(--shadow-card)",
+        boxShadow: "var(--shadow-card)",
         padding: "1rem 1.1rem",
         cursor: "pointer",
         display: "flex",
