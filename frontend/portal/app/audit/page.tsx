@@ -9,6 +9,7 @@ import type { ActorType, AuditLogEntry, Claim, ClaimStatus, Policy, PolicyStatus
 import { STATUS_TONE } from "@/lib/policy-status";
 import { STATUS_META } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { IdCardIllustration, ShieldCheckIllustration } from "@/components/HeroIllustrations";
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -140,12 +141,23 @@ export default function AuditPage() {
 
   return (
     <main style={{ maxWidth: "1040px", margin: "0 auto", padding: "2.5rem 1.5rem 4rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <div>
-        <h1 style={{ margin: 0, fontSize: "1.9rem" }}>Audit trail</h1>
-        <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)" }}>
-          Pick a policy, then a claim, to see every step recorded against it — who acted, and when.
-        </p>
-      </div>
+      <section
+        className="hero animate-fade-in-up"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1.5rem", flexWrap: "wrap", padding: "2rem 2.25rem" }}
+      >
+        <span className="hero-orb hero-orb--a" aria-hidden="true" />
+        <span className="hero-orb hero-orb--b" aria-hidden="true" />
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "560px" }}>
+          <h1 style={{ margin: 0, fontSize: "1.9rem" }}>Audit trail</h1>
+          <p style={{ margin: 0, color: "var(--text-muted)" }}>
+            Pick a policy, then a claim, to see every step recorded against it — who acted, and when.
+          </p>
+        </div>
+        <div aria-hidden="true" style={{ display: "flex", alignItems: "flex-end", gap: "0.9rem", flexShrink: 0 }}>
+          <IdCardIllustration className="float-icon" />
+          <ShieldCheckIllustration className="float-icon-delay" />
+        </div>
+      </section>
 
       {!selectedPolicy && (
         <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
