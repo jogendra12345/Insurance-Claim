@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { fetchTasks } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { STAFF_ROLES } from "@/lib/types";
 import { ThemeToggle } from "./ThemeToggle";
@@ -17,6 +18,31 @@ const TABS = (policyLabel: string) => [
 
 const STAFF_TAB = { href: "/tasks", label: "Tasks", match: (path: string) => path.startsWith("/tasks") };
 const AUDIT_TAB = { href: "/audit", label: "Audit", match: (path: string) => path.startsWith("/audit") };
+
+/** Open-task count for the Tasks tab's "Tasks (4)" badge — refetched on every route change so it stays current after claiming/completing a task elsewhere. Silently gives up on error; the tab just shows no count rather than an error state of its own. */
+function useOpenTaskCount(isStaff: boolean, pathname: string): number | null {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isStaff) {
+      setCount(null);
+      return;
+    }
+    let cancelled = false;
+    fetchTasks()
+      .then((tasks) => {
+        if (!cancelled) setCount(tasks.length);
+      })
+      .catch(() => {
+        if (!cancelled) setCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isStaff, pathname]);
+
+  return count;
+}
 
 function initialsFor(email: string): string {
   const local = email.split("@")[0] ?? email;
@@ -145,6 +171,7 @@ export function TopBar() {
 
   const isStaff = !!user && STAFF_ROLES.includes(user.role);
   const isClaimant = user?.role === "claimant";
+  const openTaskCount = useOpenTaskCount(isStaff, pathname);
   // generic/public-landing-page.md — the landing page (unauthenticated, at
   // "/") gets its own dedicated header entirely (design-reference/landing.html),
   // not a filtered version of the app's normal Policies/Claims/Tasks nav.
@@ -152,7 +179,8 @@ export function TopBar() {
   if (isAnonymousLanding) {
     return <LandingTopNav />;
   }
-  const tabs = !user ? [] : isStaff ? [...TABS("Policies"), STAFF_TAB, AUDIT_TAB] : TABS(isClaimant ? "Policy" : "Policies");
+  const staffTab = openTaskCount !== null ? { ...STAFF_TAB, label: `${STAFF_TAB.label} (${openTaskCount})` } : STAFF_TAB;
+  const tabs = !user ? [] : isStaff ? [...TABS("Policies"), staffTab, AUDIT_TAB] : TABS(isClaimant ? "Policy" : "Policies");
 
   return (
     <header
