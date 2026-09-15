@@ -18,7 +18,7 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio
     container_name: claimflow-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
