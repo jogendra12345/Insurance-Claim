@@ -8,6 +8,7 @@ import { claimsRouter } from "./routes/claims";
 import { policiesRouter } from "./routes/policies";
 import { providersRouter } from "./routes/providers";
 import { tasksRouter } from "./routes/tasks";
+import { whatsappRouter } from "./routes/whatsapp";
 import { ensureBucket } from "./storage";
 
 const app = express();
@@ -26,6 +27,7 @@ app.use("/api/policies", policiesRouter);
 app.use("/api/claims", claimsRouter);
 app.use("/api/providers", providersRouter);
 app.use("/api/tasks", tasksRouter);
+app.use("/api/whatsapp", whatsappRouter);
 
 ensureBucket()
   .then(() => {
