@@ -349,6 +349,8 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     claimType,
     claimantName,
     claimantEmail,
+    claimantPhone,
+    channel,
     incidentDate,
     incidentDescription,
     claimAmount,
@@ -364,6 +366,11 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     coordinationOfBenefits,
     attested,
   } = req.body;
+
+  // channel defaults to 'portal' (today's only real intake path); 'whatsapp'
+  // is reserved for .claude/specs/generic/whatsapp-claim-intake.md, still
+  // Draft/unimplemented — no route sends it yet.
+  const intakeChannel = channel === "whatsapp" ? "whatsapp" : "portal";
 
   if (
     !policyNumber ||
@@ -446,11 +453,11 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     const claimResult = await client.query(
       `INSERT INTO claims (
          carrier_id, insurance_type, policy_number, policy_id, claim_type,
-         claimant_name, claimant_email, incident_date, incident_description,
+         claimant_name, claimant_email, claimant_phone, channel, incident_date, incident_description,
          claim_amount, status, provider_id, diagnosis_code, procedure_code,
          service_date_from, service_date_to, total_billed_amount,
          coordination_of_benefits, attestation_signed_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'submitted', $11, $12, $13, $14, $15, $16, $17, now())
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'submitted', $13, $14, $15, $16, $17, $18, $19, now())
        RETURNING *`,
       [
         policy.carrier_id,
@@ -460,6 +467,8 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
         claimType,
         claimantName,
         claimantEmail,
+        claimantPhone || null,
+        intakeChannel,
         incidentDate,
         incidentDescription,
         claimAmount,

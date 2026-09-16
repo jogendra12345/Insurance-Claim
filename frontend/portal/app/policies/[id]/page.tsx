@@ -147,6 +147,7 @@ export default function PolicyDetailPage() {
             <div className="detail-rows">
               <DetailRow label="Policyholder" value={policy.policyholderName} />
               <DetailRow label="Policyholder email" value={policy.policyholderEmail} />
+              <DetailRow label="Policyholder phone" value={policy.policyholderPhone || "—"} />
               <DetailRow label="Insurance type" value={policy.insuranceType} />
               <DetailRow label="Effective date" value={formatDate(policy.effectiveDate)} />
               <DetailRow label="Expiry date" value={formatDate(policy.expiryDate)} />
@@ -165,6 +166,7 @@ export default function PolicyDetailPage() {
                     <span style={{ fontWeight: 500 }}>{dependent.fullName}</span>
                     <span style={{ textAlign: "right", color: "var(--text-muted)" }}>
                       {DEPENDENT_RELATIONSHIP_LABEL[dependent.relationship]} · {dependent.email}
+                      {dependent.phone ? ` · ${dependent.phone}` : ""}
                     </span>
                   </div>
                 ))}

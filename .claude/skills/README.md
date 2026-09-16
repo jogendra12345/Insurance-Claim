@@ -1,6 +1,6 @@
 # ClaimFlow AI — Claude Code skills
 
-Six skills for working against `SPEC.md`, this repo's source of truth. All of them read `SPEC.md` fresh each time rather than trusting memory of it — if `SPEC.md` changes, these skills' behavior changes with it. Invoke with `/<skill-name> [args]`.
+Seven skills for working against `SPEC.md`, this repo's source of truth, plus one repo-workflow skill. The `SPEC.md`-facing skills read it fresh each time rather than trusting memory of it — if `SPEC.md` changes, their behavior changes with it. Invoke with `/<skill-name> [args]`.
 
 ## Skills at a glance
 
@@ -12,6 +12,7 @@ Six skills for working against `SPEC.md`, this repo's source of truth. All of th
 | [`spec-sync`](spec-sync/SKILL.md) | You changed code and want to know if `SPEC.md` needs updating to match | No — drafts an edit, doesn't apply it |
 | [`dmn-table-review`](dmn-table-review/SKILL.md) | You want to check a `.dmn` file against the routing table documented in §11 | No — report only |
 | [`case-trace`](case-trace/SKILL.md) | You need the full history of one claim, spanning `audit_log` and Camunda | No — report only |
+| [`commit-and-push`](commit-and-push/SKILL.md) | You want the current changes committed (message reflecting why) and pushed to `origin/main` — no feature branches in this repo | Yes — a git commit, pushed to `main` |
 
 ## Suggested order of use
 

@@ -61,7 +61,13 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
       [policyNumber, carrierId, claim.incident_date]
     );
     const policy = policyRows[0] as
-      | { id: string; effective_date: string; policyholder_name: string; policyholder_email: string }
+      | {
+          id: string;
+          effective_date: string;
+          policyholder_name: string;
+          policyholder_email: string;
+          policyholder_phone: string | null;
+        }
       | undefined;
 
     // Duplicate-claim check: a policy shouldn't have two claims in flight at
@@ -81,25 +87,42 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
 
     // Authorized-claimant check (SPEC.md §9 "Authorized claimants") — a
     // claim is only valid if the claimant is the policyholder or a listed
-    // dependent, checked by email OR name (case-insensitive, either is
-    // enough — requiring both would fail ordinary submissions over a
-    // formatting mismatch, not an actual authorization problem). No policy
-    // match means this check doesn't apply — that failure is already
-    // captured by `!!policy` below, not this flag.
+    // dependent. Channel decides which signal is trusted: a WhatsApp claim
+    // authenticates by the phone number the conversation itself came from
+    // (.claude/specs/generic/whatsapp-claim-intake.md Open Question 4), so
+    // it's matched on phone only; a portal claim has no verified phone (the
+    // claimant just typed it, if anything), so it keeps the original
+    // email-OR-name check (case-insensitive, either is enough — requiring
+    // both would fail ordinary submissions over a formatting mismatch, not
+    // an actual authorization problem). No policy match means this check
+    // doesn't apply — that failure is already captured by `!!policy` below,
+    // not this flag.
     let authorizedClaimant = true;
     if (policy) {
-      const claimantEmail = claim.claimant_email.toLowerCase();
-      const claimantName = claim.claimant_name.toLowerCase();
-      const isPolicyholder =
-        policy.policyholder_email.toLowerCase() === claimantEmail ||
-        policy.policyholder_name.toLowerCase() === claimantName;
-      const { rowCount: dependentMatchCount } = await pool.query(
-        `SELECT id FROM policy_dependents
-         WHERE policy_id = $1 AND (lower(email) = $2 OR lower(full_name) = $3)
-         LIMIT 1`,
-        [policy.id, claimantEmail, claimantName]
-      );
-      authorizedClaimant = isPolicyholder || (dependentMatchCount ?? 0) > 0;
+      if (claim.channel === "whatsapp") {
+        const claimantPhone = (claim.claimant_phone ?? "").trim();
+        const isPolicyholder = !!claimantPhone && (policy.policyholder_phone ?? "").trim() === claimantPhone;
+        const { rowCount: dependentMatchCount } = claimantPhone
+          ? await pool.query(
+              `SELECT id FROM policy_dependents WHERE policy_id = $1 AND phone = $2 LIMIT 1`,
+              [policy.id, claimantPhone]
+            )
+          : { rowCount: 0 };
+        authorizedClaimant = isPolicyholder || (dependentMatchCount ?? 0) > 0;
+      } else {
+        const claimantEmail = claim.claimant_email.toLowerCase();
+        const claimantName = claim.claimant_name.toLowerCase();
+        const isPolicyholder =
+          policy.policyholder_email.toLowerCase() === claimantEmail ||
+          policy.policyholder_name.toLowerCase() === claimantName;
+        const { rowCount: dependentMatchCount } = await pool.query(
+          `SELECT id FROM policy_dependents
+           WHERE policy_id = $1 AND (lower(email) = $2 OR lower(full_name) = $3)
+           LIMIT 1`,
+          [policy.id, claimantEmail, claimantName]
+        );
+        authorizedClaimant = isPolicyholder || (dependentMatchCount ?? 0) > 0;
+      }
     }
 
     const validationPassed =

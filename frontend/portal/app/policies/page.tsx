@@ -22,6 +22,7 @@ const emptyForm: NewPolicyInput = {
   policyNumber: "",
   policyholderName: "",
   policyholderEmail: "",
+  policyholderPhone: "",
   status: "active",
   effectiveDate: todayIso(),
   expiryDate: "",
@@ -30,7 +31,7 @@ const emptyForm: NewPolicyInput = {
   dependents: [],
 };
 
-const emptyDependent: NewDependentInput = { fullName: "", email: "", relationship: "spouse" };
+const emptyDependent: NewDependentInput = { fullName: "", email: "", phone: "", relationship: "spouse" };
 
 const currency = (n: number) => n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
@@ -269,6 +270,15 @@ export default function PoliciesPage() {
               style={inputStyle}
             />
           </FormField>
+          <FormField label="Policyholder phone" hint="Optional — used to authorize claims filed over WhatsApp">
+            <input
+              type="tel"
+              value={form.policyholderPhone}
+              onChange={(e) => setForm((f) => ({ ...f, policyholderPhone: e.target.value }))}
+              placeholder="+15551234567"
+              style={inputStyle}
+            />
+          </FormField>
           <FormField label="Status">
             <select
               value={form.status}
@@ -351,7 +361,7 @@ export default function PoliciesPage() {
                   key={index}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr 140px auto",
+                    gridTemplateColumns: "1fr 1fr 1fr 140px auto",
                     gap: "0.6rem",
                     alignItems: "center",
                   }}
@@ -367,6 +377,13 @@ export default function PoliciesPage() {
                     value={dependent.email}
                     onChange={(e) => updateDependentRow(index, { email: e.target.value })}
                     placeholder="dependent@example.com"
+                    style={inputStyle}
+                  />
+                  <input
+                    type="tel"
+                    value={dependent.phone}
+                    onChange={(e) => updateDependentRow(index, { phone: e.target.value })}
+                    placeholder="Phone (optional)"
                     style={inputStyle}
                   />
                   <select

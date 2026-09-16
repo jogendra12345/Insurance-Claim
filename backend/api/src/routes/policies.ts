@@ -14,6 +14,7 @@ function serializePolicy(row: any) {
     policyNumber: row.policy_number,
     policyholderName: row.policyholder_name,
     policyholderEmail: row.policyholder_email,
+    policyholderPhone: row.policyholder_phone,
     insuranceType: row.insurance_type,
     status: row.status,
     effectiveDate: row.effective_date,
@@ -30,6 +31,7 @@ function serializeDependent(row: any) {
     policyId: row.policy_id,
     fullName: row.full_name,
     email: row.email,
+    phone: row.phone,
     relationship: row.relationship,
     createdAt: row.created_at,
   };
@@ -106,6 +108,7 @@ policiesRouter.post("/", async (req, res) => {
     policyNumber,
     policyholderName,
     policyholderEmail,
+    policyholderPhone,
     insuranceType,
     status,
     effectiveDate,
@@ -155,8 +158,8 @@ policiesRouter.post("/", async (req, res) => {
   try {
     await client.query("BEGIN");
     const policyResult = await client.query(
-      `INSERT INTO policies (policy_number, carrier_id, insurance_type, policyholder_name, policyholder_email, status, effective_date, expiry_date, premium_amount, coverage_amount)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO policies (policy_number, carrier_id, insurance_type, policyholder_name, policyholder_email, policyholder_phone, status, effective_date, expiry_date, premium_amount, coverage_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         policyNumber,
@@ -164,6 +167,7 @@ policiesRouter.post("/", async (req, res) => {
         insuranceType || "health",
         policyholderName,
         policyholderEmail,
+        policyholderPhone || null,
         status,
         effectiveDate,
         expiryDate,
@@ -174,10 +178,10 @@ policiesRouter.post("/", async (req, res) => {
     const policy = policyResult.rows[0];
 
     const dependentRows = [];
-    for (const dependent of dependentInputs as Array<{ fullName: string; email: string; relationship: DependentRelationship }>) {
+    for (const dependent of dependentInputs as Array<{ fullName: string; email: string; phone?: string; relationship: DependentRelationship }>) {
       const dependentResult = await client.query(
-        `INSERT INTO policy_dependents (policy_id, full_name, email, relationship) VALUES ($1, $2, $3, $4) RETURNING *`,
-        [policy.id, dependent.fullName, dependent.email, dependent.relationship]
+        `INSERT INTO policy_dependents (policy_id, full_name, email, phone, relationship) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [policy.id, dependent.fullName, dependent.email, dependent.phone || null, dependent.relationship]
       );
       dependentRows.push(dependentResult.rows[0]);
     }

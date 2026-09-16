@@ -109,6 +109,7 @@ export interface PolicyDependent {
   policyId: string;
   fullName: string;
   email: string;
+  phone: string | null;
   relationship: DependentRelationship;
   createdAt: string;
 }
@@ -118,6 +119,7 @@ export interface Policy {
   policyNumber: string;
   policyholderName: string;
   policyholderEmail: string;
+  policyholderPhone: string | null;
   insuranceType: string;
   status: PolicyStatus;
   effectiveDate: string;
@@ -132,6 +134,7 @@ export interface Policy {
 export interface NewDependentInput {
   fullName: string;
   email: string;
+  phone: string;
   relationship: DependentRelationship;
 }
 
@@ -139,6 +142,7 @@ export interface NewPolicyInput {
   policyNumber: string;
   policyholderName: string;
   policyholderEmail: string;
+  policyholderPhone: string;
   status: PolicyStatus;
   effectiveDate: string;
   expiryDate: string;

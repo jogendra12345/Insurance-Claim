@@ -55,6 +55,16 @@ Called from step 2 (**Service Task** `validate-claim`), immediately after the St
 
 No custom error boundary — an unhandled exception in the worker falls back to Zeebe's default 3-attempt retry, then an Operate incident (SPEC.md §12, top note). A *validation failure* (required field missing, no policy match) is not an exception — it's the normal `validationPassed = false` path, handled by the gateway above, not a retry/incident.
 
+## Addendum (2026-09-16): channel-scoped authorized-claimant check
+
+This doc predates the authorized-claimant check (SPEC.md §9 "Authorized claimants") and the duplicate-in-flight-claim check, both of which the shipped worker (`backend/workers/validate-claim.ts`) already implements alongside the required-field/policy checks above — this file was never updated when those landed. This addendum only covers the newest change on top of that: as of 2026-09-16, the authorized-claimant check is **channel-scoped**, resolving `.claude/specs/generic/whatsapp-claim-intake.md` Open Question 4.
+
+- `claims.channel` (`'portal'` default | `'whatsapp'`) decides which signal is checked, using `claims.policy_id`'s matched policy:
+  - `'portal'` — unchanged: `claimant_email` **or** `claimant_name` (case-insensitive) against `policyholder_email`/`policyholder_name` or a `policy_dependents.email`/`full_name` row.
+  - `'whatsapp'` — `claimant_phone` against `policyholder_phone` or a `policy_dependents.phone` row, exact match, no email/name fallback.
+- New nullable columns: `policies.policyholder_phone`, `policy_dependents.phone`, `claims.claimant_phone` (migration `0015_add_phone_fields.sql`); `claims.channel` defaults `'portal'` for every existing/portal-submitted row.
+- `channel = 'whatsapp'` is unused in production today — no route sets it, since `whatsapp-claim-intake` itself is still Draft/unimplemented. This addendum only lays the groundwork in `validate-claim` and the schema.
+
 ## Open Questions
 
 - Does `incidentDate` need to be added as an explicit process-instance variable at kickoff (alongside `claimId`, `carrierId`, `insuranceType`, `policyNumber`, `claimType`, `claimAmount` per SPEC.md §10), or is it acceptable for this worker to be the first to read it straight from `claims` via `claimId`? Every other worker in §12 takes `claimId` as an input and reads what it needs from Postgres, so reading `incident_date` the same way is likely consistent — but SPEC.md §10's kickoff variable list doesn't mention `claimId` explicitly either, only the six listed. Worth confirming the kickoff variable list is complete before implementing.
