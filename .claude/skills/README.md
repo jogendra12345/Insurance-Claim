@@ -1,6 +1,6 @@
 # ClaimFlow AI — Claude Code skills
 
-Seven skills for working against `SPEC.md`, this repo's source of truth, plus one repo-workflow skill. The `SPEC.md`-facing skills read it fresh each time rather than trusting memory of it — if `SPEC.md` changes, their behavior changes with it. Invoke with `/<skill-name> [args]`.
+Seven skills for working against `SPEC.md`, this repo's source of truth, plus two repo-workflow skills. The `SPEC.md`-facing skills read it fresh each time rather than trusting memory of it — if `SPEC.md` changes, their behavior changes with it. Invoke with `/<skill-name> [args]`.
 
 ## Skills at a glance
 
@@ -13,6 +13,7 @@ Seven skills for working against `SPEC.md`, this repo's source of truth, plus on
 | [`dmn-table-review`](dmn-table-review/SKILL.md) | You want to check a `.dmn` file against the routing table documented in §11 | No — report only |
 | [`case-trace`](case-trace/SKILL.md) | You need the full history of one claim, spanning `audit_log` and Camunda | No — report only |
 | [`commit-and-push`](commit-and-push/SKILL.md) | You want the current changes committed (message reflecting why) and pushed to `origin/main` — no feature branches in this repo | Yes — a git commit, pushed to `main` |
+| [`manage-app`](manage-app/SKILL.md) `start\|stop` | You want the full local stack (Docker, Camunda, API, workers, frontend) brought up or down per `RUNNING-LOCALLY.md`, freeing `vmmem` on stop | No — starts/stops processes, doesn't edit files |
 
 ## Suggested order of use
 
