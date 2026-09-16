@@ -1,6 +1,6 @@
 # Worker: `trigger-settlement`
 
-**Status:** Draft
+**Status:** Locked (2026-09-16)
 
 BUILD-PLAN.md feature #14. SPEC.md §12 job-worker contract (row 10). SPEC.md §10 step 15. ROADMAP.md step 4 (Job workers).
 

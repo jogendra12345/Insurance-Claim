@@ -2,7 +2,7 @@
 
 # generic/public-landing-page
 
-**Status:** Draft
+**Status:** Locked (2026-09-16)
 
 ## Purpose
 

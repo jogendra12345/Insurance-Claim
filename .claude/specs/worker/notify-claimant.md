@@ -1,6 +1,6 @@
 # Worker: `notify-claimant`
 
-**Status:** Draft
+**Status:** Locked (2026-09-16)
 
 BUILD-PLAN.md feature #16. SPEC.md §12 job-worker contract (row 12). SPEC.md §10 steps 15–16. ROADMAP.md step 4 (Job workers).
 

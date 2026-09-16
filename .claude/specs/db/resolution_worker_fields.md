@@ -1,6 +1,6 @@
 # DB: resolution_worker_fields
 
-**Status:** Draft
+**Status:** Locked (2026-09-16)
 
 Adds the two `claims` columns implied by locking in the `trigger-settlement` and `draft-denial-letter` worker specs (`.claude/specs/worker/trigger-settlement.md`, `.claude/specs/worker/draft-denial-letter.md`) — neither exists in SPEC.md §9's data model today.
 

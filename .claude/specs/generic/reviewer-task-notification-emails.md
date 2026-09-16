@@ -2,7 +2,7 @@
 
 # generic/reviewer-task-notification-emails
 
-**Status:** Draft
+**Status:** Locked (2026-09-16)
 
 > Test-mode note (2026-09-07): per explicit product direction, since this is a small internal test app (`[[project_demo_app_no_real_payments]]`), every reviewer-notification email in this pass is redirected to a single fixed test address (`ayanchou2015@gmail.com`) instead of the real per-user `users.email` lookup — see "New shared helper" below. This is a deliberate, temporary simplification, not a design change to who "should" receive these in a real deployment; swap the redirect back out for the real per-role query whenever this moves past test/demo use.
 

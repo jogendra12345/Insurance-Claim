@@ -1,6 +1,6 @@
 # Worker: `close-case`
 
-**Status:** Draft
+**Status:** Locked (2026-09-16)
 
 BUILD-PLAN.md feature #17. SPEC.md §12 job-worker contract (row 13). SPEC.md §10 steps 15–16, and the note directly below step 16. ROADMAP.md step 4 (Job workers).
 

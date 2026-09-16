@@ -1,6 +1,6 @@
 # Worker: `validate-claim`
 
-**Status:** Draft
+**Status:** Locked (2026-09-16)
 
 BUILD-PLAN.md feature #5. SPEC.md §12 job-worker contract (row 1). SPEC.md §10 step 2/3. ROADMAP.md step 4 (Job workers).
 
