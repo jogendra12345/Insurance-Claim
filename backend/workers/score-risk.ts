@@ -2,7 +2,7 @@ import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
-import { generateContent, parseJsonResponse, GEMINI_MODEL } from "../shared/gemini-client";
+import { generateContent, parseJsonResponse } from "../shared/gemini-client";
 
 // SPEC.md §12 — score-risk. Not insurance-type aware (only validate-claim,
 // extract-evidence, and detect-fraud-indicators are, per §12/§3).
@@ -69,7 +69,7 @@ zeebeClient.createWorker<ScoreRiskVariables, Record<string, unknown>, ScoreRiskO
       `Fraud indicators flagged: ${fraudIndicatorCount}\n` +
       `Case summary: ${caseSummary}`;
 
-    const responseText = await generateContent(prompt);
+    const { text: responseText, model } = await generateContent(prompt);
     const result = parseJsonResponse<RiskScoreResult>(responseText);
 
     await pool.query(
@@ -82,7 +82,7 @@ zeebeClient.createWorker<ScoreRiskVariables, Record<string, unknown>, ScoreRiskO
       actorType: "ai",
       actorId: JOB_TYPE,
       action: "scored_risk",
-      detail: { riskScore: result.riskScore, reasoning: result.reasoning, model: GEMINI_MODEL, promptVersion: PROMPT_VERSION },
+      detail: { riskScore: result.riskScore, reasoning: result.reasoning, model, promptVersion: PROMPT_VERSION },
     });
 
     return job.complete({ riskScore: result.riskScore, riskReasoning: result.reasoning });

@@ -3,7 +3,7 @@ import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
 import { getInsuranceTypeConfig } from "../shared/insurance-types/health";
-import { generateContent, fetchAsInlinePart, parseJsonResponse, GEMINI_MODEL } from "../shared/gemini-client";
+import { generateContent, fetchAsInlinePart, parseJsonResponse } from "../shared/gemini-client";
 
 // SPEC.md §12 — extract-evidence.
 interface ExtractEvidenceVariables {
@@ -61,7 +61,7 @@ zeebeClient.createWorker<ExtractEvidenceVariables, Record<string, unknown>, Extr
     }
 
     const parts = await Promise.all(documents.map((doc) => fetchAsInlinePart(doc.file_url)));
-    const responseText = await generateContent(`${config.promptTemplate}${incidentDescription}`, parts);
+    const { text: responseText, model } = await generateContent(`${config.promptTemplate}${incidentDescription}`, parts);
     const result = parseJsonResponse<ExtractionResult>(responseText);
 
     await pool.query(`UPDATE claims SET case_summary = $1, updated_at = now() WHERE id = $2`, [
@@ -86,7 +86,7 @@ zeebeClient.createWorker<ExtractEvidenceVariables, Record<string, unknown>, Extr
       detail: {
         caseSummary: result.caseSummary,
         documentCount: documents.length,
-        model: GEMINI_MODEL,
+        model,
         promptVersion: PROMPT_VERSION,
       },
     });

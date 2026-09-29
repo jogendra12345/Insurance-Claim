@@ -3,7 +3,7 @@ import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
 import { getInsuranceTypeConfig } from "../shared/insurance-types/health";
-import { generateContent, parseJsonResponse, GEMINI_MODEL } from "../shared/gemini-client";
+import { generateContent, parseJsonResponse } from "../shared/gemini-client";
 
 // SPEC.md §12 — detect-fraud-indicators.
 interface DetectFraudIndicatorsVariables {
@@ -61,7 +61,7 @@ zeebeClient.createWorker<DetectFraudIndicatorsVariables, Record<string, unknown>
     );
     const incidentDescription = claimRows[0]?.incident_description ?? "";
 
-    const responseText = await generateContent(
+    const { text: responseText, model } = await generateContent(
       `${config.fraudPromptTemplate}${claimantName}\n\nClaimant's stated reason for filing this claim:\n${incidentDescription}\n\nCase summary:\n${caseSummary}${extractedDataBlock}`
     );
     const result = parseJsonResponse<FraudDetectionResult>(responseText);
@@ -92,7 +92,7 @@ zeebeClient.createWorker<DetectFraudIndicatorsVariables, Record<string, unknown>
         indicators: result.indicators,
         countedIndicators: countedIndicators.length,
         confidenceThreshold: FRAUD_COUNT_CONFIDENCE_THRESHOLD,
-        model: GEMINI_MODEL,
+        model,
         promptVersion: PROMPT_VERSION,
       },
     });

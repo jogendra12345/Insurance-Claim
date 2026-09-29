@@ -2,7 +2,7 @@ import "dotenv/config";
 import { zeebeClient } from "../shared/zeebe-client";
 import { pool } from "../shared/db";
 import { writeAuditLog } from "../shared/audit-log";
-import { generateContent, GEMINI_MODEL } from "../shared/gemini-client";
+import { generateContent } from "../shared/gemini-client";
 
 // SPEC.md §12 / .claude/specs/worker/draft-denial-letter.md — draft-denial-letter.
 // Not insurance-type aware (not in §12's insurance-type-aware list) — the
@@ -50,7 +50,8 @@ zeebeClient.createWorker<DraftDenialLetterVariables, Record<string, unknown>, Dr
 
     const prompt = `${PROMPT_TEMPLATE}${claimantName}\nDenial reason: ${denialReason}`;
 
-    const denialLetterText = (await generateContent(prompt)).trim();
+    const { text, model } = await generateContent(prompt);
+    const denialLetterText = text.trim();
 
     await pool.query(
       `UPDATE claims SET denial_letter_text = $1, updated_at = now() WHERE id = $2`,
@@ -62,7 +63,7 @@ zeebeClient.createWorker<DraftDenialLetterVariables, Record<string, unknown>, Dr
       actorType: "ai",
       actorId: JOB_TYPE,
       action: "denial_letter_drafted",
-      detail: { denialLetterText, denialReason, model: GEMINI_MODEL, promptVersion: PROMPT_VERSION },
+      detail: { denialLetterText, denialReason, model, promptVersion: PROMPT_VERSION },
     });
 
     return job.complete({ denialLetterText });

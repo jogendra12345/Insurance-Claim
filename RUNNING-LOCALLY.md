@@ -278,6 +278,9 @@ ZEEBE_GRPC_ADDRESS=grpc://localhost:26500
 CAMUNDA_AUTH_STRATEGY=NONE
 GEMINI_API_KEY=<your key>
 GEMINI_MODEL=gemini-3.6-flash
+# Optional — tried in order when the model above is overloaded/over quota
+# (HTTP 429/5xx). See SPEC.md §12 "Gemini model fallback".
+GEMINI_FALLBACK_MODELS=gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite
 FRONTEND_URL=http://localhost:3000
 
 # Optional — notify-claimant falls back to a console-log mock if neither is
