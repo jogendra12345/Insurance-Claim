@@ -2,8 +2,16 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Request, Router } from "express";
 import { pool } from "../db";
 import { BUCKET, minioClient, publicUrl } from "../storage";
-import { downloadMedia, sendMenu, sendText } from "../whatsapp-client";
-import { getClaimStatusDetail, getClaimStatusList, getPolicyStatusList, raiseClaim } from "../claims-assistant";
+import { downloadMedia, sendButtons, sendMenu, sendText } from "../whatsapp-client";
+import {
+  claimProgressLine,
+  claimStatusCopy,
+  getClaimStatusDetail,
+  getClaimStatusList,
+  getPolicyStatusList,
+  raiseClaim,
+  type ClaimStatusDetail,
+} from "../claims-assistant";
 import { CPT_OR_HCPCS_PATTERN, ClaimValidationError, ICD10_PATTERN, NPI_PATTERN } from "../create-claim";
 
 // WhatsApp claims assistant webhook — .claude/specs/generic/claims-assistant.md
@@ -134,12 +142,12 @@ async function handleClaimStatusMenu(phone: string, session: Session, text: stri
       await sendText(phone, "I couldn't find that claim. Type 'menu' to start over.");
       return;
     }
-    const lines = [`Claim ${detail.shortRef}`, `Status: ${detail.status}`, `Requested amount: $${detail.claimAmount}`];
-    if (detail.denialReason) lines.push(`Denial reason: ${detail.denialReason}`);
-    if (detail.infoRequestedReason) lines.push(`More info needed: ${detail.infoRequestedReason}`);
-    lines.push("", "Type 'menu' for the main menu.");
-    await sendText(phone, lines.join("\n"));
+    await sendText(phone, formatClaimDetail(detail));
     await resetToMenu(phone);
+    await sendButtons(phone, "Anything else?", [
+      { id: "check_claim_status", title: "Other claims" },
+      { id: "main_menu", title: "Main menu" },
+    ]);
     return;
   }
   const claims = await getClaimStatusList(phone);
@@ -150,9 +158,54 @@ async function handleClaimStatusMenu(phone: string, session: Session, text: stri
   }
   await sendMenu(
     phone,
-    "Here are your claims — pick one for details:",
-    claims.map((c) => ({ id: `claim:${c.id}`, title: `${c.shortRef} — ${c.status}` }))
+    claims.length === 1 ? "Here's your claim. Tap it for details:" : `Here are your ${claims.length} most recent claims. Tap one for details:`,
+    claims.map((c) => ({
+      id: `claim:${c.id}`,
+      title: `${c.shortRef} ${claimStatusCopy(c.status).label}`,
+      description: `${formatAmount(c.claimAmount)} · ${titleCase(c.claimType)} · filed ${formatDate(c.createdAt)}`,
+    }))
   );
+}
+
+// ---------- Claim status formatting (claims-assistant.md addendum 2026-09-29) ----------
+
+// WhatsApp text messages allow 4096 chars; keep the AI summary readable in chat.
+const CASE_SUMMARY_MAX = 700;
+
+function formatAmount(amount: string): string {
+  const n = Number(amount);
+  return Number.isFinite(n) ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${amount}`;
+}
+
+// Date only, UTC — timezone standardization is still SPEC.md §14 future work.
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+function titleCase(s: string): string {
+  return s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatClaimDetail(d: ClaimStatusDetail): string {
+  const copy = claimStatusCopy(d.status);
+  const lines = [
+    `*Claim ${d.shortRef}*`,
+    `Status: ${copy.glyph} ${copy.label}`,
+    `Progress: ${claimProgressLine(d.status)}`,
+    "",
+    `Type: ${titleCase(d.claimType)}`,
+    `Amount: ${formatAmount(d.claimAmount)}`,
+    `Filed: ${formatDate(d.createdAt)}`,
+    `Last update: ${formatDate(d.updatedAt)}`,
+  ];
+  if (d.denialReason) lines.push("", `*Reason:* ${d.denialReason}`);
+  if (d.infoRequestedReason) lines.push("", `*Information needed:* ${d.infoRequestedReason}`);
+  if (d.caseSummary) {
+    const summary = d.caseSummary.length > CASE_SUMMARY_MAX ? `${d.caseSummary.slice(0, CASE_SUMMARY_MAX - 1).trimEnd()}…` : d.caseSummary;
+    lines.push("", "*AI case summary*", summary);
+  }
+  if (copy.next) lines.push("", `*What happens next:* ${copy.next}`);
+  return lines.join("\n");
 }
 
 async function handlePolicyStatusMenu(phone: string): Promise<void> {

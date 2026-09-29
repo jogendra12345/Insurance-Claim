@@ -14,13 +14,46 @@ export interface ClaimStatusSummary {
   id: string;
   shortRef: string;
   status: string;
+  claimType: string;
+  claimAmount: string;
+  createdAt: string;
   updatedAt: string;
 }
 
 export interface ClaimStatusDetail extends ClaimStatusSummary {
-  claimAmount: string;
   denialReason: string | null;
   infoRequestedReason: string | null;
+  caseSummary: string | null;
+}
+
+// Claimant-facing status copy — labels and 3-stage progress duplicated from
+// frontend/portal/components/StatusBadge.tsx STATUS_META so every channel says
+// the same thing (claims-assistant.md addendum 2026-09-29).
+export const CLAIM_STATUS_COPY: Record<string, { label: string; glyph: string; stage: 1 | 2 | 3; next: string }> = {
+  submitted: { label: "Submitted", glyph: "○", stage: 1, next: "We've received your claim and are about to check it against your policy." },
+  validating: { label: "Validating", glyph: "○", stage: 1, next: "We're checking your claim details and documents against your policy." },
+  triage: { label: "In triage", glyph: "◐", stage: 2, next: "A reviewer is checking your claim and will pass it to the right team." },
+  in_review: { label: "Under review", glyph: "◐", stage: 2, next: "A specialist is reviewing your claim and will make a decision." },
+  awaiting_info: { label: "Action needed", glyph: "!", stage: 2, next: "We need more information from you before we can continue. Please add it from this claim's page in the ClaimFlow portal." },
+  approved: { label: "Approved", glyph: "✓", stage: 3, next: "Your claim has been approved." },
+  denied: { label: "Denied", glyph: "✕", stage: 3, next: "Your claim was not approved. The reason is shown above." },
+};
+
+export function claimStatusCopy(status: string) {
+  return CLAIM_STATUS_COPY[status] ?? { label: status, glyph: "○", stage: 1 as const, next: "" };
+}
+
+const STAGE_LABELS = ["Submitted", "In review", "Decision"] as const;
+
+// e.g. "Submitted ✓ → In review ◐ → Decision"
+export function claimProgressLine(status: string): string {
+  const { stage, glyph } = claimStatusCopy(status);
+  return STAGE_LABELS.map((label, i) => {
+    const n = i + 1;
+    if (n < stage) return `${label} ✓`;
+    if (n === stage) return `${label} ${glyph}`;
+    return label;
+  }).join(" → ");
 }
 
 export interface PolicyStatusSummary {
@@ -36,20 +69,24 @@ export interface PolicyStatusSummary {
 // actually filed it, same as it only carries their email today).
 export async function getClaimStatusList(phone: string): Promise<ClaimStatusSummary[]> {
   const { rows } = await pool.query(
-    `SELECT id, status, updated_at FROM claims WHERE claimant_phone = $1 ORDER BY updated_at DESC LIMIT 10`,
+    `SELECT id, status, claim_type, claim_amount, created_at, updated_at
+     FROM claims WHERE claimant_phone = $1 ORDER BY updated_at DESC LIMIT 10`,
     [phone]
   );
   return rows.map((row) => ({
     id: row.id,
     shortRef: shortClaimId(row.id),
     status: row.status,
+    claimType: row.claim_type,
+    claimAmount: row.claim_amount,
+    createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   }));
 }
 
 export async function getClaimStatusDetail(phone: string, claimId: string): Promise<ClaimStatusDetail | null> {
   const { rows } = await pool.query(
-    `SELECT id, status, updated_at, claim_amount, denial_reason, info_requested_reason
+    `SELECT id, status, claim_type, claim_amount, created_at, updated_at, denial_reason, info_requested_reason, case_summary
      FROM claims WHERE id = $1 AND claimant_phone = $2`,
     [claimId, phone]
   );
@@ -59,10 +96,13 @@ export async function getClaimStatusDetail(phone: string, claimId: string): Prom
     id: row.id,
     shortRef: shortClaimId(row.id),
     status: row.status,
-    updatedAt: row.updated_at.toISOString(),
+    claimType: row.claim_type,
     claimAmount: row.claim_amount,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
     denialReason: row.denial_reason,
     infoRequestedReason: row.info_requested_reason,
+    caseSummary: row.case_summary,
   };
 }
 

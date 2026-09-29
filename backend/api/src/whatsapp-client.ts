@@ -9,10 +9,15 @@
 
 const GRAPH_API_VERSION = "v26.0";
 
+// Meta limits: list row title ≤ 24 chars, description ≤ 72, ≤ 10 rows;
+// reply buttons ≤ 3, title ≤ 20, body ≤ 1024.
 export interface MenuOption {
   id: string;
   title: string;
+  description?: string;
 }
+
+const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 function graphApiConfigured(): boolean {
   return !!process.env.WHATSAPP_ACCESS_TOKEN && !!process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -44,7 +49,9 @@ export async function sendText(to: string, text: string): Promise<void> {
 export async function sendMenu(to: string, bodyText: string, options: MenuOption[]): Promise<void> {
   if (!graphApiConfigured()) {
     console.log(
-      `[mockWhatsAppClient] to ${to}:\n${bodyText}\n${options.map((o) => `- [${o.id}] ${o.title}`).join("\n")}`
+      `[mockWhatsAppClient] to ${to}:\n${bodyText}\n${options
+        .map((o) => `- [${o.id}] ${o.title}${o.description ? ` / ${o.description}` : ""}`)
+        .join("\n")}`
     );
     return;
   }
@@ -56,7 +63,35 @@ export async function sendMenu(to: string, bodyText: string, options: MenuOption
       body: { text: bodyText },
       action: {
         button: "Menu",
-        sections: [{ title: "Options", rows: options.map((o) => ({ id: o.id, title: o.title })) }],
+        sections: [
+          {
+            title: "Options",
+            rows: options.slice(0, 10).map((o) => ({
+              id: o.id,
+              title: clip(o.title, 24),
+              ...(o.description ? { description: clip(o.description, 72) } : {}),
+            })),
+          },
+        ],
+      },
+    },
+  });
+}
+
+// Tappable reply buttons (up to 3) under a short message.
+export async function sendButtons(to: string, bodyText: string, buttons: MenuOption[]): Promise<void> {
+  if (!graphApiConfigured()) {
+    console.log(`[mockWhatsAppClient] to ${to}:\n${bodyText}\n${buttons.map((b) => `[ ${b.title} ] (${b.id})`).join("  ")}`);
+    return;
+  }
+  await callGraphApi({
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: clip(bodyText, 1024) },
+      action: {
+        buttons: buttons.slice(0, 3).map((b) => ({ type: "reply", reply: { id: b.id, title: clip(b.title, 20) } })),
       },
     },
   });
