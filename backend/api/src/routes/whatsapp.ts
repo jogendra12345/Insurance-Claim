@@ -1,4 +1,5 @@
-import { Router } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { Request, Router } from "express";
 import { pool } from "../db";
 import { BUCKET, minioClient, publicUrl } from "../storage";
 import { downloadMedia, sendMenu, sendText } from "../whatsapp-client";
@@ -23,6 +24,26 @@ whatsappRouter.get("/webhook", (req, res) => {
   }
   res.sendStatus(403);
 });
+
+// ---------- Signature verification (claims-assistant.md addendum 2026-09-29) ----------
+
+if (!process.env.WHATSAPP_APP_SECRET) {
+  console.warn(
+    "WHATSAPP_APP_SECRET is not set — POST /api/whatsapp/webhook accepts unsigned events. Set it before exposing the webhook publicly."
+  );
+}
+
+// Meta signs each event as X-Hub-Signature-256: sha256=<HMAC-SHA256 of the
+// raw body, keyed with the App Secret>. Unset secret = local mock mode.
+function hasValidSignature(req: Request & { rawBody?: Buffer }): boolean {
+  const secret = process.env.WHATSAPP_APP_SECRET;
+  if (!secret) return true;
+  const header = req.get("x-hub-signature-256");
+  if (!header?.startsWith("sha256=") || !req.rawBody) return false;
+  const expected = Buffer.from(createHmac("sha256", secret).update(req.rawBody).digest("hex"));
+  const received = Buffer.from(header.slice("sha256=".length));
+  return expected.length === received.length && timingSafeEqual(expected, received);
+}
 
 // ---------- Session persistence (whatsapp_sessions, migration 0016) ----------
 
@@ -344,7 +365,12 @@ async function handleRaisingClaim(phone: string, session: Session, text: string 
 // ---------- Webhook entry point ----------
 
 whatsappRouter.post("/webhook", async (req, res) => {
-  // Always 200 — Meta retries/backs off a webhook that doesn't ack quickly,
+  if (!hasValidSignature(req)) {
+    console.warn("POST /api/whatsapp/webhook rejected: missing or invalid X-Hub-Signature-256");
+    return res.sendStatus(401);
+  }
+
+  // Otherwise always 200 — Meta retries/backs off a webhook that doesn't ack quickly,
   // and a malformed/non-message event (delivery receipts, etc.) is common
   // and not an error on our side.
   res.sendStatus(200);

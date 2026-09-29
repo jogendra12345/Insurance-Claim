@@ -7,7 +7,7 @@
 // POSTs shaped like Meta's webhook payload, without failing on a missing
 // credential.
 
-const GRAPH_API_VERSION = "v20.0";
+const GRAPH_API_VERSION = "v26.0";
 
 export interface MenuOption {
   id: string;

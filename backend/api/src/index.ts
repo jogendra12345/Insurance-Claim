@@ -18,7 +18,15 @@ const port = Number(process.env.PORT ?? 4000);
 // (frontend/portal's dev server on :3000 calling this API on :4000), so the
 // browser needs the CORS response to explicitly allow it.
 app.use(cors({ origin: process.env.CORS_ORIGIN ?? "http://localhost:3000", credentials: true }));
-app.use(express.json());
+// Keep the raw body bytes — POST /api/whatsapp/webhook verifies Meta's
+// X-Hub-Signature-256 HMAC over exactly what Meta sent, not re-serialized JSON.
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  })
+);
 app.use(cookieParser());
 app.use(attachUser);
 

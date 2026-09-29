@@ -12,7 +12,18 @@ Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 
 Wait until `docker info` succeeds (usually 30-60s after launch).
 
-**Note:** on this machine the `docker compose` plugin subcommand isn't wired
+**Note:** a per-user Docker Desktop install lives under
+`%LOCALAPPDATA%\Programs\DockerDesktop` instead of `C:\Program Files\Docker` —
+launch it from there if the path above doesn't exist:
+
+```powershell
+Start-Process "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe"
+```
+
+On such installs `docker-compose` is usually already on PATH (check with
+`docker-compose --version`), so the PATH workaround below isn't needed.
+
+**Note:** on some machines the `docker compose` plugin subcommand isn't wired
 up (`docker: unknown command: docker compose`). Use the standalone
 `docker-compose` binary instead for every command on this page:
 
@@ -33,6 +44,18 @@ docker-compose up -d
 Starts `claimflow-postgres` (port 5432) and `claimflow-minio` (ports 9000/9001).
 Data persists in Docker volumes, so nothing needs re-seeding on restart.
 
+**Watch out (fresh machine):** MinIO no longer publishes public images —
+pulling `quay.io/minio/minio` fails with `401 Unauthorized`, and
+`minio/minio` on Docker Hub fails with `pull access denied`. Machines that
+pulled it before still have it cached; on a new machine, pull the maintained
+community fork and tag it locally under the name `docker-compose.yaml` expects:
+
+```bash
+docker pull pgsty/minio:latest
+docker tag pgsty/minio:latest quay.io/minio/minio:latest
+docker-compose up -d
+```
+
 ## 3. Run DB migrations
 
 ```bash
@@ -41,6 +64,63 @@ npm run migrate
 ```
 
 Safe to run every time — already-applied migrations are skipped automatically.
+
+### Loading the sample data (fresh machine)
+
+`claimflow_data.sql` at the repo root is a data-only `pg_dump` (policies,
+claims, providers, audit_log, etc. — including its own `schema_migrations`
+rows). It can't be loaded straight on top of a freshly migrated DB: a
+migration already seeds a `providers` row the dump also contains
+(`duplicate key ... providers_npi_key`), and the dump's `schema_migrations`
+rows collide too. On a **brand-new, empty** database only (this wipes every
+table), after running the migrations above:
+
+```bash
+docker exec claimflow-postgres psql -U claimflow -d claimflow -c "DO \$\$ DECLARE t text; BEGIN SELECT string_agg(quote_ident(tablename), ',') INTO t FROM pg_tables WHERE schemaname='public'; EXECUTE 'TRUNCATE ' || t || ' CASCADE'; END \$\$;"
+docker exec -i claimflow-postgres psql -U claimflow -d claimflow -v ON_ERROR_STOP=1 --single-transaction < claimflow_data.sql
+```
+
+The dump's `schema_migrations` only lists migrations up to the point it was
+taken, so the next `npm run migrate` will try to re-apply later ones whose
+changes are already in the schema (e.g. `column "policyholder_phone" ...
+already exists`). Mark those as applied — as of this writing that's 0015 and
+0016:
+
+```bash
+docker exec claimflow-postgres psql -U claimflow -d claimflow -c "INSERT INTO schema_migrations(version) VALUES ('0015_add_phone_fields'),('0016_add_whatsapp_sessions') ON CONFLICT DO NOTHING;"
+cd backend && npm run migrate   # should now skip everything
+```
+
+Two gaps the dump can't fill on a new machine: uploaded documents live in
+the old machine's MinIO volume (not in the dump), so `claim_documents` rows
+for sample claims point at files that don't exist here; and Camunda starts
+empty, so any sample claim that was mid-process (`in_review`) has no process
+instance behind it and can't be progressed in Tasklist. Closed
+(`approved`/`denied`) claims are unaffected; submit new claims to exercise
+the full flow.
+
+### Demo login accounts
+
+```bash
+cd backend/api
+npm run seed:demo-users
+```
+
+Creates (or resets) one portal account per staff role plus the sample
+claimants, all with password `claimflow123` — safe to re-run:
+
+| Role | Email |
+|---|---|
+| admin | admin1@claimflow.test |
+| triage-team | triage1@claimflow.test |
+| adjuster | adjuster1@claimflow.test |
+| investigator | investigator1@claimflow.test |
+| legal-reviewer | legal1@claimflow.test |
+| supervisor | supervisor1@claimflow.test |
+| claimant | ayanchou2015@gmail.com (POL-100013), amina.al-farsi@example.com (POL-100001), youssef.nasser@example.com (POL-100004) |
+
+Requires `backend/api/.env` (for `DATABASE_URL`) and Postgres up. These are
+portal logins; Camunda Operate/Tasklist still use `demo` / `demo`.
 
 `backend/db/run-migrations.sh` calls `docker-compose` (standalone binary), matching
 the PATH workaround above — if the plugin ever gets wired up on this machine, this
@@ -68,12 +148,24 @@ MINIO_BUCKET=claim-documents
 ZEEBE_GRPC_ADDRESS=grpc://localhost:26500
 CAMUNDA_AUTH_STRATEGY=NONE
 
+# Required — signs login session tokens; without it every login throws
+# "SESSION_SECRET is not set." Any long random string works locally, e.g.
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+SESSION_SECRET=
+
 # Optional — the forgot-password flow's OTP email falls back to a
 # console-log mock (prints the code here) if neither is set. Same values as
 # backend/workers/.env below; Gmail is preferred over Resend when both are set.
 GMAIL_USER=
 GMAIL_APP_PASSWORD=
 RESEND_API_KEY=
+
+# Optional — WhatsApp claims assistant (§8 below). Unset = outbound messages
+# are logged instead of sent, and webhook signatures aren't checked.
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_APP_SECRET=
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=
 ```
 
 **Watch out:** if a previous `npm run dev` for this package is still holding
@@ -121,6 +213,13 @@ docker-compose up -d
 
 Operate/Tasklist at http://localhost:8080, login `demo` / `demo`.
 
+Requires `camunda-docker/.env` to exist (gitignored; `docker-compose.yaml`
+marks it `required: true` and reads the image tag from it) — create it with:
+
+```
+CAMUNDA_VERSION=8.9.16
+```
+
 **Watch out:** the `orchestration` container's `mem_limit` (in
 `camunda-docker/docker-compose.yaml`) has needed bumping twice already (1g →
 2g → 2.5g) — under memory pressure it either silently hangs on gRPC calls
@@ -151,9 +250,13 @@ already-tight VM.
 
 Deploy the process, DMN, and forms after any change to
 `process/claim-case-process.bpmn`, `process/health-claim-routing.dmn`, or
-`process/forms/*.form` — there's no watch/auto-deploy; a one-off
-`zeebeClient.deployResources([...])` script (see git history for the exact
-shape) is the current approach.
+`process/forms/*.form` — there's no watch/auto-deploy. A fresh Camunda has
+nothing deployed, so run this once on a new machine too:
+
+```bash
+cd backend
+node deploy-resources.mjs
+```
 
 ## 7. Start the job workers
 
@@ -188,16 +291,66 @@ and Camunda (step 6) already up. `POST /api/claims` (backend API, step 4)
 starts the process instance; nothing progresses past `validate-claim`
 without this running.
 
+## 8. WhatsApp claims assistant (optional)
+
+Meta must reach the webhook over public HTTPS, so the local API needs a
+tunnel. Setup (Meta app `1566291655540625`, WhatsApp Business Account
+`2084153485520470`, test number +1 555-176-2215 — see `PREREQUISITES.md`):
+
+1. Fill the four `WHATSAPP_*` values in `backend/api/.env` (§4 template):
+   - `WHATSAPP_PHONE_NUMBER_ID` — WhatsApp → API Setup, under the **From** number.
+   - `WHATSAPP_ACCESS_TOKEN` — a system-user token (Business Settings → Users →
+     System users → Generate token, expiry **Never**, scopes
+     `whatsapp_business_messaging` + `whatsapp_business_management`). The
+     "Generate access token" button on API Setup only makes a ~24h token
+     for that page's **Send message** button — don't put it here.
+   - `WHATSAPP_APP_SECRET` — App settings → Basic → App secret.
+   - `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — any random string you choose.
+2. Start a tunnel to the API:
+   ```bash
+   cloudflared tunnel --no-autoupdate --url http://localhost:4000
+   ```
+   (`winget install Cloudflare.cloudflared`; installs to
+   `C:\Program Files (x86)\cloudflared\`.) It prints a
+   `https://<random>.trycloudflare.com` URL — **this changes every time
+   cloudflared restarts**, and Meta's Callback URL must then be updated.
+3. Meta → WhatsApp → Configuration → Edit: Callback URL
+   `https://<tunnel>/api/whatsapp/webhook`, Verify token as above →
+   **Verify and save**; then **Manage** → subscribe to `messages`.
+4. Add your phone under API Setup → **To** (max 5 test recipients), and to
+   let the bot recognize you, store it on a policy **digits only with
+   country code, no `+`** — exactly how WhatsApp sends it (e.g.
+   `919876543210`):
+   ```bash
+   docker exec claimflow-postgres psql -U claimflow -d claimflow -c "UPDATE policies SET policyholder_phone = '<digits>' WHERE policy_number = '<POL-...>';"
+   ```
+   Check-claim-status matches `claims.claimant_phone` — portal-raised claims
+   have none unless you set it the same way.
+5. Send `hi` to the test number — the bot replies with its menu.
+
+**Watch out — messages never arrive, but "Verify and save" succeeded:** the
+app must also be subscribed to the WhatsApp Business Account, which the
+dashboard doesn't always do. Check with
+`GET https://graph.facebook.com/v26.0/<WABA_ID>/subscribed_apps` (bearer =
+the access token); if "ClaimFlow AI" isn't listed, `POST` to the same URL to
+subscribe it. Also check the Callback URL Meta has saved isn't a stale
+tunnel: `GET https://graph.facebook.com/v26.0/<APP_ID>/subscriptions` with
+`Authorization: Bearer <APP_ID>|<APP_SECRET>`.
+
+`API log` shows `rejected: missing or invalid X-Hub-Signature-256` for any
+webhook POST not signed by Meta with `WHATSAPP_APP_SECRET` — expected for
+hand-crafted test requests.
+
 ## Verifying it's up
 
 | Service | URL | Check |
 |---|---|---|
 | Frontend | http://localhost:3000 | loads the portal homepage |
-| Backend API | http://localhost:4000/api/claims | returns 200 |
+| Backend API | http://localhost:4000/api/claims | returns 401 `Login required.` when logged out (the API is up) |
 | Postgres | localhost:5432 | `docker exec claimflow-postgres pg_isready -U claimflow -d claimflow` |
 | MinIO | http://localhost:9001 | console login `claimflow` / `claimflow123` |
 | Camunda | http://localhost:8080/v2/topology | `"health":"healthy"` on the partition |
-| Workers | terminal output | `<job-type> worker started, polling for jobs` for all 13 |
+| Workers | terminal output | `<job-type> worker started, polling for jobs` for all 17 |
 
 ## Shutting down
 
