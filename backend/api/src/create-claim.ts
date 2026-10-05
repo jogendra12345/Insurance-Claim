@@ -18,7 +18,13 @@ export const ICD10_PATTERN = /^[A-TV-Z][0-9][0-9AB](\.[0-9A-Z]{1,4})?$/i;
 export const CPT_OR_HCPCS_PATTERN = /^(\d{5}|[A-Z]\d{4})$/i;
 export const NPI_PATTERN = /^[0-9]{10}$/;
 
-export class ClaimValidationError extends Error {}
+// `field` names the CreateClaimInput key at fault, when there is one, so a
+// conversational caller (routes/whatsapp.ts) can re-ask just that question.
+export class ClaimValidationError extends Error {
+  constructor(message: string, readonly field?: keyof CreateClaimInput) {
+    super(message);
+  }
+}
 
 export interface CreateClaimInput {
   policyNumber: string;
@@ -78,19 +84,19 @@ export function validateCreateClaimInput(input: CreateClaimInput, files: CreateC
     throw new ClaimValidationError("Missing required claim fields.");
   }
   if (!input.attested) {
-    throw new ClaimValidationError("You must attest that the information provided is accurate to submit a claim.");
+    throw new ClaimValidationError("You must attest that the information provided is accurate to submit a claim.", "attested");
   }
   if (!ICD10_PATTERN.test(input.diagnosisCode)) {
-    throw new ClaimValidationError("Diagnosis code must be a valid ICD-10 code (e.g. E11.9).");
+    throw new ClaimValidationError("Diagnosis code must be a valid ICD-10 code (e.g. E11.9).", "diagnosisCode");
   }
   if (!CPT_OR_HCPCS_PATTERN.test(input.procedureCode)) {
-    throw new ClaimValidationError("Procedure code must be a valid CPT (5 digits) or HCPCS (letter + 4 digits) code.");
+    throw new ClaimValidationError("Procedure code must be a valid CPT (5 digits) or HCPCS (letter + 4 digits) code.", "procedureCode");
   }
   if (!NPI_PATTERN.test(input.providerNpi)) {
-    throw new ClaimValidationError("Provider NPI must be exactly 10 digits.");
+    throw new ClaimValidationError("Provider NPI must be exactly 10 digits.", "providerNpi");
   }
   if (Number.isNaN(Number(input.totalBilledAmount)) || Number(input.totalBilledAmount) <= 0) {
-    throw new ClaimValidationError("Total billed amount must be greater than 0.");
+    throw new ClaimValidationError("Total billed amount must be greater than 0.", "totalBilledAmount");
   }
   if (files.length === 0) {
     throw new ClaimValidationError("At least one supporting document is required.");
@@ -110,13 +116,14 @@ export async function createClaim(input: CreateClaimInput, files: CreateClaimDoc
       [input.policyNumber]
     );
     if (policyResult.rowCount === 0) {
-      throw new ClaimValidationError(`No policy found for ${input.policyNumber}.`);
+      throw new ClaimValidationError(`No policy found for ${input.policyNumber}.`, "policyNumber");
     }
     const policy = policyResult.rows[0];
 
     if (Number(input.claimAmount) > Number(policy.coverage_amount)) {
       throw new ClaimValidationError(
-        `Requested claim amount must be less than or equal to the policy's coverage amount (${Number(policy.coverage_amount).toLocaleString()}).`
+        `Requested claim amount must be less than or equal to the policy's coverage amount (${Number(policy.coverage_amount).toLocaleString()}).`,
+        "claimAmount"
       );
     }
 

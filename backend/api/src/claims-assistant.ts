@@ -126,6 +126,19 @@ export async function getPolicyStatusList(phone: string): Promise<PolicyStatusSu
   }));
 }
 
+// A phone is "known" if it's on a policy (as policyholder or dependent) or
+// has filed a claim before — the same signals the intents above scope by
+// (claims-assistant.md addendum 2026-10-05, item 2).
+export async function isKnownPhone(phone: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM policies WHERE policyholder_phone = $1)
+         OR EXISTS (SELECT 1 FROM policy_dependents WHERE phone = $1)
+         OR EXISTS (SELECT 1 FROM claims WHERE claimant_phone = $1) AS known`,
+    [phone]
+  );
+  return rows[0].known;
+}
+
 export interface RaiseClaimResult {
   claimId: string;
   shortRef: string;

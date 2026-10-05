@@ -2,13 +2,14 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Request, Router } from "express";
 import { pool } from "../db";
 import { BUCKET, minioClient, publicUrl } from "../storage";
-import { downloadMedia, sendButtons, sendMenu, sendText } from "../whatsapp-client";
+import { downloadMedia, sendButtons, sendMenu, sendText, type MenuOption } from "../whatsapp-client";
 import {
   claimProgressLine,
   claimStatusCopy,
   getClaimStatusDetail,
   getClaimStatusList,
   getPolicyStatusList,
+  isKnownPhone,
   raiseClaim,
   type ClaimStatusDetail,
 } from "../claims-assistant";
@@ -96,6 +97,7 @@ async function updateSession(phone: string, patch: Partial<Pick<Session, "mode" 
 // ---------- Inbound message parsing (Meta Cloud API webhook shape) ----------
 
 interface InboundMessage {
+  messageId: string | null;
   from: string;
   text: string | null;
   interactiveId: string | null;
@@ -106,18 +108,19 @@ function extractInboundMessage(body: any): InboundMessage | null {
   const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!message) return null;
   const from = message.from;
+  const messageId: string | null = message.id ?? null;
   if (message.type === "text") {
-    return { from, text: message.text?.body ?? "", interactiveId: null, media: null };
+    return { messageId, from, text: message.text?.body ?? "", interactiveId: null, media: null };
   }
   if (message.type === "interactive") {
     const id = message.interactive?.list_reply?.id ?? message.interactive?.button_reply?.id ?? null;
-    return { from, text: null, interactiveId: id, media: null };
+    return { messageId, from, text: null, interactiveId: id, media: null };
   }
   if (message.type === "image" || message.type === "document") {
     const m = message[message.type];
-    return { from, text: null, interactiveId: null, media: { id: m.id, mimeType: m.mime_type, filename: m.filename ?? `${message.type}-${Date.now()}` } };
+    return { messageId, from, text: null, interactiveId: null, media: { id: m.id, mimeType: m.mime_type, filename: m.filename ?? `${message.type}-${Date.now()}` } };
   }
-  return { from, text: null, interactiveId: null, media: null };
+  return { messageId, from, text: null, interactiveId: null, media: null };
 }
 
 // ---------- Menu ----------
@@ -221,72 +224,182 @@ async function handlePolicyStatusMenu(phone: string): Promise<void> {
   await resetToMenu(phone);
 }
 
-// ---------- Raise-a-claim: plain sequential text Q&A ----------
+// ---------- Raise-a-claim: sequential Q&A ----------
 // Decided at Lock (.claude/specs/generic/claims-assistant.md Open Question
 // 1(b)) — no Meta Flow Builder access yet, so this asks one field at a time
 // in the same order ClaimForm presents them, re-prompting on the same
-// validation regexes POST /api/claims already enforces.
+// validation regexes POST /api/claims already enforces. Where an answer has a
+// fixed set of values (policy, claim type, yes/no) it's offered as a list or
+// reply buttons, with typed answers still accepted (addendum 2026-10-05).
 
 const CLAIM_TYPES = ["outpatient", "inpatient", "pharmacy", "dental", "maternity", "other"];
 
 type ParseResult = { ok: true; value: unknown } | { ok: false; error: string };
+type Parser = (text: string | null, interactiveId: string | null, phone: string) => ParseResult | Promise<ParseResult>;
+
+// Wraps a text-only parser: a stale button/list tap on a typed question gets
+// asked to type instead.
+function typed(parse: (text: string) => ParseResult): (text: string | null, interactiveId?: string | null) => ParseResult {
+  return (text) => (text === null ? { ok: false, error: "Please type your answer." } : parse(text));
+}
 
 function nonEmpty(error: string) {
-  return (text: string): ParseResult => (text.trim() ? { ok: true, value: text.trim() } : { ok: false, error });
+  return typed((text) => (text.trim() ? { ok: true, value: text.trim() } : { ok: false, error }));
 }
-function parseClaimType(text: string): ParseResult {
-  const index = Number(text.trim()) - 1;
+
+// Tapped or typed, the policy must be one of the sender's own (addendum
+// 2026-10-05) — typed input is matched case-insensitively and stored in the
+// policy's own casing.
+async function parsePolicyNumber(text: string | null, interactiveId: string | null, phone: string): Promise<ParseResult> {
+  const answer = interactiveId?.startsWith("policy:") ? interactiveId.slice("policy:".length) : text?.trim();
+  if (!answer) return { ok: false, error: "Please pick your policy from the list, or type its number." };
+  const match = (await getPolicyStatusList(phone)).find((p) => p.policyNumber.toLowerCase() === answer.toLowerCase());
+  return match
+    ? { ok: true, value: match.policyNumber }
+    : { ok: false, error: `"${answer}" isn't one of your policies. Please pick one from the list.` };
+}
+
+function parseClaimType(text: string | null, interactiveId: string | null): ParseResult {
+  if (interactiveId?.startsWith("claim_type:")) return { ok: true, value: interactiveId.slice("claim_type:".length) };
+  const t = text?.trim().toLowerCase() ?? "";
+  const index = Number(t) - 1;
   if (Number.isInteger(index) && CLAIM_TYPES[index]) return { ok: true, value: CLAIM_TYPES[index] };
-  if (CLAIM_TYPES.includes(text.trim().toLowerCase())) return { ok: true, value: text.trim().toLowerCase() };
-  return { ok: false, error: `Please reply with a number 1-${CLAIM_TYPES.length}, or the type name.` };
+  if (CLAIM_TYPES.includes(t)) return { ok: true, value: t };
+  return { ok: false, error: "Please pick a claim type from the list." };
 }
-function parseEmail(text: string): ParseResult {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text.trim())
+
+const parseEmail = typed((text) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text.trim())
     ? { ok: true, value: text.trim() }
-    : { ok: false, error: "That doesn't look like a valid email address." };
+    : { ok: false, error: "That doesn't look like a valid email address." }
+);
+
+// ---------- Date parsing (addendum 2026-10-05, item 5) ----------
+
+const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+// Returns YYYY-MM-DD, or null for an impossible date like 31/02/2026.
+function isoDate(year: number, month: number, day: number): string | null {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
+  return d.toISOString().slice(0, 10);
 }
-function parseDate(label: string) {
-  return (text: string): ParseResult =>
-    /^\d{4}-\d{2}-\d{2}$/.test(text.trim()) && !Number.isNaN(Date.parse(text.trim()))
-      ? { ok: true, value: text.trim() }
-      : { ok: false, error: `${label} must be in YYYY-MM-DD format.` };
+
+// "today"/"yesterday" use the server's local date.
+function localIsoDate(daysAgo: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return isoDate(d.getFullYear(), d.getMonth() + 1, d.getDate())!;
 }
-function parseOptionalDate(text: string): ParseResult {
-  if (text.trim().toLowerCase() === "same") return { ok: true, value: null };
-  return parseDate("Service date")(text);
-}
-function parsePositiveNumber(label: string) {
-  return (text: string): ParseResult => {
-    const n = Number(text.trim());
-    return !Number.isNaN(n) && n > 0 ? { ok: true, value: n } : { ok: false, error: `${label} must be a number greater than 0.` };
-  };
-}
-function parseYesNo(text: string): ParseResult {
+
+// Accepts YYYY-MM-DD, DD/MM/YYYY or DD-MM-YYYY (day first), "3 Oct 2026" /
+// "3 October 2026", "today", "yesterday".
+function toIsoDate(text: string): string | null {
   const t = text.trim().toLowerCase();
-  if (["yes", "y"].includes(t)) return { ok: true, value: true };
-  if (["no", "n"].includes(t)) return { ok: true, value: false };
-  return { ok: false, error: "Please reply 'yes' or 'no'." };
+  if (t === "today") return localIsoDate(0);
+  if (t === "yesterday") return localIsoDate(1);
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return isoDate(Number(m[1]), Number(m[2]), Number(m[3]));
+  m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) return isoDate(Number(m[3]), Number(m[2]), Number(m[1]));
+  m = t.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,})\.?,?\s+(\d{4})$/);
+  if (m) {
+    const month = MONTH_NAMES.findIndex((name) => name.startsWith(m![2]));
+    return month === -1 ? null : isoDate(Number(m[3]), month + 1, Number(m[1]));
+  }
+  return null;
 }
+
+const DATE_HINT = "e.g. 2026-10-03, 03/10/2026, 3 Oct 2026, or 'today'";
+
+function parseDate(label: string) {
+  return typed((text) => {
+    const value = toIsoDate(text);
+    return value ? { ok: true, value } : { ok: false, error: `${label} isn't a date I recognise (${DATE_HINT}).` };
+  });
+}
+
+function parseLastServiceDate(text: string | null, interactiveId: string | null): ParseResult {
+  if (interactiveId === "same_day" || text?.trim().toLowerCase() === "same") return { ok: true, value: null };
+  return parseDate("Last date of service")(text, interactiveId);
+}
+
+function parsePositiveNumber(label: string) {
+  return typed((text) => {
+    const n = Number(text.trim().replace(/[$,]/g, ""));
+    return !Number.isNaN(n) && n > 0 ? { ok: true, value: n } : { ok: false, error: `${label} must be a number greater than 0.` };
+  });
+}
+
+function yesNo(text: string | null, interactiveId: string | null): boolean | null {
+  const t = interactiveId ?? text?.trim().toLowerCase();
+  if (t === "yes" || t === "y") return true;
+  if (t === "no" || t === "n") return false;
+  return null;
+}
+
+function parseYesNo(text: string | null, interactiveId: string | null): ParseResult {
+  const value = yesNo(text, interactiveId);
+  return value === null ? { ok: false, error: "Please answer Yes or No." } : { ok: true, value };
+}
+
+// The attestation must be "yes" — createClaim() would reject "no" anyway, so
+// say so now rather than after the documents step.
+function parseAttestation(text: string | null, interactiveId: string | null): ParseResult {
+  const value = yesNo(text, interactiveId);
+  if (value === true) return { ok: true, value };
+  if (value === false) return { ok: false, error: "You need to confirm the information is accurate to submit a claim. Type 'cancel' to stop." };
+  return { ok: false, error: "Please answer Yes or No." };
+}
+
 function parsePattern(pattern: RegExp, error: string) {
-  return (text: string): ParseResult => (pattern.test(text.trim()) ? { ok: true, value: text.trim() } : { ok: false, error });
+  return typed((text) => (pattern.test(text.trim()) ? { ok: true, value: text.trim() } : { ok: false, error }));
+}
+
+const MAIN_MENU_OPTION: MenuOption = { id: "main_menu", title: "Main menu" };
+
+const YES_NO_BUTTONS: MenuOption[] = [
+  { id: "yes", title: "Yes" },
+  { id: "no", title: "No" },
+];
+
+// Every raise-a-claim message carries a way back to the top-level menu
+// (addendum 2026-10-05); typed answers still work alongside the button.
+async function sendWithMainMenu(phone: string, body: string): Promise<void> {
+  await sendButtons(phone, body, [MAIN_MENU_OPTION]);
 }
 
 interface StepDef {
   key: string;
   prompt: string;
-  parse: (text: string) => ParseResult;
+  parse: Parser;
+  // Offered as a tappable list (options) or reply buttons (buttons); typed
+  // answers are still parsed either way.
+  options?: (phone: string) => Promise<MenuOption[]>;
+  buttons?: MenuOption[];
 }
 
 const RAISE_CLAIM_STEPS: StepDef[] = [
-  { key: "policyNumber", prompt: "What's your policy number?", parse: nonEmpty("Policy number can't be blank.") },
+  {
+    key: "policyNumber",
+    prompt: "Which policy is this claim for? Tap one below, or type the policy number.",
+    parse: parsePolicyNumber,
+    options: async (phone) =>
+      (await getPolicyStatusList(phone)).map((p) => ({
+        id: `policy:${p.policyNumber}`,
+        title: p.policyNumber,
+        description: `${titleCase(p.status)} · expires ${formatDate(p.expiryDate)}`,
+      })),
+  },
   {
     key: "claimType",
-    prompt: `What type of claim is this? Reply with a number:\n${CLAIM_TYPES.map((t, i) => `${i + 1}. ${t}`).join("\n")}`,
+    prompt: "What type of claim is this?",
     parse: parseClaimType,
+    options: async () => CLAIM_TYPES.map((t) => ({ id: `claim_type:${t}`, title: titleCase(t) })),
   },
   { key: "claimantName", prompt: "What's your full name?", parse: nonEmpty("Name can't be blank.") },
   { key: "claimantEmail", prompt: "What's your email address?", parse: parseEmail },
-  { key: "incidentDate", prompt: "What date did the incident happen? (YYYY-MM-DD)", parse: parseDate("Incident date") },
+  { key: "incidentDate", prompt: `What date did the incident happen? (${DATE_HINT})`, parse: parseDate("Incident date") },
   { key: "incidentDescription", prompt: "Briefly describe what happened.", parse: nonEmpty("Please describe what happened.") },
   { key: "claimAmount", prompt: "What's the claim amount you're requesting (USD)?", parse: parsePositiveNumber("Claim amount") },
   {
@@ -299,13 +412,19 @@ const RAISE_CLAIM_STEPS: StepDef[] = [
     prompt: "What's the procedure code (CPT — 5 digits, or HCPCS — letter + 4 digits)?",
     parse: parsePattern(CPT_OR_HCPCS_PATTERN, "Procedure code must be a valid CPT (5 digits) or HCPCS (letter + 4 digits) code."),
   },
-  { key: "serviceDateFrom", prompt: "What date was the service provided? (YYYY-MM-DD)", parse: parseDate("Service date") },
-  { key: "serviceDateTo", prompt: "Last date of service, if different (YYYY-MM-DD) — or reply 'same'.", parse: parseOptionalDate },
+  { key: "serviceDateFrom", prompt: `What date was the service provided? (${DATE_HINT})`, parse: parseDate("Service date") },
+  {
+    key: "serviceDateTo",
+    prompt: "Last date of service, if different? Tap Same day, or type the date.",
+    parse: parseLastServiceDate,
+    buttons: [{ id: "same_day", title: "Same day" }],
+  },
   { key: "totalBilledAmount", prompt: "What's the total amount billed by the provider (USD)?", parse: parsePositiveNumber("Total billed amount") },
   {
     key: "coordinationOfBenefits",
-    prompt: "Do you have other health insurance that might also cover this claim? (yes/no)",
+    prompt: "Do you have other health insurance that might also cover this claim?",
     parse: parseYesNo,
+    buttons: YES_NO_BUTTONS,
   },
   { key: "providerNpi", prompt: "What's the provider's NPI (10 digits)?", parse: parsePattern(NPI_PATTERN, "Provider NPI must be exactly 10 digits.") },
   { key: "providerTaxId", prompt: "What's the provider's tax ID?", parse: nonEmpty("Provider tax ID can't be blank.") },
@@ -313,45 +432,75 @@ const RAISE_CLAIM_STEPS: StepDef[] = [
   { key: "facilityAddress", prompt: "What's the facility address?", parse: nonEmpty("Facility address can't be blank.") },
   {
     key: "attested",
-    prompt: "Do you confirm the information you've provided is accurate to the best of your knowledge? (yes/no)",
-    parse: parseYesNo,
+    prompt: "Do you confirm the information you've provided is accurate to the best of your knowledge?",
+    parse: parseAttestation,
+    buttons: YES_NO_BUTTONS,
   },
 ];
+
+const DOCUMENTS_PROMPT = "Last step — please send at least one supporting document (photo or PDF). Type 'done' when you've sent everything.";
 
 function nextUnansweredStep(collected: Record<string, unknown>): StepDef | null {
   return RAISE_CLAIM_STEPS.find((s) => !(s.key in collected)) ?? null;
 }
 
-async function startRaisingClaim(phone: string): Promise<void> {
-  await updateSession(phone, { mode: "raising_claim", collected_fields: {}, documents: [] });
-  await sendText(phone, `Let's raise a claim. ${RAISE_CLAIM_STEPS[0].prompt}`);
+// Sends a step's question — as a list, reply buttons, or a text question with
+// a Main menu button — with an optional lead-in (an error, or "Let's raise a
+// claim."). Lists hold ≤ 10 rows and messages ≤ 3 buttons, one of which is
+// always Main menu.
+async function askStep(phone: string, step: StepDef, leadIn = ""): Promise<void> {
+  const body = leadIn ? `${leadIn}\n${step.prompt}` : step.prompt;
+  if (step.buttons) {
+    await sendButtons(phone, body, [...step.buttons.slice(0, 2), MAIN_MENU_OPTION]);
+    return;
+  }
+  const options = step.options ? await step.options(phone) : [];
+  if (options.length > 0) {
+    await sendMenu(phone, body, [...options.slice(0, 9), MAIN_MENU_OPTION]);
+  } else {
+    await sendWithMainMenu(phone, body);
+  }
 }
 
-async function handleRaisingClaim(phone: string, session: Session, text: string | null, media: InboundMessage["media"]): Promise<void> {
+async function startRaisingClaim(phone: string): Promise<void> {
+  await updateSession(phone, { mode: "raising_claim", collected_fields: {}, documents: [] });
+  await askStep(phone, RAISE_CLAIM_STEPS[0], "Let's raise a claim.");
+}
+
+async function handleRaisingClaim(
+  phone: string,
+  session: Session,
+  text: string | null,
+  interactiveId: string | null,
+  media: InboundMessage["media"]
+): Promise<void> {
   const step = nextUnansweredStep(session.collected_fields);
 
   if (step) {
-    if (!text) {
-      await sendText(phone, `Please answer in text for now. ${step.prompt}`);
+    if (!text && !interactiveId) {
+      await askStep(phone, step, "I can't use a file here — documents come at the end.");
       return;
     }
-    const result = step.parse(text);
+    const result = await step.parse(text, interactiveId, phone);
     if (!result.ok) {
-      await sendText(phone, `${result.error}\n${step.prompt}`);
+      await askStep(phone, step, result.error);
       return;
     }
     const collected = { ...session.collected_fields, [step.key]: result.value };
     await updateSession(phone, { collected_fields: collected });
     const next = nextUnansweredStep(collected);
     if (next) {
-      await sendText(phone, next.prompt);
+      await askStep(phone, next);
+    } else if (session.documents.length > 0) {
+      // Re-answering a field after a rejected submission — documents are already in.
+      await sendWithMainMenu(phone, "Thanks, updated. Type 'done' to submit your claim, or send another document.");
     } else {
-      await sendText(phone, "Last step — please send at least one supporting document (photo or PDF). Type 'done' when you've sent everything.");
+      await sendWithMainMenu(phone, DOCUMENTS_PROMPT);
     }
     return;
   }
 
-  // All text fields collected — now accepting documents until "done".
+  // All fields collected — now accepting documents until "done".
   if (media) {
     try {
       const { buffer, mimeType } = await downloadMedia(media.id);
@@ -359,7 +508,7 @@ async function handleRaisingClaim(phone: string, session: Session, text: string 
       await minioClient.putObject(BUCKET, objectKey, buffer, buffer.length, { "Content-Type": mimeType });
       const documents = [...session.documents, { name: media.filename, url: publicUrl(objectKey), contentType: mimeType, size: buffer.length }];
       await updateSession(phone, { documents });
-      await sendText(phone, `Document added (${documents.length} so far). Send another, or type 'done' when finished.`);
+      await sendWithMainMenu(phone, `Document added (${documents.length} so far). Send another, or type 'done' when finished.`);
     } catch (err) {
       console.error(`WhatsApp media download failed for ${phone}:`, err);
       await sendText(phone, "Sorry, I couldn't process that file. Please try sending it again.");
@@ -368,17 +517,17 @@ async function handleRaisingClaim(phone: string, session: Session, text: string 
   }
 
   if (text?.trim().toLowerCase() !== "done") {
-    await sendText(phone, "Please send a document, or type 'done' when you've sent everything.");
+    await sendWithMainMenu(phone, "Please send a document, or type 'done' when you've sent everything.");
     return;
   }
 
   if (session.documents.length === 0) {
-    await sendText(phone, "At least one document is required. Please send one, or type 'cancel' to stop.");
+    await sendWithMainMenu(phone, "At least one document is required. Please send one, or type 'cancel' to stop.");
     return;
   }
 
+  const fields = session.collected_fields as Record<string, any>;
   try {
-    const fields = session.collected_fields as Record<string, any>;
     const result = await raiseClaim(
       phone,
       {
@@ -403,10 +552,27 @@ async function handleRaisingClaim(phone: string, session: Session, text: string 
       },
       session.documents.map((d) => ({ originalname: d.name, mimetype: d.contentType, url: d.url, size: d.size }))
     );
-    await sendText(phone, `Your claim has been raised — reference ${result.shortRef}. We'll message you here as its status changes. Type 'menu' for the main menu.`);
+    // Status changes go out by email only (notify-claimant) — WhatsApp pushes
+    // are future work (addendum 2026-10-05, item 1).
+    await sendText(
+      phone,
+      `Your claim has been raised — reference ${result.shortRef}. We'll email you at ${fields.claimantEmail} as it progresses, and you can check it here any time with "Check claim status". Type 'menu' for the main menu.`
+    );
   } catch (err) {
     if (err instanceof ClaimValidationError) {
-      await sendText(phone, `Couldn't raise the claim: ${err.message}\nType 'cancel' to start over, or 'menu' for the main menu.`);
+      // Re-ask just the field at fault, keeping every other answer and the
+      // documents (addendum 2026-10-05, item 3).
+      const faulty = err.field && RAISE_CLAIM_STEPS.find((s) => s.key === err.field);
+      if (faulty) {
+        const { [faulty.key]: _dropped, ...rest } = session.collected_fields;
+        await updateSession(phone, { collected_fields: rest });
+        await askStep(phone, faulty, `Couldn't raise the claim: ${err.message}\nLet's fix that.`);
+      } else {
+        await sendButtons(phone, `Couldn't raise the claim: ${err.message}`, [
+          { id: "restart_claim", title: "Start over" },
+          { id: "main_menu", title: "Main menu" },
+        ]);
+      }
       return;
     }
     console.error(`WhatsApp raiseClaim failed for ${phone}:`, err);
@@ -416,6 +582,19 @@ async function handleRaisingClaim(phone: string, session: Session, text: string 
 }
 
 // ---------- Webhook entry point ----------
+
+const UNKNOWN_NUMBER_REPLY =
+  "Sorry, this WhatsApp number isn't linked to any ClaimFlow policy, so I can't help with claims from it. Please contact your insurer to add this number to your policy, then message me again.";
+
+// Records the message id; false if it was already handled (a Meta
+// redelivery — addendum 2026-10-05, item 4).
+async function markProcessed(messageId: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `INSERT INTO whatsapp_processed_messages (message_id) VALUES ($1) ON CONFLICT (message_id) DO NOTHING`,
+    [messageId]
+  );
+  return rowCount === 1;
+}
 
 whatsappRouter.post("/webhook", async (req, res) => {
   if (!hasValidSignature(req)) {
@@ -431,12 +610,21 @@ whatsappRouter.post("/webhook", async (req, res) => {
   try {
     const inbound = extractInboundMessage(req.body);
     if (!inbound) return;
-    const { from: phone, text, interactiveId, media } = inbound;
+    const { messageId, from: phone, text, interactiveId, media } = inbound;
+
+    if (messageId && !(await markProcessed(messageId))) return;
+
+    // Unrecognized numbers get one fixed reply and no session
+    // (addendum 2026-10-05, item 2).
+    if (!(await isKnownPhone(phone))) {
+      await sendText(phone, UNKNOWN_NUMBER_REPLY);
+      return;
+    }
 
     const session = await getOrCreateSession(phone);
     const trimmed = text?.trim().toLowerCase();
 
-    if (trimmed === "menu" || trimmed === "hi" || trimmed === "hello") {
+    if (trimmed === "menu" || trimmed === "hi" || trimmed === "hello" || interactiveId === "main_menu") {
       await resetToMenu(phone);
       await sendTopLevelMenu(phone);
       return;
@@ -444,6 +632,10 @@ whatsappRouter.post("/webhook", async (req, res) => {
     if (trimmed === "cancel" && session.mode !== "menu") {
       await resetToMenu(phone);
       await sendText(phone, "Cancelled. Type 'menu' any time to start over.");
+      return;
+    }
+    if (interactiveId === "restart_claim") {
+      await startRaisingClaim(phone);
       return;
     }
 
@@ -475,7 +667,7 @@ whatsappRouter.post("/webhook", async (req, res) => {
     }
 
     if (session.mode === "raising_claim") {
-      await handleRaisingClaim(phone, session, text, media);
+      await handleRaisingClaim(phone, session, text, interactiveId, media);
       return;
     }
   } catch (err) {
