@@ -346,8 +346,10 @@ tunnel. Setup (Meta app `1566291655540625`, WhatsApp Business Account
    ```bash
    docker exec claimflow-postgres psql -U claimflow -d claimflow -c "UPDATE policies SET policyholder_phone = '<digits>' WHERE policy_number = '<POL-...>';"
    ```
-   Check-claim-status matches `claims.claimant_phone` — portal-raised claims
-   have none unless you set it the same way.
+   Check-claim-status then shows that person's claims from either channel:
+   WhatsApp-raised ones (`claims.claimant_phone`) and portal-filed ones
+   (matched on the email of the policyholder/dependent with this phone) — no
+   need to back-fill `claimant_phone` on portal claims.
 5. Send `hi` to the test number — the bot replies with its menu.
 
 **Watch out — messages never arrive, but "Verify and save" succeeded:** the

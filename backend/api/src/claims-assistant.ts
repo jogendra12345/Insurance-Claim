@@ -63,15 +63,31 @@ export interface PolicyStatusSummary {
   expiryDate: string;
 }
 
-// Claim status is scoped by claimant_phone directly — mirrors how
-// GET /api/claims scopes a portal claimant by claimant_email, no
-// policyholder/dependent join (a claim only carries the phone of whoever
-// actually filed it, same as it only carries their email today).
-export async function getClaimStatusList(phone: string): Promise<ClaimStatusSummary[]> {
+// Who a lookup is for: WhatsApp knows the sender's phone, a portal session
+// knows the user's email (claims-assistant.md "batch 2" addendum, item 3).
+export type AssistantIdentity = { kind: "phone"; phone: string } | { kind: "email"; email: string };
+
+// The person's own email(s) for a phone: the policyholder or dependent record
+// carrying that phone — not everyone on their policy.
+const EMAILS_FOR_PHONE = `SELECT lower(policyholder_email) FROM policies WHERE policyholder_phone = $1
+                          UNION SELECT lower(email) FROM policy_dependents WHERE phone = $1`;
+
+// Claim scope, with the identity value as $1. Email mirrors GET /api/claims
+// (claimant_email). Phone covers WhatsApp-raised claims (claimant_phone) plus
+// everything filed under that person's email, so portal claims show up too
+// (addendum "batch 2", items 1-2).
+function claimScope(identity: AssistantIdentity): { where: string; value: string } {
+  return identity.kind === "email"
+    ? { where: "lower(claims.claimant_email) = lower($1)", value: identity.email }
+    : { where: `(claims.claimant_phone = $1 OR lower(claims.claimant_email) IN (${EMAILS_FOR_PHONE}))`, value: identity.phone };
+}
+
+export async function getClaimStatusList(identity: AssistantIdentity): Promise<ClaimStatusSummary[]> {
+  const scope = claimScope(identity);
   const { rows } = await pool.query(
     `SELECT id, status, claim_type, claim_amount, created_at, updated_at
-     FROM claims WHERE claimant_phone = $1 ORDER BY updated_at DESC LIMIT 10`,
-    [phone]
+     FROM claims WHERE ${scope.where} ORDER BY updated_at DESC LIMIT 10`,
+    [scope.value]
   );
   return rows.map((row) => ({
     id: row.id,
@@ -84,11 +100,12 @@ export async function getClaimStatusList(phone: string): Promise<ClaimStatusSumm
   }));
 }
 
-export async function getClaimStatusDetail(phone: string, claimId: string): Promise<ClaimStatusDetail | null> {
+export async function getClaimStatusDetail(identity: AssistantIdentity, claimId: string): Promise<ClaimStatusDetail | null> {
+  const scope = claimScope(identity);
   const { rows } = await pool.query(
     `SELECT id, status, claim_type, claim_amount, created_at, updated_at, denial_reason, info_requested_reason, case_summary
-     FROM claims WHERE id = $1 AND claimant_phone = $2`,
-    [claimId, phone]
+     FROM claims WHERE ${scope.where} AND claims.id = $2`,
+    [scope.value, claimId]
   );
   const row = rows[0];
   if (!row) return null;
@@ -106,17 +123,21 @@ export async function getClaimStatusDetail(phone: string, claimId: string): Prom
   };
 }
 
-// Policy status is scoped by policyholder_phone OR a policy_dependents.phone
-// row — mirrors GET /api/policies's claimant scoping (SPEC.md §9 "Authorized
-// claimants"), phone-resolved here instead of session-resolved.
-export async function getPolicyStatusList(phone: string): Promise<PolicyStatusSummary[]> {
+// Policy status: policies where the person is the policyholder or a
+// dependent — mirrors GET /api/policies's claimant scoping (SPEC.md §9
+// "Authorized claimants"), matched on phone or email per identity.
+export async function getPolicyStatusList(identity: AssistantIdentity): Promise<PolicyStatusSummary[]> {
+  const where =
+    identity.kind === "email"
+      ? "lower(policies.policyholder_email) = lower($1) OR lower(policy_dependents.email) = lower($1)"
+      : "policies.policyholder_phone = $1 OR policy_dependents.phone = $1";
   const { rows } = await pool.query(
     `SELECT DISTINCT policies.id, policies.policy_number, policies.status, policies.expiry_date
      FROM policies
      LEFT JOIN policy_dependents ON policy_dependents.policy_id = policies.id
-     WHERE policies.policyholder_phone = $1 OR policy_dependents.phone = $1
+     WHERE ${where}
      ORDER BY policies.policy_number`,
-    [phone]
+    [identity.kind === "email" ? identity.email : identity.phone]
   );
   return rows.map((row) => ({
     id: row.id,

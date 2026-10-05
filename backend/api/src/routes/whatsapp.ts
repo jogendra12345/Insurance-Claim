@@ -140,7 +140,7 @@ async function sendTopLevelMenu(phone: string): Promise<void> {
 async function handleClaimStatusMenu(phone: string, session: Session, text: string | null, interactiveId: string | null): Promise<void> {
   if (interactiveId?.startsWith("claim:")) {
     const claimId = interactiveId.slice("claim:".length);
-    const detail = await getClaimStatusDetail(phone, claimId);
+    const detail = await getClaimStatusDetail({ kind: "phone", phone }, claimId);
     if (!detail) {
       await sendText(phone, "I couldn't find that claim. Type 'menu' to start over.");
       return;
@@ -153,7 +153,7 @@ async function handleClaimStatusMenu(phone: string, session: Session, text: stri
     ]);
     return;
   }
-  const claims = await getClaimStatusList(phone);
+  const claims = await getClaimStatusList({ kind: "phone", phone });
   if (claims.length === 0) {
     await sendText(phone, "I couldn't find any claims for this number. Type 'menu' for the main menu.");
     await resetToMenu(phone);
@@ -212,7 +212,7 @@ function formatClaimDetail(d: ClaimStatusDetail): string {
 }
 
 async function handlePolicyStatusMenu(phone: string): Promise<void> {
-  const policies = await getPolicyStatusList(phone);
+  const policies = await getPolicyStatusList({ kind: "phone", phone });
   if (policies.length === 0) {
     await sendText(phone, "I couldn't find any policies for this number. Type 'menu' for the main menu.");
     await resetToMenu(phone);
@@ -253,7 +253,7 @@ function nonEmpty(error: string) {
 async function parsePolicyNumber(text: string | null, interactiveId: string | null, phone: string): Promise<ParseResult> {
   const answer = interactiveId?.startsWith("policy:") ? interactiveId.slice("policy:".length) : text?.trim();
   if (!answer) return { ok: false, error: "Please pick your policy from the list, or type its number." };
-  const match = (await getPolicyStatusList(phone)).find((p) => p.policyNumber.toLowerCase() === answer.toLowerCase());
+  const match = (await getPolicyStatusList({ kind: "phone", phone })).find((p) => p.policyNumber.toLowerCase() === answer.toLowerCase());
   return match
     ? { ok: true, value: match.policyNumber }
     : { ok: false, error: `"${answer}" isn't one of your policies. Please pick one from the list.` };
@@ -385,7 +385,7 @@ const RAISE_CLAIM_STEPS: StepDef[] = [
     prompt: "Which policy is this claim for? Tap one below, or type the policy number.",
     parse: parsePolicyNumber,
     options: async (phone) =>
-      (await getPolicyStatusList(phone)).map((p) => ({
+      (await getPolicyStatusList({ kind: "phone", phone })).map((p) => ({
         id: `policy:${p.policyNumber}`,
         title: p.policyNumber,
         description: `${titleCase(p.status)} · expires ${formatDate(p.expiryDate)}`,
