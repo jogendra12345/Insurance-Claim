@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, login } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { SIGN_OUT_MESSAGES, type SignOutReason } from "@/lib/auth-session";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +13,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Set when this tab was signed out automatically (lib/auth-session.ts signOutTab).
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("reason") as SignOutReason | null;
+    if (reason && reason in SIGN_OUT_MESSAGES) setNotice(SIGN_OUT_MESSAGES[reason]);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,6 +42,22 @@ export default function LoginPage() {
       <p style={{ color: "var(--text-muted)", marginTop: 0, marginBottom: "1.75rem" }}>
         Claimants and staff both log in here.
       </p>
+      {notice && (
+        <div
+          role="status"
+          style={{
+            marginBottom: "1.25rem",
+            padding: "0.75rem 0.9rem",
+            borderRadius: "var(--radius-sm)",
+            border: "1px solid var(--border)",
+            background: "var(--status-attention-bg)",
+            color: "var(--status-attention-fg)",
+            fontSize: "0.85rem",
+          }}
+        >
+          {notice}
+        </div>
+      )}
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <FormField label="Email">
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />

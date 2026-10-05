@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import { Router } from "express";
 import { pool } from "../db";
-import { clearSessionCookie, hashPassword, requireRole, setSessionCookie, STAFF_ROLES, verifyPassword } from "../auth";
+import { hashPassword, requireAuth, requireRole, STAFF_ROLES, tokenResponse, verifyPassword } from "../auth";
 import { sendEmail } from "../../../shared/email-sender";
 
 export const authRouter = Router();
@@ -62,8 +62,8 @@ authRouter.post("/signup", async (req, res) => {
       [String(email).trim(), passwordHash]
     );
     const user = rows[0];
-    setSessionCookie(res, { userId: user.id, email: user.email, role: user.role });
-    res.status(201).json(serializeUser(user));
+    // Bearer token in the body, no cookie — per-tab sessions (auth-role-based-access.md addendum 2026-10-05).
+    res.status(201).json(tokenResponse({ userId: user.id, email: user.email, role: user.role }, user.token_version, serializeUser(user)));
   } catch (err: any) {
     if (err.code === "23505") {
       return res.status(409).json({ message: "An account with that email already exists." });
@@ -202,7 +202,9 @@ authRouter.post("/verify-otp", async (req, res) => {
     await pool.query(
       `UPDATE users
        SET password_hash = $1, reset_otp_hash = NULL, reset_otp_expires_at = NULL,
-           reset_otp_attempts = 0, reset_otp_sent_at = NULL
+           reset_otp_attempts = 0, reset_otp_sent_at = NULL,
+           -- revokes every token issued before the reset
+           token_version = token_version + 1
        WHERE id = $2`,
       [passwordHash, user.id]
     );
@@ -226,24 +228,21 @@ authRouter.post("/login", async (req, res) => {
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       return res.status(401).json({ message: "Incorrect email or password." });
     }
-    setSessionCookie(res, { userId: user.id, email: user.email, role: user.role });
-    res.json(serializeUser(user));
+    res.json(tokenResponse({ userId: user.id, email: user.email, role: user.role }, user.token_version, serializeUser(user)));
   } catch (err) {
     console.error("POST /api/auth/login failed:", err);
     res.status(500).json({ message: "Couldn't log in." });
   }
 });
 
-// POST /api/auth/logout
+// POST /api/auth/logout — nothing to clear server-side: the token lives in
+// the tab's sessionStorage and the frontend discards it. Kept so the client
+// logout call stays harmless.
 authRouter.post("/logout", (_req, res) => {
-  clearSessionCookie(res);
   res.status(204).send();
 });
 
 // GET /api/auth/me — lets the frontend know who's logged in (or isn't) on load.
-authRouter.get("/me", (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ message: "Not logged in." });
-  }
-  res.json({ id: req.user.userId, email: req.user.email, role: req.user.role });
+authRouter.get("/me", requireAuth, (req, res) => {
+  res.json({ id: req.user!.userId, email: req.user!.email, role: req.user!.role });
 });

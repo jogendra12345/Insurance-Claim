@@ -152,6 +152,10 @@ CAMUNDA_AUTH_STRATEGY=NONE
 # "SESSION_SECRET is not set." Any long random string works locally, e.g.
 # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 SESSION_SECRET=
+# Optional — how long a login lasts, in hours (default 8). Logins are per
+# browser tab (a bearer token in that tab's sessionStorage), so each tab can
+# be signed in as a different user; closing the tab also ends its login.
+SESSION_TTL_HOURS=8
 
 # Optional — the forgot-password flow's OTP email falls back to a
 # console-log mock (prints the code here) if neither is set. Same values as
@@ -364,6 +368,16 @@ tunnel: `GET https://graph.facebook.com/v26.0/<APP_ID>/subscriptions` with
 `API log` shows `rejected: missing or invalid X-Hub-Signature-256` for any
 webhook POST not signed by Meta with `WHATSAPP_APP_SECRET` — expected for
 hand-crafted test requests.
+
+## Automated tests
+
+```bash
+cd backend/api && npm test        # auth/session API tests — needs Postgres up and migrations run
+cd frontend/portal && npm test    # per-tab login tests (jsdom, no servers needed)
+```
+
+The API suite creates and deletes its own throwaway users; it never sends
+email (the password-reset test writes the one-time code straight to the DB).
 
 ## Verifying it's up
 

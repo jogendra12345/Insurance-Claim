@@ -340,7 +340,9 @@ claimsRouter.post("/:id/resubmit", uploadDocuments, async (req, res) => {
 // kickoff itself lives in ../create-claim.ts, shared with the WhatsApp
 // webhook (.claude/specs/generic/claims-assistant.md) — this handler only
 // adapts multipart/form-data into that shared function's input shape.
-claimsRouter.post("/", uploadDocuments, async (req, res) => {
+// Requires a logged-in user (was open; closed with the per-tab session change,
+// auth-role-based-access.md addendum 2026-10-05).
+claimsRouter.post("/", requireAuth, uploadDocuments, async (req, res) => {
   const {
     policyNumber,
     claimType,

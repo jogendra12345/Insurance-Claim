@@ -1,5 +1,7 @@
 import type { ActorType, AssistantClaim, AssistantClaimDetail, AuditLogEntry, AuthUser, Claim, NewClaimInput, NewPolicyInput, PendingTask, Policy, Provider, Role, Task } from "./types";
 
+import { getToken, ownerMatches, saveSession, SIGN_OUT_MESSAGES, signOutTab } from "./auth-session";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 export class ApiError extends Error {
@@ -11,10 +13,36 @@ export class ApiError extends Error {
   }
 }
 
-// backend/api's session cookie is cross-origin (frontend :3000 -> API :4000
-// in dev), so every call needs credentials: "include" or the browser won't
-// send/accept it — see .claude/specs/generic/auth-role-based-access.md.
-const withCredentials: RequestInit = { credentials: "include" };
+// Every call sends this tab's bearer token — sessions are per tab, kept in
+// sessionStorage, not a shared cookie (.claude/specs/generic/
+// auth-role-based-access.md, addendum 2026-10-05).
+//
+// - Owner check: if the stored login no longer belongs to the user this tab
+//   is showing, the tab is signed out and the request is never sent.
+// - Any 401 (except from calls that expect one: login/signup/me) signs this
+//   tab out and sends it to /login.
+async function apiFetch(path: string, init: RequestInit = {}, options: { handles401?: boolean } = {}): Promise<Response> {
+  if (!ownerMatches()) {
+    signOutTab("changed");
+    throw new ApiError(SIGN_OUT_MESSAGES.changed);
+  }
+  const headers = new Headers(init.headers);
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (res.status === 401 && !options.handles401) {
+    signOutTab("expired");
+    throw new ApiError(SIGN_OUT_MESSAGES.expired);
+  }
+  return res;
+}
+
+/** Login/signup response: the token goes to this tab's sessionStorage, the user to the caller. */
+async function startSession(res: Response): Promise<AuthUser> {
+  const body = (await res.json()) as { access_token: string; token_type: string; user: AuthUser };
+  saveSession(body.access_token, body.user);
+  return body.user;
+}
 
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
@@ -26,7 +54,7 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
 
 // GET /api/policies — backs the policy-number dropdown.
 export async function fetchPolicies(): Promise<Policy[]> {
-  const res = await fetch(`${API_BASE_URL}/api/policies`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/policies`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(`Couldn't load policies (${res.status}).`);
   }
@@ -35,7 +63,7 @@ export async function fetchPolicies(): Promise<Policy[]> {
 
 // GET /api/policies/:id — a single policy plus its dependents, for the policy detail page.
 export async function fetchPolicy(policyId: string): Promise<Policy> {
-  const res = await fetch(`${API_BASE_URL}/api/policies/${policyId}`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/policies/${policyId}`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(`Couldn't load that policy (${res.status}).`);
   }
@@ -45,7 +73,7 @@ export async function fetchPolicy(policyId: string): Promise<Policy> {
 // GET /api/providers — backs the claim form's provider picker (autofills
 // facility name/address/tax ID on NPI selection).
 export async function fetchProviders(): Promise<Provider[]> {
-  const res = await fetch(`${API_BASE_URL}/api/providers`, { cache: "no-store" });
+  const res = await apiFetch(`/api/providers`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(`Couldn't load providers (${res.status}).`);
   }
@@ -55,9 +83,8 @@ export async function fetchProviders(): Promise<Provider[]> {
 // backend/api's claims-list-by-policy-number endpoint (spec follow-up dependency,
 // .claude/specs/generic/claimant-portal-ui.md#follow-up-dependencies — not built yet).
 export async function fetchActiveClaimsByPolicy(policyNumber: string): Promise<Claim[]> {
-  const res = await fetch(
-    `${API_BASE_URL}/api/claims?policyNumber=${encodeURIComponent(policyNumber)}`,
-    { cache: "no-store", ...withCredentials }
+  const res = await apiFetch(`/api/claims?policyNumber=${encodeURIComponent(policyNumber)}`,
+    { cache: "no-store" }
   );
   if (!res.ok) {
     throw new ApiError(`Couldn't load claims for that policy number (${res.status}).`);
@@ -67,7 +94,7 @@ export async function fetchActiveClaimsByPolicy(policyNumber: string): Promise<C
 
 // GET /api/claims/:id — documented in SPEC.md §7/§18.
 export async function fetchClaim(claimId: string): Promise<Claim> {
-  const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/claims/${claimId}`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(`Couldn't load that claim (${res.status}).`);
   }
@@ -76,7 +103,7 @@ export async function fetchClaim(claimId: string): Promise<Claim> {
 
 // GET /api/claims — all claims, for the Claims tab's grid + KPIs.
 export async function fetchAllClaims(): Promise<Claim[]> {
-  const res = await fetch(`${API_BASE_URL}/api/claims`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/claims`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(`Couldn't load claims (${res.status}).`);
   }
@@ -93,9 +120,8 @@ export async function fetchClaimAuditLog(
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   const query = params.toString();
-  const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}/audit-log${query ? `?${query}` : ""}`, {
+  const res = await apiFetch(`/api/claims/${claimId}/audit-log${query ? `?${query}` : ""}`, {
     cache: "no-store",
-    ...withCredentials,
   });
   if (!res.ok) {
     throw new ApiError(`Couldn't load that claim's audit history (${res.status}).`);
@@ -105,11 +131,10 @@ export async function fetchClaimAuditLog(
 
 // POST /api/policies — the Policies tab's "add policy" panel.
 export async function createPolicy(input: NewPolicyInput): Promise<Policy> {
-  const res = await fetch(`${API_BASE_URL}/api/policies`, {
+  const res = await apiFetch(`/api/policies`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-    ...withCredentials,
   });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Adding the policy failed (${res.status}).`));
@@ -119,7 +144,7 @@ export async function createPolicy(input: NewPolicyInput): Promise<Policy> {
 
 // DELETE /api/policies/:id
 export async function deletePolicy(policyId: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/policies/${policyId}`, { method: "DELETE", ...withCredentials });
+  const res = await apiFetch(`/api/policies/${policyId}`, { method: "DELETE" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Deleting the policy failed (${res.status}).`));
   }
@@ -156,7 +181,7 @@ export async function submitClaim(input: NewClaimInput, options: { source?: "cha
     body.append("documents", file);
   }
 
-  const res = await fetch(`${API_BASE_URL}/api/claims`, { method: "POST", body, ...withCredentials });
+  const res = await apiFetch(`/api/claims`, { method: "POST", body });
   if (!res.ok) {
     const fallback = `Submitting the claim failed (${res.status}).`;
     const data = await res.json().catch(() => null);
@@ -170,7 +195,7 @@ export async function submitClaim(input: NewClaimInput, options: { source?: "cha
 // GET /api/assistant/claims — the claimant's 10 most recent claims, with the
 // same status wording the WhatsApp bot uses.
 export async function fetchAssistantClaims(): Promise<AssistantClaim[]> {
-  const res = await fetch(`${API_BASE_URL}/api/assistant/claims`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/assistant/claims`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't load your claims (${res.status}).`));
   }
@@ -179,7 +204,7 @@ export async function fetchAssistantClaims(): Promise<AssistantClaim[]> {
 
 // GET /api/assistant/claims/:id
 export async function fetchAssistantClaim(claimId: string): Promise<AssistantClaimDetail> {
-  const res = await fetch(`${API_BASE_URL}/api/assistant/claims/${claimId}`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/assistant/claims/${claimId}`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't load that claim (${res.status}).`));
   }
@@ -190,7 +215,7 @@ export async function fetchAssistantClaim(claimId: string): Promise<AssistantCla
 
 // GET /api/claims/:id/pending-task
 export async function fetchPendingTask(claimId: string): Promise<PendingTask | null> {
-  const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}/pending-task`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/claims/${claimId}/pending-task`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't check for a pending task (${res.status}).`));
   }
@@ -205,7 +230,7 @@ export async function resubmitClaim(claimId: string, input: { documents: File[];
   for (const file of input.documents) {
     body.append("documents", file);
   }
-  const res = await fetch(`${API_BASE_URL}/api/claims/${claimId}/resubmit`, { method: "POST", body, ...withCredentials });
+  const res = await apiFetch(`/api/claims/${claimId}/resubmit`, { method: "POST", body });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Submitting your update failed (${res.status}).`));
   }
@@ -217,36 +242,34 @@ export async function resubmitClaim(claimId: string, input: { documents: File[];
 // POST /api/auth/signup — claimant self-registration, gated server-side by
 // a policy-number + email match.
 export async function signup(input: { email: string; password: string; policyNumber: string }): Promise<AuthUser> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-    ...withCredentials,
-  });
+  const res = await apiFetch(
+    `/api/auth/signup`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    { handles401: true }
+  );
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Signup failed (${res.status}).`));
   }
-  return res.json();
+  return startSession(res);
 }
 
 // POST /api/auth/login
 export async function login(input: { email: string; password: string }): Promise<AuthUser> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-    ...withCredentials,
-  });
+  const res = await apiFetch(
+    `/api/auth/login`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    { handles401: true }
+  );
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Login failed (${res.status}).`));
   }
-  return res.json();
+  return startSession(res);
 }
 
 // POST /api/auth/forgot-password — always resolves with a generic message,
 // whether or not the email matches an account.
 export async function forgotPassword(email: string): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+  const res = await apiFetch(`/api/auth/forgot-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -259,7 +282,7 @@ export async function forgotPassword(email: string): Promise<{ message: string }
 
 // POST /api/auth/verify-otp — verifies the code and sets newPassword in the same call.
 export async function verifyOtp(input: { email: string; otp: string; newPassword: string }): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+  const res = await apiFetch(`/api/auth/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -272,11 +295,10 @@ export async function verifyOtp(input: { email: string; otp: string; newPassword
 
 // POST /api/auth/register-staff — admin-only, creates a non-claimant account.
 export async function registerStaff(input: { email: string; password: string; role: Role }): Promise<AuthUser> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/register-staff`, {
+  const res = await apiFetch(`/api/auth/register-staff`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-    ...withCredentials,
   });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Registering the user failed (${res.status}).`));
@@ -284,15 +306,16 @@ export async function registerStaff(input: { email: string; password: string; ro
   return res.json();
 }
 
-// POST /api/auth/logout
+// POST /api/auth/logout — a no-op server-side (nothing to revoke); the
+// caller clears this tab's session. Best-effort, never blocks logging out.
 export async function logout(): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/auth/logout`, { method: "POST", ...withCredentials });
+  await apiFetch(`/api/auth/logout`, { method: "POST" }, { handles401: true }).catch(() => undefined);
 }
 
 // GET /api/auth/me — null (not thrown) when nobody's logged in, since that's
 // the expected steady state for an anonymous visitor, not an error.
 export async function fetchCurrentUser(): Promise<AuthUser | null> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/me`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/auth/me`, { cache: "no-store" }, { handles401: true });
   if (res.status === 401) return null;
   if (!res.ok) {
     throw new ApiError(`Couldn't check login status (${res.status}).`);
@@ -304,7 +327,7 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
 
 // GET /api/tasks
 export async function fetchTasks(): Promise<Task[]> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/tasks`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't load tasks (${res.status}).`));
   }
@@ -313,7 +336,7 @@ export async function fetchTasks(): Promise<Task[]> {
 
 // POST /api/tasks/:key/claim
 export async function claimTask(taskKey: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskKey}/claim`, { method: "POST", ...withCredentials });
+  const res = await apiFetch(`/api/tasks/${taskKey}/claim`, { method: "POST" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't claim this task (${res.status}).`));
   }
@@ -321,7 +344,7 @@ export async function claimTask(taskKey: string): Promise<void> {
 
 // GET /api/tasks/:key — single task's detail, for the /tasks/:key summary page.
 export async function fetchTask(taskKey: string): Promise<Task> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskKey}`, { cache: "no-store", ...withCredentials });
+  const res = await apiFetch(`/api/tasks/${taskKey}`, { cache: "no-store" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't load this task (${res.status}).`));
   }
@@ -330,7 +353,7 @@ export async function fetchTask(taskKey: string): Promise<Task> {
 
 // POST /api/tasks/:key/unclaim — releases the task back to the queue.
 export async function unclaimTask(taskKey: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskKey}/unclaim`, { method: "POST", ...withCredentials });
+  const res = await apiFetch(`/api/tasks/${taskKey}/unclaim`, { method: "POST" });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't unclaim this task (${res.status}).`));
   }
@@ -340,11 +363,10 @@ export async function unclaimTask(taskKey: string): Promise<void> {
 // Camunda-rendered forms (TriageReviewForm, ReviewDecisionForm,
 // ValidationExceptionReviewForm) already produce.
 export async function completeTask(taskKey: string, variables: Record<string, unknown>): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskKey}/complete`, {
+  const res = await apiFetch(`/api/tasks/${taskKey}/complete`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ variables }),
-    ...withCredentials,
   });
   if (!res.ok) {
     throw new ApiError(await readErrorMessage(res, `Couldn't complete this task (${res.status}).`));

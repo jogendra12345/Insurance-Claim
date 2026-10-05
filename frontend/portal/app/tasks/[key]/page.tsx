@@ -183,12 +183,11 @@ export default function TaskDetailPage() {
               {task.claim && (
                 <a
                   href={`/claims/${task.claim.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="transition"
                   style={{ display: "inline-block", marginTop: "0.5rem", fontSize: "0.82rem", fontWeight: 600, color: "var(--primary)" }}
                 >
-                  View full submission ↗
+                  {/* Same tab: logins are per tab, so a new tab would open logged out. */}
+                  View full submission →
                 </a>
               )}
             </div>

@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import "./globals.css";
 import { TopBar } from "@/components/TopBar";
 import { AssistantChat } from "@/components/assistant/AssistantChat";
 import { AuthProvider } from "@/lib/auth-context";
-import type { AuthUser } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "ClaimFlow AI — Claimant Portal",
@@ -21,39 +19,17 @@ const THEME_INIT_SCRIPT = `
 })();
 `;
 
-// Resolves who's logged in during SSR (server-to-server call, forwarding
-// the incoming session cookie) so the first HTML the browser paints
-// already reflects the real logged-in state — a client-only fetch can't
-// do that, since the server-rendered HTML paints before any client JS
-// runs. Every full page load in this app hits this (nav links are plain
-// <a href>, not next/link), so getting this right here is what actually
-// fixes the tab-label flash, not anything client-side.
-async function resolveUser(): Promise<AuthUser | null> {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-  const cookie = headers().get("cookie");
-  if (!cookie) return null;
-  try {
-    const res = await fetch(`${apiBaseUrl}/api/auth/me`, {
-      headers: { cookie },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null; // backend/api unreachable — render logged-out, client refresh() will retry
-  }
-}
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const initialUser = await resolveUser();
-
+// Who is logged in is resolved in the browser from this tab's sessionStorage
+// (lib/auth-context.tsx) — the server can't see it, by design: each tab has
+// its own login (.claude/specs/generic/auth-role-based-access.md, 2026-10-05).
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        <AuthProvider initialUser={initialUser}>
+        <AuthProvider>
           <TopBar />
           {children}
           {/* Claimant-only chat assistant — .claude/specs/generic/portal-claims-assistant.md */}

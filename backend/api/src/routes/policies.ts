@@ -103,7 +103,9 @@ policiesRouter.get("/:id", requireAuth, async (req, res) => {
 // carrier_id isn't claimant/operator-entered in this demo (no real carrier
 // concept exposed yet, per SPEC.md §14's tenant-isolation future work) — a
 // fresh id is generated server-side per new policy.
-policiesRouter.post("/", async (req, res) => {
+// Admin-only (was open though the UI offered it only to admins; closed with
+// the per-tab session change, auth-role-based-access.md addendum 2026-10-05).
+policiesRouter.post("/", requireRole("admin"), async (req, res) => {
   const {
     policyNumber,
     policyholderName,

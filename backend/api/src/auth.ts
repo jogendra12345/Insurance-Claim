@@ -1,6 +1,7 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
+import { pool } from "./db";
 
 // .claude/specs/generic/auth-role-based-access.md — locked design.
 export type Role =
@@ -38,7 +39,10 @@ export interface SessionUser {
   role: Role;
 }
 
-const COOKIE_NAME = "claimflow_session";
+// Per-tab sessions: a bearer token the frontend keeps in sessionStorage,
+// not a cookie (every tab shares a cookie, so a second login in another tab
+// replaced the first). .claude/specs/generic/auth-role-based-access.md,
+// addendum 2026-10-05.
 
 function secret(): string {
   const value = process.env.SESSION_SECRET;
@@ -48,45 +52,45 @@ function secret(): string {
   return value;
 }
 
-function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("base64url");
+function ttlSeconds(): number {
+  const hours = Number(process.env.SESSION_TTL_HOURS ?? 8);
+  return Math.round((Number.isFinite(hours) && hours > 0 ? hours : 8) * 3600);
 }
 
-// Signed cookie carrying {userId, email, role} — no server-side sessions
-// table (locked decision, see the spec's lock note). Logout just clears
-// the cookie client-side; there's no revocation list in v1.
-export function createSessionCookie(user: SessionUser): string {
-  const payload = Buffer.from(JSON.stringify(user)).toString("base64url");
-  return `${payload}.${sign(payload)}`;
+interface TokenClaims {
+  sub: string;
+  email: string;
+  role: Role;
+  /** users.token_version at issue time — a password reset bumps it, revoking older tokens. */
+  ver: number;
 }
 
-export function verifySessionCookie(cookieValue: string | undefined): SessionUser | null {
-  if (!cookieValue) return null;
-  const [payload, signature] = cookieValue.split(".");
-  if (!payload || !signature) return null;
-  const expected = sign(payload);
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+/** HS256 JWT: sub, email, role, ver, iat, exp. */
+export function issueAccessToken(user: SessionUser, tokenVersion: number): string {
+  const claims: TokenClaims = { sub: user.userId, email: user.email, role: user.role, ver: tokenVersion };
+  return jwt.sign(claims, secret(), { algorithm: "HS256", expiresIn: ttlSeconds() });
+}
+
+/** The login/signup response body. */
+export function tokenResponse(user: SessionUser, tokenVersion: number, publicUser: unknown) {
+  return { access_token: issueAccessToken(user, tokenVersion), token_type: "bearer" as const, user: publicUser };
+}
+
+/** Signature + expiry only; the token version is checked against the DB in attachUser. */
+export function verifyAccessToken(token: string): (SessionUser & { tokenVersion: number }) | null {
   try {
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const claims = jwt.verify(token, secret(), { algorithms: ["HS256"] }) as jwt.JwtPayload & Partial<TokenClaims>;
+    if (!claims.sub || !claims.email || !claims.role || typeof claims.ver !== "number") return null;
+    return { userId: claims.sub, email: claims.email, role: claims.role, tokenVersion: claims.ver };
   } catch {
     return null;
   }
 }
 
-export function setSessionCookie(res: Response, user: SessionUser) {
-  // No maxAge — a browser-session cookie, cleared when the browser closes,
-  // so closing the app actually logs the user out instead of leaving a
-  // week-long standing login.
-  res.cookie(COOKIE_NAME, createSessionCookie(user), {
-    httpOnly: true,
-    sameSite: "lax",
-  });
-}
-
-export function clearSessionCookie(res: Response) {
-  res.clearCookie(COOKIE_NAME);
+function bearerToken(req: Request): string | undefined {
+  const header = req.get("authorization");
+  const match = header?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1];
 }
 
 declare global {
@@ -98,17 +102,33 @@ declare global {
   }
 }
 
-// Reads the session cookie (if any) and attaches req.user. Does not reject
-// unauthenticated requests — routes that need a logged-in user use
-// requireAuth/requireRole below.
-export function attachUser(req: Request, _res: Response, next: NextFunction) {
-  req.user = verifySessionCookie(req.cookies?.[COOKIE_NAME]) ?? undefined;
-  next();
+// Reads "Authorization: Bearer <token>" (if any) and attaches req.user —
+// same {userId, email, role} shape the cookie session produced, so routes
+// and role checks are unchanged. An invalid, expired or revoked token just
+// leaves req.user unset; requireAuth/requireRole then answer 401.
+export async function attachUser(req: Request, _res: Response, next: NextFunction) {
+  const token = bearerToken(req);
+  const claims = token ? verifyAccessToken(token) : null;
+  if (!claims) return next();
+  try {
+    const { rows } = await pool.query(`SELECT token_version FROM users WHERE id = $1`, [claims.userId]);
+    if (rows[0] && rows[0].token_version === claims.tokenVersion) {
+      req.user = { userId: claims.userId, email: claims.email, role: claims.role };
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+function unauthorized(res: Response) {
+  res.set("WWW-Authenticate", "Bearer");
+  return res.status(401).json({ message: "Login required." });
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.user) {
-    return res.status(401).json({ message: "Login required." });
+    return unauthorized(res);
   }
   next();
 }
@@ -116,7 +136,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 export function requireRole(...roles: Role[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ message: "Login required." });
+      return unauthorized(res);
     }
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ message: "Not allowed for your role." });
