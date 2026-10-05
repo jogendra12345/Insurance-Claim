@@ -10,6 +10,8 @@ export function serializeClaim(row: any) {
     claimType: row.claim_type,
     claimantName: row.claimant_name,
     claimantEmail: row.claimant_email,
+    claimantPhone: row.claimant_phone ?? null,
+    channel: row.channel ?? "portal",
     incidentDate: row.incident_date,
     incidentDescription: row.incident_description,
     claimAmount: row.claim_amount === null ? null : Number(row.claim_amount),

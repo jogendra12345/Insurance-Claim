@@ -25,6 +25,9 @@ export interface Claim {
   claimType: ClaimType;
   claimantName: string;
   claimantEmail: string;
+  /** Set for WhatsApp-raised claims; portal claims usually have none. */
+  claimantPhone: string | null;
+  channel: "portal" | "whatsapp";
   incidentDate: string;
   incidentDescription: string;
   claimAmount: number;

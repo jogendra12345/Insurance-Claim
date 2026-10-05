@@ -259,6 +259,7 @@ export default function ClaimDetailPage() {
                     <DetailRow label="Facility" value={claim.provider.facilityName} />
                     <DetailRow label="NPI" value={claim.provider.npi} />
                     <DetailRow label="Tax ID" value={claim.provider.taxId} />
+                    <DetailRow label="Facility address" value={claim.provider.facilityAddress} />
                   </div>
                 </Section>
               )}
@@ -271,6 +272,8 @@ export default function ClaimDetailPage() {
                   <DetailRow label="Policy number" value={claim.policyNumber} />
                   <DetailRow label="Claimant" value={claim.claimantName} />
                   <DetailRow label="Email" value={claim.claimantEmail} />
+                  {claim.claimantPhone && <DetailRow label="Phone" value={claim.claimantPhone} />}
+                  <DetailRow label="Filed via" value={claim.channel === "whatsapp" ? "WhatsApp" : "Portal"} />
                 </div>
               </Section>
 

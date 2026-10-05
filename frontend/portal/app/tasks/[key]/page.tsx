@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { STAFF_ROLES } from "@/lib/types";
 import type { Claim, Task } from "@/lib/types";
 import { StatusBadge } from "@/components/StatusBadge";
+import { formatDate } from "@/lib/time";
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -45,6 +46,8 @@ export default function TaskDetailPage() {
   const { user, loading: authLoading } = useAuth();
   const [task, setTask] = useState<Task | null>(null);
   const [documents, setDocuments] = useState<Claim["documents"]>(undefined);
+  // GET /api/tasks/:key's claim has no provider join — taken from the full claim fetch below.
+  const [provider, setProvider] = useState<Claim["provider"]>(null);
   // Each document expands/collapses independently — a doc id in this set is expanded.
   const [expandedDocIds, setExpandedDocIds] = useState<Set<string>>(new Set());
   const [state, setState] = useState<LoadState>("loading");
@@ -65,7 +68,10 @@ export default function TaskDetailPage() {
         // facing claim page uses.
         if (data.claim) {
           fetchClaim(data.claim.id)
-            .then((full) => setDocuments(full.documents))
+            .then((full) => {
+              setDocuments(full.documents);
+              setProvider(full.provider);
+            })
             .catch(() => setDocuments(undefined));
         }
       })
@@ -206,6 +212,8 @@ export default function TaskDetailPage() {
               )}
             </Section>
           )}
+
+          {task.claim && <ClaimDetails claim={task.claim} provider={provider} />}
 
           {task.claim && (
             <Section title={`Documents (${documents?.length ?? 0})`}>
@@ -490,6 +498,36 @@ function ValidationExceptionForm({ busy, onComplete }: { busy: boolean; onComple
         {busy ? "Submitting…" : "Submit"}
       </button>
     </div>
+  );
+}
+
+// What the claimant filed — codes, dates, amounts, provider — so a reviewer
+// can decide without opening the claim page in another tab.
+// .claude/specs/generic/task-page-claim-details.md
+function ClaimDetails({ claim, provider }: { claim: Claim; provider: Claim["provider"] }) {
+  const serviceDates =
+    claim.serviceDateTo && claim.serviceDateTo !== claim.serviceDateFrom
+      ? `${formatDate(claim.serviceDateFrom)} – ${formatDate(claim.serviceDateTo)}`
+      : formatDate(claim.serviceDateFrom);
+  return (
+    <Section title="Claim details">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", columnGap: "2rem" }}>
+        <div>
+          <DetailRow label="Claim type" value={claim.claimType.charAt(0).toUpperCase() + claim.claimType.slice(1)} />
+          <DetailRow label="Incident date" value={formatDate(claim.incidentDate)} />
+          <DetailRow label="Diagnosis code (ICD-10)" value={claim.diagnosisCode} />
+          <DetailRow label="Procedure code (CPT/HCPCS)" value={claim.procedureCode} />
+          <DetailRow label="Date(s) of service" value={serviceDates} />
+        </div>
+        <div>
+          <DetailRow label="Requested amount" value={currency(claim.claimAmount)} />
+          <DetailRow label="Total billed" value={currency(claim.totalBilledAmount)} />
+          <DetailRow label="Other coverage (COB)" value={claim.coordinationOfBenefits ? "Yes" : "No"} />
+          <DetailRow label="Provider" value={provider ? `${provider.facilityName} (NPI ${provider.npi})` : "—"} />
+          <DetailRow label="Filed via" value={claim.channel === "whatsapp" ? "WhatsApp" : "Portal"} />
+        </div>
+      </div>
+    </Section>
   );
 }
 
