@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import { TopBar } from "@/components/TopBar";
+import { AssistantChat } from "@/components/assistant/AssistantChat";
 import { AuthProvider } from "@/lib/auth-context";
 import type { AuthUser } from "@/lib/types";
 
@@ -55,6 +56,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AuthProvider initialUser={initialUser}>
           <TopBar />
           {children}
+          {/* Claimant-only chat assistant — .claude/specs/generic/portal-claims-assistant.md */}
+          <AssistantChat />
         </AuthProvider>
       </body>
     </html>

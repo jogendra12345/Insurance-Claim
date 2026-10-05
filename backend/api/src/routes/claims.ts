@@ -348,6 +348,7 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     claimantEmail,
     claimantPhone,
     channel,
+    source,
     incidentDate,
     incidentDescription,
     claimAmount,
@@ -377,6 +378,7 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
         // channel defaults to 'portal' (today's only real portal-side value);
         // 'whatsapp' is only ever set by routes/whatsapp.ts.
         channel: channel === "whatsapp" ? "whatsapp" : "portal",
+        source: source === "chat" ? "chat" : undefined,
         incidentDate,
         incidentDescription,
         claimAmount,
@@ -397,7 +399,8 @@ claimsRouter.post("/", uploadDocuments, async (req, res) => {
     res.status(201).json(serializeClaim(claim));
   } catch (err) {
     if (err instanceof ClaimValidationError) {
-      return res.status(400).json({ message: err.message });
+      // field lets the portal chat re-ask just that question (portal-claims-assistant.md Decision 5).
+      return res.status(400).json({ message: err.message, field: err.field });
     }
     console.error("POST /api/claims failed:", err);
     res.status(500).json({ message: "Submitting the claim failed." });

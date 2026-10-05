@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import { attachUser } from "./auth";
+import { assistantRouter } from "./routes/assistant";
 import { authRouter } from "./routes/auth";
 import { claimsRouter } from "./routes/claims";
 import { policiesRouter } from "./routes/policies";
@@ -36,6 +37,7 @@ app.use("/api/claims", claimsRouter);
 app.use("/api/providers", providersRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/whatsapp", whatsappRouter);
+app.use("/api/assistant", assistantRouter);
 
 ensureBucket()
   .then(() => {

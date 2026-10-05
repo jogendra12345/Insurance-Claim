@@ -33,6 +33,8 @@ export interface CreateClaimInput {
   claimantEmail: string;
   claimantPhone?: string | null;
   channel: "portal" | "whatsapp";
+  // Portal sub-source, audit detail only (portal-claims-assistant.md Decision 5).
+  source?: "chat";
   incidentDate: string;
   incidentDescription: string;
   claimAmount: string | number;
@@ -101,6 +103,11 @@ export function validateCreateClaimInput(input: CreateClaimInput, files: CreateC
   if (files.length === 0) {
     throw new ClaimValidationError("At least one supporting document is required.");
   }
+}
+
+function auditSource(input: CreateClaimInput): string {
+  if (input.channel === "whatsapp") return "whatsapp-assistant";
+  return input.source === "chat" ? "claimant-portal-chat" : "claimant-portal";
 }
 
 /** Inserts the claim/provider/documents, starts the Zeebe process, and returns the raw claim row (not serialized — callers format for their own channel). */
@@ -202,7 +209,7 @@ export async function createClaim(input: CreateClaimInput, files: CreateClaimDoc
     await client.query(
       `INSERT INTO audit_log (claim_id, actor_type, actor_id, action, detail)
        VALUES ($1, 'system', 'backend/api', 'submitted', $2)`,
-      [claim.id, JSON.stringify({ source: input.channel === "whatsapp" ? "whatsapp-assistant" : "claimant-portal", documentCount: files.length })]
+      [claim.id, JSON.stringify({ source: auditSource(input), documentCount: files.length })]
     );
 
     await client.query("COMMIT");

@@ -2,7 +2,7 @@
 
 # generic/portal-claims-assistant
 
-**Status:** Draft
+**Status:** Locked (2026-10-05)
 
 ## Purpose
 
@@ -83,20 +83,26 @@ A claim raised through the chat writes the same `submitted` / `process-started` 
 
 The portal-matching status labels and 3-stage progress, the "what happens next" copy, the AI case summary in claim detail (risk score and fraud indicators are not shown), and the Gemini model fallback (only relevant to option (c)). All added to the shared layer on 2026-09-29.
 
-## Open Questions
+## Decisions at Lock (2026-10-05)
 
-1. **Raise-a-claim style**: (a) guided steps with widgets, (b) chat as launcher into the existing form, (c) AI-assisted from an uploaded bill, or a combination. This decides most of the build size.
-2. **Scope beyond the three intents**: should the chat answer free-form questions (e.g. coverage)? If yes, answers must be grounded in the claimant's own policy data and clearly labeled as not a coverage decision. A Gemini answer about coverage that turns out wrong is a real risk for an insurer.
-3. **Placement**: a floating chat button on every claimant page, a dedicated `/assistant` page, or a panel on the claimant home/claims page.
-4. **Backend shape**: assistant endpoint (one source of wording for both channels) vs. thin client over existing endpoints.
-5. **Channel value** for chat-raised claims: `portal` plus audit detail (no code change) vs. a new `portal_chat` value (type + SPEC update, no worker change; chat claims become directly queryable).
-6. **Who can use it**: claimants only (proposed), or also staff, e.g. "show me my open tasks"?
-7. **Draft storage** for multi-turn claim raising: client-side vs. a server-side sessions table.
-8. **Audit for read-only lookups**: keep WhatsApp's behavior (not audited) or start logging "viewed claim status" events?
+1. ~~**Raise-a-claim style**~~ — **Decided: (a) guided steps with the portal's own widgets.** One question per turn in `ClaimForm`'s order, each answered with the widget the form already uses: policy and claim type as tappable chips, `IcdCodeSelect` for diagnosis, `ProviderSelect` for the provider (picking a known provider fills tax ID / facility name / address and skips those questions, as the form does), native date inputs, and the form's file picker (PDF/JPG/PNG, ≤ 10MB each). Validation per step reuses `ClaimForm`'s rules (ICD-10 / CPT-HCPCS / NPI patterns, dates not in the future, service end ≥ start, amounts > 0, claim amount ≤ the policy's coverage). Matching `ClaimForm` for claimants: the email is the account's own and is not asked; the name is offered pre-filled from the policyholder name with the option to type another. The flow ends in a **review card** with *Edit* links per answer and the attestation checkbox, then submits. Option (c) (AI fill from an uploaded bill) is future work.
+2. ~~**Scope beyond the three intents**~~ — **Decided: no free-form Q&A.** Only *Check claim status*, *Check policy status*, *Raise a claim*; anything typed outside a question is answered with the menu.
+3. ~~**Placement**~~ — **Decided: a floating chat button** (bottom-right) on every page for a logged-in `claimant`, opening a panel; full-screen at phone width.
+4. ~~**Backend shape**~~ — **Decided: hybrid.** Claim status comes from new claimant-only read endpoints over the shared layer — `GET /api/assistant/claims` and `GET /api/assistant/claims/:id` (`backend/api/src/routes/assistant.ts`, identity `{ kind: "email", email: req.user.email }`) — returning the same status label, progress line and "what happens next" copy WhatsApp uses. Policy status reuses the existing `GET /api/policies` (already claimant-scoped; no wording to share). Raising a claim submits through the existing `POST /api/claims` multipart path — no second submission path.
+5. ~~**Channel value**~~ — **Decided: `channel = 'portal'`.** `POST /api/claims` accepts an optional `source=chat`; the `submitted` audit row's `detail.source` becomes `"claimant-portal-chat"` instead of `"claimant-portal"`. No schema or type change. `POST /api/claims` 400 responses also gain `field` (from `ClaimValidationError.field`, added in `claims-assistant.md`'s batch-1 addendum) so the chat jumps back to just that question and then returns to the review card.
+6. ~~**Who can use it**~~ — **Decided: claimants only.** The button isn't rendered for staff, and the assistant endpoints are `requireRole("claimant")`.
+7. ~~**Draft storage**~~ — **Decided: client-side, `sessionStorage`.** Answers survive a refresh within the tab; a different tab or device starts fresh. Attached files can't be stored there, so after a refresh the chat keeps the answers and asks for the documents again. Nothing server-side until submit.
+8. ~~**Audit for read-only lookups**~~ — **Decided: not audited**, same as WhatsApp. A submitted claim is audited as today (`submitted`, with the chat source).
+
+## Build notes
+
+- **Built 2026-10-05.** Backend: `backend/api/src/routes/assistant.ts` (mounted at `/api/assistant`), `source` + `auditSource()` in `create-claim.ts`, `source` passthrough and `field` on 400s in `routes/claims.ts`. Frontend: `components/assistant/AssistantChat.tsx` (panel, intents, step engine, review card) and `components/assistant/claim-steps.ts` (step definitions + validation mirrored from `ClaimForm`), mounted in `app/layout.tsx`; styles under "Portal chat assistant" in `app/globals.css`; `fetchAssistantClaims`/`fetchAssistantClaim`, `ApiError.field` and `submitClaim(…, { source })` in `lib/api.ts`.
+- **Picker dropdowns open upward inside the chat.** `IcdCodeSelect`/`ProviderSelect` position their `role="listbox"` below the input; at the bottom of the panel that was clipped, so the chat's CSS flips them above the input instead of changing the shared components.
+- **Verified live 2026-10-05** as `ayanchou2015@gmail.com`: claim list + detail (same wording as WhatsApp), policy status, a full chat claim (future-date and over-coverage rejections, Back, provider pick skipping facility questions, unsupported file type rejected, Edit from review returning to review) submitted as claim `c0d11dc8` — stored with `channel = 'portal'`, audit `source: "claimant-portal-chat"`, process started and picked up by `validate-claim`. Draft and conversation survived full-page navigation. API: staff → 403, logged out → 401, another person's claim id → 404, over-coverage `POST /api/claims` → `field: "claimAmount"`. Phone-width layout checked in a 380px frame. Not covered: a server-side rejection driving the chat back to a question end-to-end (every server rule the chat can hit is already checked client-side first).
 
 ## Follow-up dependencies
 
-- **Resolves `claims-assistant.md` Decision 5** (Phase 2 timing/scope) once this spec is Locked; update that line to point here.
+- ~~**Resolves `claims-assistant.md` Decision 5**~~ — done at Lock: that line now points here.
 - **Shared-layer identity refactor** touches WhatsApp code paths; the WhatsApp intents need a regression check (menu, claim status, policy status, raise a claim) after it.
 - **`generic/dynamic-form-builder` (Draft)**: if admin-defined claim forms land, the chat's claim intake should read the same field definitions rather than hardcoding `ClaimForm`'s order.
-- **`SPEC.md` §14 "Chatbot integration"** bullet should link here; add a row to `BUILD-PLAN.md` Phase 2 when scheduled.
+- ~~**`SPEC.md` §14 "Chatbot integration"**~~ — linked here, and `BUILD-PLAN.md` Phase 2 row #36 added, at Lock.

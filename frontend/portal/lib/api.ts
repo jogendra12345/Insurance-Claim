@@ -1,8 +1,15 @@
-import type { ActorType, AuditLogEntry, AuthUser, Claim, NewClaimInput, NewPolicyInput, PendingTask, Policy, Provider, Role, Task } from "./types";
+import type { ActorType, AssistantClaim, AssistantClaimDetail, AuditLogEntry, AuthUser, Claim, NewClaimInput, NewPolicyInput, PendingTask, Policy, Provider, Role, Task } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  /** The claim field at fault, when POST /api/claims names one (portal-claims-assistant.md Decision 5). */
+  field?: string;
+  constructor(message: string, field?: string) {
+    super(message);
+    this.field = field;
+  }
+}
 
 // backend/api's session cookie is cross-origin (frontend :3000 -> API :4000
 // in dev), so every call needs credentials: "include" or the browser won't
@@ -122,8 +129,11 @@ export async function deletePolicy(policyId: string): Promise<void> {
 // carrierId/insuranceType are intentionally omitted here: per the locked UI spec
 // they're hidden/derived fields, resolved server-side from policyNumber, not
 // claimant-entered.
-export async function submitClaim(input: NewClaimInput): Promise<Claim> {
+// options.source = "chat" marks a portal-chat submission in the audit log
+// (.claude/specs/generic/portal-claims-assistant.md Decision 5).
+export async function submitClaim(input: NewClaimInput, options: { source?: "chat" } = {}): Promise<Claim> {
   const body = new FormData();
+  if (options.source) body.set("source", options.source);
   body.set("policyNumber", input.policyNumber);
   body.set("claimType", input.claimType);
   body.set("claimantName", input.claimantName);
@@ -148,7 +158,30 @@ export async function submitClaim(input: NewClaimInput): Promise<Claim> {
 
   const res = await fetch(`${API_BASE_URL}/api/claims`, { method: "POST", body, ...withCredentials });
   if (!res.ok) {
-    throw new ApiError(await readErrorMessage(res, `Submitting the claim failed (${res.status}).`));
+    const fallback = `Submitting the claim failed (${res.status}).`;
+    const data = await res.json().catch(() => null);
+    throw new ApiError(data?.message || fallback, data?.field);
+  }
+  return res.json();
+}
+
+// --- Portal chat assistant (.claude/specs/generic/portal-claims-assistant.md) ---
+
+// GET /api/assistant/claims — the claimant's 10 most recent claims, with the
+// same status wording the WhatsApp bot uses.
+export async function fetchAssistantClaims(): Promise<AssistantClaim[]> {
+  const res = await fetch(`${API_BASE_URL}/api/assistant/claims`, { cache: "no-store", ...withCredentials });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Couldn't load your claims (${res.status}).`));
+  }
+  return res.json();
+}
+
+// GET /api/assistant/claims/:id
+export async function fetchAssistantClaim(claimId: string): Promise<AssistantClaimDetail> {
+  const res = await fetch(`${API_BASE_URL}/api/assistant/claims/${claimId}`, { cache: "no-store", ...withCredentials });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res, `Couldn't load that claim (${res.status}).`));
   }
   return res.json();
 }

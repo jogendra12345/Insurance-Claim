@@ -228,3 +228,25 @@ export interface NewClaimInput {
   attested: boolean;
   documents: File[];
 }
+
+// GET /api/assistant/claims[/:id] — .claude/specs/generic/portal-claims-assistant.md.
+// Status wording (statusLabel/progress/next) comes from the server's shared
+// assistant layer, identical to the WhatsApp bot's.
+export interface AssistantClaim {
+  id: string;
+  shortRef: string;
+  status: ClaimStatus;
+  claimType: string;
+  claimAmount: string;
+  createdAt: string;
+  updatedAt: string;
+  statusLabel: string;
+  progress: string;
+  next: string;
+}
+
+export interface AssistantClaimDetail extends AssistantClaim {
+  denialReason: string | null;
+  infoRequestedReason: string | null;
+  caseSummary: string | null;
+}
