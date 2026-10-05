@@ -309,17 +309,36 @@ tunnel. Setup (Meta app `1566291655540625`, WhatsApp Business Account
      for that page's **Send message** button — don't put it here.
    - `WHATSAPP_APP_SECRET` — App settings → Basic → App secret.
    - `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — any random string you choose.
-2. Start a tunnel to the API:
-   ```bash
-   cloudflared tunnel --no-autoupdate --url http://localhost:4000
-   ```
-   (`winget install Cloudflare.cloudflared`; installs to
-   `C:\Program Files (x86)\cloudflared\`.) It prints a
-   `https://<random>.trycloudflare.com` URL — **this changes every time
-   cloudflared restarts**, and Meta's Callback URL must then be updated.
-3. Meta → WhatsApp → Configuration → Edit: Callback URL
-   `https://<tunnel>/api/whatsapp/webhook`, Verify token as above →
-   **Verify and save**; then **Manage** → subscribe to `messages`.
+2. Tunnel to the API — an **ngrok free static domain**, so the public URL
+   never changes (set up 2026-10-05; replaces the old Cloudflare quick
+   tunnel, whose random `trycloudflare.com` URL changed on every restart and
+   silently broke the bot until Meta was updated by hand):
+   - Domain: `https://kleenex-kabob-predefine.ngrok-free.dev` (the ngrok
+     account's free dev domain — dashboard → Universal Gateway → Domains).
+   - Config: `%LOCALAPPDATA%\ngrok\ngrok.yml` holds the authtoken and an
+     endpoint named `claimflow-whatsapp` → upstream `4000`.
+   - Started **with the app**, not on boot — the tunnel is useless without
+     the API behind it. Right after `npm run dev` in `backend/api` (§4), in
+     another terminal:
+     ```bash
+     cd backend/api
+     npm run tunnel        # runs ngrok start claimflow-whatsapp (scripts/tunnel.ts)
+     ```
+     `/manage-app start` does this automatically and `/manage-app stop`
+     stops it. If the tunnel isn't running, Meta's messages go nowhere and
+     the bot is silent (Meta retries for a while, then drops them).
+   - Fresh machine: `winget install Ngrok.Ngrok`, `ngrok update`,
+     `ngrok config add-authtoken <token>`, then add the `endpoints:` block
+     to `ngrok.yml` (`ngrok config check` validates it). The free plan allows
+     **one** running agent — stop any manual `ngrok` before starting the
+     service.
+   - Free-plan ngrok shows a browser warning page to browsers only; Meta's
+     webhook POSTs pass straight through.
+3. Meta Callback URL — **set once**, already done for the domain above:
+   `https://kleenex-kabob-predefine.ngrok-free.dev/api/whatsapp/webhook`,
+   subscribed to `messages`. Only redo this if the domain changes (Meta →
+   WhatsApp → Configuration → Edit → **Verify and save**; the API must be
+   running so Meta's verify handshake succeeds).
 4. Add your phone under API Setup → **To** (max 5 test recipients), and to
    let the bot recognize you, store it on a policy **digits only with
    country code, no `+`** — exactly how WhatsApp sends it (e.g.

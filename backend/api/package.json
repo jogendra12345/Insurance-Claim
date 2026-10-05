@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "tunnel": "tsx scripts/tunnel.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "seed:demo-users": "tsx scripts/seed-demo-users.ts"
