@@ -255,6 +255,7 @@ the incident via `POST /v2/incidents/{incidentKey}/resolution` (basic auth
 `demo`/`demo`) is safe once you've confirmed it's this kind of timeout
 rather than a real logic error.
 
+
 Check current usage with `docker stats --no-stream orchestration`; if it's
 pinned near the limit, bump `mem_limit` in `camunda-docker/docker-compose.yaml`
 and `docker-compose up -d orchestration` to recreate it (data persists in the
@@ -268,6 +269,17 @@ VM limit before raising the container's `mem_limit` further; if not, the
 real fix is increasing Docker Desktop's memory allocation (Settings →
 Resources) rather than over-provisioning a single container within an
 already-tight VM.
+
+**Watch out (2026-10-07):** if `orchestration` gets killed (exit code 137 —
+Docker Desktop's whole VM was 4 GB with Camunda allowed 2.5 GB of it), Docker
+restarts it itself, and a manual `docker-compose up -d` at the same time can
+fail with `Bind for 0.0.0.0:9600 failed: port is already allocated` — leaving
+the container "healthy" but with **no published ports** (`docker port
+orchestration` prints nothing; `localhost:8080` doesn't answer). Fix:
+`cd camunda-docker && docker-compose down && docker-compose up -d` (no `-v` —
+data is kept). While Camunda was unreachable, the portal's Tasks page used to
+crash the whole API (policies/claims stopped loading too); `backend/api/src/
+index.ts` now survives that specific Camunda-client error.
 
 Deploy the process, DMN, and forms after any change to
 `process/claim-case-process.bpmn`, `process/health-claim-routing.dmn`, or
