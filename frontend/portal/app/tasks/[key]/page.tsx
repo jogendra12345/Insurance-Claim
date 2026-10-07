@@ -523,7 +523,7 @@ function ClaimDetails({ claim, provider }: { claim: Claim; provider: Claim["prov
           <DetailRow label="Total billed" value={currency(claim.totalBilledAmount)} />
           <DetailRow label="Other coverage (COB)" value={claim.coordinationOfBenefits ? "Yes" : "No"} />
           <DetailRow label="Provider" value={provider ? `${provider.facilityName} (NPI ${provider.npi})` : "—"} />
-          <DetailRow label="Filed via" value={claim.channel === "whatsapp" ? "WhatsApp" : "Portal"} />
+          <DetailRow label="Filed via" value={claim.channel === "whatsapp" ? "WhatsApp" : claim.channel === "email" ? "Email" : "Portal"} />
         </div>
       </div>
     </Section>

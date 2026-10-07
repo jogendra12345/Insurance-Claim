@@ -32,7 +32,7 @@ export interface CreateClaimInput {
   claimantName: string;
   claimantEmail: string;
   claimantPhone?: string | null;
-  channel: "portal" | "whatsapp";
+  channel: "portal" | "whatsapp" | "email";
   // Portal sub-source, audit detail only (portal-claims-assistant.md Decision 5).
   source?: "chat";
   incidentDate: string;
@@ -107,6 +107,7 @@ export function validateCreateClaimInput(input: CreateClaimInput, files: CreateC
 
 function auditSource(input: CreateClaimInput): string {
   if (input.channel === "whatsapp") return "whatsapp-assistant";
+  if (input.channel === "email") return "email-intake";
   return input.source === "chat" ? "claimant-portal-chat" : "claimant-portal";
 }
 

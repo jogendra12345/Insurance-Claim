@@ -170,6 +170,15 @@ WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_APP_SECRET=
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=
+
+# Optional — email claim intake (§9 below). Off unless EMAIL_INTAKE_ENABLED=true.
+EMAIL_INTAKE_ENABLED=
+EMAIL_INTAKE_IMAP_USER=
+EMAIL_INTAKE_IMAP_PASSWORD=
+# Optional — reads claim details from free text and attached bills; without
+# it email intake still works from the claim form alone. Same key as
+# backend/workers/.env.
+GEMINI_API_KEY=
 ```
 
 **Watch out:** if a previous `npm run dev` for this package is still holding
@@ -369,15 +378,47 @@ tunnel: `GET https://graph.facebook.com/v26.0/<APP_ID>/subscriptions` with
 webhook POST not signed by Meta with `WHATSAPP_APP_SECRET` — expected for
 hand-crafted test requests.
 
+## 9. Email claim intake (optional)
+
+Claimants email a dedicated claims Gmail address to raise a claim (a fill-in
+claim form comes back), check claim status, or check policy status —
+`.claude/specs/generic/email-claim-intake.md`. The API polls that inbox over
+IMAP and replies over its SMTP.
+
+1. Create (or pick) a **dedicated** Gmail account for claims — not the
+   `GMAIL_USER` account, which sends OTP/notification mail. Turn on 2-Step
+   Verification and create an App Password (myaccount.google.com/apppasswords).
+2. In `backend/api/.env` set `EMAIL_INTAKE_ENABLED=true`,
+   `EMAIL_INTAKE_IMAP_USER=<that address>`,
+   `EMAIL_INTAKE_IMAP_PASSWORD=<the App Password>`, and ideally
+   `GEMINI_API_KEY` (§4 template). Optional: `EMAIL_INTAKE_POLL_SECONDS`
+   (default 60), `EMAIL_INTAKE_REMINDER_DAYS` (3), `EMAIL_INTAKE_EXPIRY_DAYS`
+   (14).
+3. Restart the API — its log shows `Email claim intake polling <address> every 60s.`
+4. To test, email that address **from an address that's on a policy**
+   (`policyholder_email` or a dependent's email). Seeded policies use
+   undeliverable `@example.com` addresses, so update one first, e.g.
+   `UPDATE policies SET policyholder_email = 'you@gmail.com' WHERE policy_number = '<one>';`
+   Then send `raise a claim`, fill in the form that comes back, attach a
+   PDF/photo, reply, and reply `CONFIRM` to the summary.
+
+The inbox is read as unseen mail and marked seen, so start with an empty
+inbox — anything already unread there gets processed. Unknown senders get one
+"not linked to a policy" reply per 24h; mail failing SPF/DKIM/DMARC is dropped
+without a reply. Every step is logged in `email_intake_events`
+(`SELECT action, detail FROM email_intake_events ORDER BY created_at DESC`).
+
 ## Automated tests
 
 ```bash
-cd backend/api && npm test        # auth/session API tests — needs Postgres up and migrations run
+cd backend/api && npm test        # auth/session + email intake API tests — needs Postgres up and migrations run
 cd frontend/portal && npm test    # per-tab login tests (jsdom, no servers needed)
 ```
 
-The API suite creates and deletes its own throwaway users; it never sends
-email (the password-reset test writes the one-time code straight to the DB).
+The API suite creates and deletes its own throwaway users and policies; it
+never sends email (the password-reset test writes the one-time code straight
+to the DB; the email intake tests swap outbound mail, the AI and MinIO for
+in-memory fakes and stub Zeebe).
 
 ## Verifying it's up
 

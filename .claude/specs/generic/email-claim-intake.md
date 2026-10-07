@@ -2,7 +2,7 @@
 
 # generic/email-claim-intake
 
-**Status:** Draft (2026-10-07)
+**Status:** Locked (2026-10-07)
 
 ## Purpose
 
@@ -20,8 +20,8 @@ A claimant emails a dedicated claims address with a description of what happened
 ## Scope
 
 **In scope**
-- Receiving inbound email on a dedicated claims mailbox (mechanism: Open Question 1).
-- Sender verification and an up-front "known sender" check (Open Question 2).
+- Receiving inbound email on a dedicated claims mailbox (mechanism: Decision 1).
+- Sender verification and an up-front "known sender" check (Decision 2).
 - A reply-keyword **menu** (`RAISE A CLAIM` / `CLAIM STATUS` / `POLICY STATUS`) for greetings and unclear emails.
 - A plain-text **claim form template** sent in reply to "raise a claim", parsed deterministically when it comes back.
 - AI extraction of `CreateClaimInput` fields from free text outside the form (and attachment text where useful), followed by deterministic validation — the AI never decides validity.
@@ -44,22 +44,22 @@ A claimant emails a dedicated claims address with a description of what happened
 
 ## Design
 
-### Inbound mail (Open Question 1)
+### Inbound mail (Decision 1)
 
 Two options; the rest of the design is the same either way — the receiver hands a normalized `InboundEmail` (`messageId`, `inReplyTo`, `references[]`, `from`, `subject`, `textBody`, `attachments[]`, `authResults`) to one channel-adapter function.
 
-- **(a) Gmail IMAP polling (recommended for v1).** Poll the existing `GMAIL_USER` mailbox (or a dedicated Gmail account) every ~60 s with an IMAP client (e.g. `imapflow`) using an App Password, fetch unseen messages, process, mark seen. Runs as a small loop inside `backend/api` (or a separate process — decide at build). Works locally today with no domain, no tunnel, no new paid service. Gmail stamps an `Authentication-Results` header with SPF/DKIM/DMARC verdicts, which Open Question 2 can use.
+- **(a) Gmail IMAP polling (recommended for v1).** Poll a dedicated claims Gmail account every ~60 s with an IMAP client (e.g. `imapflow`) using an App Password, fetch unseen messages, process, mark seen. Runs as a small loop inside `backend/api` (or a separate process — decide at build). Works locally today with no domain, no tunnel, no new paid service. Gmail stamps an `Authentication-Results` header with SPF/DKIM/DMARC verdicts, which Decision 2 uses.
 - **(b) Inbound-parse webhook** (Resend inbound, SendGrid Inbound Parse, Mailgun Routes) → `POST /api/email/inbound`, signature-verified like the WhatsApp webhook. Real-time, scales better, but needs a domain we control with MX records pointed at the provider plus a public URL — neither exists yet (`PREREQUISITES.md`: Resend domain unverified).
 
 Swap later by replacing the receiver only; keep the adapter and everything below it unchanged.
 
-### Sender identity and verification (Open Question 2)
+### Sender identity and verification (Decision 2)
 
 Email `From:` is trivially spoofable, so the sender address alone is weaker than WhatsApp's phone number (which Meta verifies). Every inbound email goes through, in order:
 
 1. **Known-sender gate** — same idea as WhatsApp batch 1's `isKnownPhone()`: `from` (lowercased) must match `policies.policyholder_email`, `policy_dependents.email`, or an existing `claims.claimant_email`. Otherwise one fixed reply ("this address isn't linked to a policy — contact your insurer, or file in the portal") and no draft row is created. Unknown senders get that reply at most once per 24 h per address, to avoid becoming a reply-bot for spam.
 2. **Authentication check** — proposed: require `dmarc=pass`, or `spf=pass` **and** `dkim=pass` aligned to the `From` domain, in `Authentication-Results`. Failing mail is dropped with an `audit_log` row and no reply (replying to a forged sender emails the real person).
-3. **Confirm-before-submit** (proposed, see Open Question 2) — when a draft becomes complete, the final reply doesn't raise the claim yet; it sends a summary of every field to the matched address on file and asks the claimant to reply `CONFIRM`. Only a reply in that thread from that address raises the claim. Because the summary goes to the real address on file, a spoofer never sees it.
+3. **Confirm-before-submit** (Decision 2) — when a draft becomes complete, the final reply doesn't raise the claim yet; it sends a summary of every field to the matched address on file and asks the claimant to reply `CONFIRM`. Only a reply in that thread from that address raises the claim. Because the summary goes to the real address on file, a spoofer never sees it.
 
 Status replies (claim/policy status) only need steps 1–2: they go back to the address on file, which is the person allowed to see them.
 
@@ -92,17 +92,18 @@ in, and attach at least one supporting document (bill, receipt or report —
 PDF or photo). Leave a line blank if you don't know it; we'll ask about it.
 
 ----- CLAIM FORM -----
-Policy number: POL-1234        (your policies: POL-1234, POL-5678)
-Claim type:                    (outpatient / inpatient / pharmacy / dental / maternity / other)
-Incident date:                 (e.g. 03/10/2026, 3 Oct 2026, today)
+Policy number (yours: POL-1234, POL-5678): POL-1234
+Claim type (outpatient / inpatient / pharmacy / dental / maternity / other):
+Your full name: Sara Khan
+Incident date (e.g. 03/10/2026, 3 Oct 2026, today):
 What happened:
 Claim amount (USD):
-Diagnosis code (ICD-10):       (e.g. J18.9 — on your bill)
-Procedure code (CPT/HCPCS):    (e.g. 99284 — on your bill)
-Service date from:
-Service date to:               (leave blank if same day)
-Total billed (USD):
-Provider NPI:                  (10 digits)
+Diagnosis code (ICD-10, e.g. J18.9, on your bill):
+Procedure code (CPT or HCPCS, e.g. 99284, on your bill):
+Service date from (first day of treatment):
+Service date to (leave blank if same day):
+Total billed (USD, the provider's full bill):
+Provider NPI (10 digits):
 Provider tax ID:
 Facility name:
 Facility address:
@@ -111,14 +112,14 @@ I confirm this is accurate (yes/no):
 ----- END OF FORM -----
 ```
 
-- **One line per `CreateClaimInput` field** except `channel`, `claimantPhone`, `claimantEmail` (the verified sender) and `claimantName` (from the policy/dependent record on file — Design "Field extraction"). Order matches the portal `ClaimForm` / WhatsApp step order. Claim-type options come from the same list WhatsApp uses (`CLAIM_TYPES`, moved to the shared parsers module).
+- **One line per `CreateClaimInput` field** except `channel`, `claimantPhone` and `claimantEmail` (the verified sender). `claimantName` is a *Your full name* line pre-filled from the policy/dependent record on file (see Build notes). Order matches the portal `ClaimForm` / WhatsApp step order. Claim-type options come from the same list WhatsApp uses (`CLAIM_TYPES`, moved to the shared parsers module).
 - **Pre-filling**: policy number when the sender has exactly one policy (listed in the hint when they have several); on follow-ups, every accepted value.
-- **Hints** in `(…)` after the value area are ignored by the parser.
+- **Hints** in `(…)` sit in the label, before the colon, and are ignored by the parser (see Build notes).
 - **Follow-up form**: lines needing attention are prefixed `⚠` with the reason on the line below, e.g.
   ```
-  ⚠ Provider NPI: 123456789
+  ⚠ Provider NPI (10 digits): 123456789
     → Provider NPI must be exactly 10 digits.
-  ⚠ Procedure code (CPT/HCPCS):
+  ⚠ Procedure code (CPT or HCPCS, e.g. 99284, on your bill):
     → Still needed.
   ```
   and low-confidence AI values are prefixed `?` ("please check"). A short "What we have" summary above the form is unnecessary — the filled-in form *is* the summary.
@@ -128,7 +129,7 @@ I confirm this is accurate (yes/no):
 When a reply to a draft arrives:
 1. Strip quoted history (see "Quoted history" below), then look for the `----- CLAIM FORM -----` … `----- END OF FORM -----` block. If the claimant replied *above* our quoted form without copying it, the block is searched in the quoted text too — but only lines whose value differs from what we sent count as answers.
 2. **Deterministic pass**: each line is matched to a field by its label (case-insensitive, tolerant of a missing `⚠`/`?` prefix, extra spaces, and a removed hint), and its value is everything after the first `:` up to an optional trailing `(…)` hint. Blank values are ignored (field stays as it was). This pass needs no AI and is exact.
-3. **AI pass** only for: free text outside the form block (e.g. "NPI is 1234567890, sorry forgot"), form lines the label matcher couldn't place, and attachments (Open Question 5). Same extraction call as "Field extraction" below.
+3. **AI pass** only for: free text outside the form block (e.g. "NPI is 1234567890, sorry forgot"), form lines the label matcher couldn't place, and new attachments (Decision 5). Same extraction call as "Field extraction" below.
 4. Every value from either pass goes through the shared deterministic validators; deterministic form values win over AI values for the same field in the same email.
 
 ### Field extraction
@@ -160,9 +161,9 @@ No claim exists until every required field passes validation — a draft just wa
 | AI unsure of a value | Line marked `?` to check |
 | Form lines deleted or mangled | Label matcher is tolerant; anything it can't place goes to the AI pass; still-missing fields are re-flagged |
 | Reply contains nothing usable | Nothing lost; the same pre-filled form is re-sent |
-| New email (not a reply) while a draft is open | Open Question 4 |
-| Claimant goes silent | Open Question 3 |
-| Complete draft | Confirmation summary (if Open Question 2 adopts confirm-before-submit), then `createClaim()` |
+| New email (not a reply) while a draft is open | A separate draft; the reply mentions the other open draft (Decision 4) |
+| Claimant goes silent | Reminder after 3 days, expired after 14 (Decision 3) |
+| Complete draft | Confirmation summary; `CONFIRM` reply → `createClaim()` |
 | `createClaim()` rejects at submit (e.g. amount over coverage) | Same as WhatsApp batch 1: use `ClaimValidationError.field` to clear just that field, keep everything else and the documents, and reply asking for that one field. No `field` → reply explaining the problem and offering to start over (reply `RESTART`) |
 | Reply `CANCEL` | Draft abandoned, confirmation reply sent |
 
@@ -184,10 +185,10 @@ Next migration numbers on disk: `0019`, `0020`.
 | `documents` | jsonb | `{name,url,contentType,size}[]` — same shape as `whatsapp_sessions.documents` |
 | `status` | text | `collecting` \| `awaiting_confirmation` \| `submitted` \| `abandoned` \| `expired` |
 | `claim_id` | uuid NULL → `claims.id` | set on submit |
-| `last_inbound_at` / `reminder_sent_at` | timestamptz | for Open Question 3 |
+| `last_inbound_at` / `reminder_sent_at` | timestamptz | for Decision 3 |
 | `created_at` / `updated_at` | timestamptz | |
 
-Unlike `whatsapp_sessions` (one row per phone), a sender can have several drafts — one per thread — subject to Open Question 4.
+Unlike `whatsapp_sessions` (one row per phone), a sender can have several drafts — one per thread — per Decision 4.
 
 **`email_processed_messages`** (migration `0020`) — `message_id text PK`, `processed_at timestamptz`. Same purpose as `whatsapp_processed_messages` (`0017`): IMAP re-fetch or webhook redelivery must not double-process. No cleanup for v1, same reasoning.
 
@@ -212,17 +213,39 @@ Pre-claim rows have no `claim_id`; on submit, the draft id is logged in the clai
 
 ### Configuration
 
-New env vars in `backend/api/.env` (exact set depends on Open Question 1): `EMAIL_INTAKE_ENABLED`, `EMAIL_INTAKE_ADDRESS`, and for (a) `EMAIL_INTAKE_IMAP_USER`/`EMAIL_INTAKE_IMAP_PASSWORD` (default to `GMAIL_USER`/`GMAIL_APP_PASSWORD`), `EMAIL_INTAKE_POLL_SECONDS`. Unset → intake off, logged at startup. Add a "still needed"/decided line to `PREREQUISITES.md`.
+New env vars in `backend/api/.env` (Decision 1): `EMAIL_INTAKE_ENABLED`, `EMAIL_INTAKE_ADDRESS`, and for (a) `EMAIL_INTAKE_IMAP_USER`/`EMAIL_INTAKE_IMAP_PASSWORD` (the dedicated claims account's Gmail address and App Password — used for both IMAP and SMTP), `EMAIL_INTAKE_POLL_SECONDS`. Unset → intake off, logged at startup. Add a "still needed"/decided line to `PREREQUISITES.md`.
 
-## Open Questions
+## Decisions at Lock (2026-10-07)
 
-1. **Inbound mechanism** — (a) Gmail IMAP polling (recommended: works today, free, no domain) or (b) an inbound-parse webhook (needs a domain + public URL)? If (a): reuse the existing `GMAIL_USER` mailbox or create a dedicated claims Gmail account? A dedicated account is recommended — the existing one also sends OTP and notification mail, and the poller would otherwise read unrelated inbox traffic.
-2. **Sender verification** — adopt both the SPF/DKIM/DMARC check **and** confirm-before-submit (recommended), only one, or neither (demo-grade)? Confirm-before-submit adds one round trip per claim but is the only defense when a sender's domain has no DMARC.
-3. **Silent claimants** — proposed: one reminder after 3 days without a reply, draft `expired` after 14 days with a final "this draft has closed — just email us again" message. Alternatively no expiry for v1, matching WhatsApp's Decision 3. Needs a scheduler either way (the IMAP poll loop can sweep drafts; webhook mode would need a timer).
-4. **New email while a draft is open** — (a) always start a separate draft (simplest; a claimant might genuinely file two claims), (b) merge into the most recent open draft, or (c) ask in the reply ("Is this about your claim in progress or a new one?"). Recommended: (a), with the reply mentioning the other open draft.
-5. **Attachments as a field source** — should extraction also read attached bills/EOBs (where most ICD-10/CPT/NPI codes actually live) via `fetchAsInlinePart()`, or only the email text and form? Recommended: read attachments too and pre-fill blank form lines from them, so the claimant doesn't have to copy codes off the bill by hand — at the cost of a larger AI call per email. Values taken from attachments are marked `?` (please check) on the returned form, never silently accepted.
-6. **Size/type limits** — max attachments per email and per draft, max size, allowed types (proposed: PDF/JPEG/PNG/HEIC, 10 MB each, 10 per draft — align with the portal's multer limits).
+All six took the recommended option.
+
+1. ~~**Inbound mechanism**~~ — **(a) Gmail IMAP polling** of a **dedicated claims Gmail account** (not the existing `GMAIL_USER` mailbox, which also sends OTP/notification mail), every ~60 s. Replies go out over that same account's SMTP so they come from the claims address and thread correctly. The webhook option (b) stays the upgrade path once a domain exists — only the receiver changes.
+2. ~~**Sender verification**~~ — **both**: the SPF/DKIM/DMARC check on the receiving server's `Authentication-Results` header, **and** confirm-before-submit (a reply of `CONFIRM` to a full summary sent to the verified address on file).
+3. ~~**Silent claimants**~~ — **reminder after 3 days** without a reply (the pre-filled form re-sent once), **draft expired after 14 days** with a final "this draft has closed — just email us again" message. The IMAP poll loop sweeps drafts each tick.
+4. ~~**New email while a draft is open**~~ — **(a) always a separate draft**; the reply mentions the other open draft(s) so the claimant can carry on there instead.
+5. ~~**Attachments as a field source**~~ — **yes**: new attachments are sent to the AI along with the text, and values read from them fill only blank form lines, always marked `?` (please check), never silently accepted.
+6. ~~**Size/type limits**~~ — PDF, JPEG, PNG, HEIC; **10 MB per file** (the portal's own multer limit, `MAX_FILE_SIZE_BYTES` in `routes/claims.ts`); **10 documents per draft**. Rejected attachments are named in the reply with the reason.
 
 ## Build notes
 
-_(empty until built)_
+**Built 2026-10-07.** Files:
+- `backend/api/src/email-intake.ts` — `processInboundEmail()` (sender checks, intents, drafts, form + AI merge, confirm, `createClaim()`), `sweepDrafts()` (Decision 3), and `emailIntakeDeps` (outbound mail / AI / document storage, swappable in tests).
+- `backend/api/src/email-intake-form.ts` — pure pieces: `FORM_FIELDS`, `renderForm()`, `parseFormLines()`/`changedFormValues()`, `stripQuoted()`, `detectIntent()`, `controlKeyword()`, `checkSenderAuth()`.
+- `backend/api/src/email-intake-poller.ts` — Gmail IMAP receiver (`imapflow` + `mailparser`), started from `index.ts` when `EMAIL_INTAKE_ENABLED=true`.
+- `backend/api/src/email-intake-mailer.ts` — replies over the claims account's Gmail SMTP with `Message-ID`/`In-Reply-To`/`References` and `Auto-Submitted: auto-replied`; logs instead when the account isn't configured.
+- `backend/api/src/claim-field-parsers.ts` — the date/amount/claim-type/yes-no/pattern parsers moved out of `routes/whatsapp.ts`, now used by both channels. WhatsApp behavior re-checked unchanged against a mock-mode API (claim-type number, bad email, impossible date, `$1,200`).
+- `claims-assistant.ts`: `isKnownEmail()`, `nameForEmail()`, `raiseClaimByEmail()`. `create-claim.ts`: `channel` gains `'email'`, audit source `email-intake`. `backend/workers/validate-claim.ts`: the email-only authorized-claimant branch. Portal "Filed via" shows *Email*.
+- Migrations `0019_add_email_claim_drafts.sql` (`email_claim_drafts`, `email_intake_events`) and `0020_add_email_processed_messages.sql`.
+- Tests: `backend/api/test/email-intake-form.test.ts` (17, pure) and `backend/api/test/email-intake.test.ts` (13, against local Postgres with mail/AI/MinIO faked and Zeebe stubbed) — unknown sender, forged sender, duplicate Message-ID, blank form → filled form with a bad NPI → AI correction → untouched quoted form changes nothing → `CONFIRM` → claim on `channel = 'email'` with audit rows → claim status; a described claim from free text + attachment rejected at submit for over-coverage and re-asked for that one field; `CANCEL`; reminder and expiry; raw RFC 822 → `InboundEmail`.
+
+Deviations from the Design above, decided at build:
+- **Hints sit inside the label, before the colon** — `Diagnosis code (ICD-10, e.g. J18.9, on your bill): J18.9` — rather than after the value as the template sketch shows, so a typed value never runs into hint text. The parser takes the first colon *outside* parentheses (the policy hint itself contains one: `(yours: POL-1234)`).
+- **A "Your full name" line** is on the form, pre-filled from the policy/dependent record, so the claimant can correct it ("Field extraction" said they could override it).
+- **Extra draft columns**: `invalid_fields` (`{key: {value, error}}`, so a bad value is shown back as sent) and `sent_forms` (`{ourMessageId: {key: shown value}}`). A form line counts as an answer only if it differs from the form *being replied to* — so replying to an older email in the thread, with its stale quoted form, can't revert later answers.
+- **Pre-claim history** goes to a new `email_intake_events` table (`audit_log.claim_id` is `NOT NULL`); on submit, a `human` `email-intake-confirmed` `audit_log` row on the claim carries `draftId`, joining the two.
+- **"Describes a claim" (intent step 5)** is a heuristic, not a separate AI classification call: an attachment, a pasted form, or ≥ 15 words of new text starts a draft through the normal extraction; if that yields fewer than 2 answers and no documents, the draft is discarded and the menu is sent instead.
+- **`?` (low-confidence) lines don't block** the confirmation summary — the summary shows them marked and the claimant's `CONFIRM` covers them; returning the form with a `?` line left as-is also clears the mark.
+- **Authentication-Results trust**: only the topmost header whose authserv-id is `EMAIL_INTAKE_AUTHSERV_ID` (default `mx.google.com`) is read. Lower ones could have been written by the sender.
+- **At-most-once processing**: the `Message-ID` is recorded before processing, and an IMAP message is marked seen even if processing throws (the error is logged), so a poison message can't loop.
+
+Not yet verified: a real Gmail round trip (no dedicated claims account exists yet — `PREREQUISITES.md`), and AI extraction against the live Gemini API (the tests fake it).

@@ -109,6 +109,18 @@ zeebeClient.createWorker<ValidateClaimVariables, Record<string, unknown>, Valida
             )
           : { rowCount: 0 };
         authorizedClaimant = isPolicyholder || (dependentMatchCount ?? 0) > 0;
+      } else if (claim.channel === "email") {
+        // Email intake (.claude/specs/generic/email-claim-intake.md): the
+        // sender address is the identity that channel verified (SPF/DKIM/
+        // DMARC plus the CONFIRM round trip), so it's matched on email only —
+        // no name fallback, mirroring WhatsApp's phone-only rule.
+        const claimantEmail = claim.claimant_email.toLowerCase();
+        const isPolicyholder = (policy.policyholder_email ?? "").toLowerCase() === claimantEmail;
+        const { rowCount: dependentMatchCount } = await pool.query(
+          `SELECT id FROM policy_dependents WHERE policy_id = $1 AND lower(email) = $2 LIMIT 1`,
+          [policy.id, claimantEmail]
+        );
+        authorizedClaimant = isPolicyholder || (dependentMatchCount ?? 0) > 0;
       } else {
         const claimantEmail = claim.claimant_email.toLowerCase();
         const claimantName = claim.claimant_name.toLowerCase();

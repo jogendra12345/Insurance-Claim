@@ -65,6 +65,10 @@ This doc predates the authorized-claimant check (SPEC.md §9 "Authorized claiman
 - New nullable columns: `policies.policyholder_phone`, `policy_dependents.phone`, `claims.claimant_phone` (migration `0015_add_phone_fields.sql`); `claims.channel` defaults `'portal'` for every existing/portal-submitted row.
 - `channel = 'whatsapp'` is unused in production today — no route sets it, since `claims-assistant` itself is still Draft/unimplemented. This addendum only lays the groundwork in `validate-claim` and the schema.
 
+## Addendum (2026-10-07): `channel = 'email'`
+
+Email claim intake ([`generic/email-claim-intake`](../generic/email-claim-intake.md)) adds a third channel value. An `'email'` claim is authorized on **email only**: `claimant_email` (the sender address that channel verified via SPF/DKIM/DMARC plus the `CONFIRM` round trip) must match the matched policy's `policyholder_email` or a `policy_dependents.email` row for it, case-insensitive, with no name fallback — mirroring the WhatsApp phone-only rule. `'portal'` and `'whatsapp'` are unchanged.
+
 ## Open Questions
 
 - Does `incidentDate` need to be added as an explicit process-instance variable at kickoff (alongside `claimId`, `carrierId`, `insuranceType`, `policyNumber`, `claimType`, `claimAmount` per SPEC.md §10), or is it acceptable for this worker to be the first to read it straight from `claims` via `claimId`? Every other worker in §12 takes `claimId` as an input and reads what it needs from Postgres, so reading `incident_date` the same way is likely consistent — but SPEC.md §10's kickoff variable list doesn't mention `claimId` explicitly either, only the six listed. Worth confirming the kickoff variable list is complete before implementing.

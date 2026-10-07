@@ -175,3 +175,41 @@ export async function raiseClaim(
   const claim = await createClaim({ ...fields, channel: "whatsapp", claimantPhone: phone }, documents);
   return { claimId: claim.id, shortRef: shortClaimId(claim.id) };
 }
+
+// ---------- Email intake (.claude/specs/generic/email-claim-intake.md) ----------
+
+// An address is "known" if it's on a policy (as policyholder or dependent) or
+// has filed a claim before — the email twin of isKnownPhone().
+export async function isKnownEmail(email: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM policies WHERE lower(policyholder_email) = lower($1))
+         OR EXISTS (SELECT 1 FROM policy_dependents WHERE lower(email) = lower($1))
+         OR EXISTS (SELECT 1 FROM claims WHERE lower(claimant_email) = lower($1)) AS known`,
+    [email]
+  );
+  return rows[0].known;
+}
+
+// The person's own name on file for an address — policyholder first, then
+// dependent, then their most recent claim. Pre-fills the email claim form.
+export async function nameForEmail(email: string): Promise<string | null> {
+  const { rows } = await pool.query(
+    `SELECT name FROM (
+       SELECT policyholder_name AS name, 1 AS rank FROM policies WHERE lower(policyholder_email) = lower($1)
+       UNION ALL SELECT full_name, 2 FROM policy_dependents WHERE lower(email) = lower($1)
+       UNION ALL (SELECT claimant_name, 3 FROM claims WHERE lower(claimant_email) = lower($1) ORDER BY created_at DESC LIMIT 1)
+     ) names ORDER BY rank LIMIT 1`,
+    [email]
+  );
+  return rows[0]?.name ?? null;
+}
+
+// claimantEmail is the verified sender address, never a typed value.
+export async function raiseClaimByEmail(
+  email: string,
+  fields: Omit<CreateClaimInput, "channel" | "claimantPhone" | "claimantEmail">,
+  documents: CreateClaimDocument[]
+): Promise<RaiseClaimResult> {
+  const claim = await createClaim({ ...fields, claimantEmail: email, channel: "email", claimantPhone: null }, documents);
+  return { claimId: claim.id, shortRef: shortClaimId(claim.id) };
+}

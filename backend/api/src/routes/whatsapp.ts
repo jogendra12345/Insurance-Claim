@@ -14,6 +14,18 @@ import {
   type ClaimStatusDetail,
 } from "../claims-assistant";
 import { CPT_OR_HCPCS_PATTERN, ClaimValidationError, ICD10_PATTERN, NPI_PATTERN } from "../create-claim";
+import {
+  CLAIM_TYPES,
+  DATE_HINT,
+  parseClaimTypeText,
+  parseDateText,
+  parseEmailText,
+  parseNonEmpty,
+  parsePatternText,
+  parsePositiveNumberText,
+  yesNoText,
+  type ParseResult,
+} from "../claim-field-parsers";
 
 // WhatsApp claims assistant webhook — .claude/specs/generic/claims-assistant.md
 // (Phase 1). Menu-driven: any message with no active mode gets the top-level
@@ -232,9 +244,6 @@ async function handlePolicyStatusMenu(phone: string): Promise<void> {
 // fixed set of values (policy, claim type, yes/no) it's offered as a list or
 // reply buttons, with typed answers still accepted (addendum 2026-10-05).
 
-const CLAIM_TYPES = ["outpatient", "inpatient", "pharmacy", "dental", "maternity", "other"];
-
-type ParseResult = { ok: true; value: unknown } | { ok: false; error: string };
 type Parser = (text: string | null, interactiveId: string | null, phone: string) => ParseResult | Promise<ParseResult>;
 
 // Wraps a text-only parser: a stale button/list tap on a typed question gets
@@ -244,7 +253,7 @@ function typed(parse: (text: string) => ParseResult): (text: string | null, inte
 }
 
 function nonEmpty(error: string) {
-  return typed((text) => (text.trim() ? { ok: true, value: text.trim() } : { ok: false, error }));
+  return typed((text) => parseNonEmpty(text, error));
 }
 
 // Tapped or typed, the policy must be one of the sender's own (addendum
@@ -261,62 +270,14 @@ async function parsePolicyNumber(text: string | null, interactiveId: string | nu
 
 function parseClaimType(text: string | null, interactiveId: string | null): ParseResult {
   if (interactiveId?.startsWith("claim_type:")) return { ok: true, value: interactiveId.slice("claim_type:".length) };
-  const t = text?.trim().toLowerCase() ?? "";
-  const index = Number(t) - 1;
-  if (Number.isInteger(index) && CLAIM_TYPES[index]) return { ok: true, value: CLAIM_TYPES[index] };
-  if (CLAIM_TYPES.includes(t)) return { ok: true, value: t };
-  return { ok: false, error: "Please pick a claim type from the list." };
+  return parseClaimTypeText(text ?? "");
 }
 
-const parseEmail = typed((text) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text.trim())
-    ? { ok: true, value: text.trim() }
-    : { ok: false, error: "That doesn't look like a valid email address." }
-);
+const parseEmail = typed(parseEmailText);
 
-// ---------- Date parsing (addendum 2026-10-05, item 5) ----------
-
-const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-
-// Returns YYYY-MM-DD, or null for an impossible date like 31/02/2026.
-function isoDate(year: number, month: number, day: number): string | null {
-  const d = new Date(Date.UTC(year, month - 1, day));
-  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
-  return d.toISOString().slice(0, 10);
-}
-
-// "today"/"yesterday" use the server's local date.
-function localIsoDate(daysAgo: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return isoDate(d.getFullYear(), d.getMonth() + 1, d.getDate())!;
-}
-
-// Accepts YYYY-MM-DD, DD/MM/YYYY or DD-MM-YYYY (day first), "3 Oct 2026" /
-// "3 October 2026", "today", "yesterday".
-function toIsoDate(text: string): string | null {
-  const t = text.trim().toLowerCase();
-  if (t === "today") return localIsoDate(0);
-  if (t === "yesterday") return localIsoDate(1);
-  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m) return isoDate(Number(m[1]), Number(m[2]), Number(m[3]));
-  m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (m) return isoDate(Number(m[3]), Number(m[2]), Number(m[1]));
-  m = t.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,})\.?,?\s+(\d{4})$/);
-  if (m) {
-    const month = MONTH_NAMES.findIndex((name) => name.startsWith(m![2]));
-    return month === -1 ? null : isoDate(Number(m[3]), month + 1, Number(m[1]));
-  }
-  return null;
-}
-
-const DATE_HINT = "e.g. 2026-10-03, 03/10/2026, 3 Oct 2026, or 'today'";
-
+// Date formats: claim-field-parsers.ts toIsoDate() (addendum 2026-10-05, item 5).
 function parseDate(label: string) {
-  return typed((text) => {
-    const value = toIsoDate(text);
-    return value ? { ok: true, value } : { ok: false, error: `${label} isn't a date I recognise (${DATE_HINT}).` };
-  });
+  return typed((text) => parseDateText(text, label));
 }
 
 function parseLastServiceDate(text: string | null, interactiveId: string | null): ParseResult {
@@ -325,17 +286,12 @@ function parseLastServiceDate(text: string | null, interactiveId: string | null)
 }
 
 function parsePositiveNumber(label: string) {
-  return typed((text) => {
-    const n = Number(text.trim().replace(/[$,]/g, ""));
-    return !Number.isNaN(n) && n > 0 ? { ok: true, value: n } : { ok: false, error: `${label} must be a number greater than 0.` };
-  });
+  return typed((text) => parsePositiveNumberText(text, label));
 }
 
 function yesNo(text: string | null, interactiveId: string | null): boolean | null {
-  const t = interactiveId ?? text?.trim().toLowerCase();
-  if (t === "yes" || t === "y") return true;
-  if (t === "no" || t === "n") return false;
-  return null;
+  if (interactiveId) return yesNoText(interactiveId);
+  return text === null ? null : yesNoText(text);
 }
 
 function parseYesNo(text: string | null, interactiveId: string | null): ParseResult {
@@ -353,7 +309,7 @@ function parseAttestation(text: string | null, interactiveId: string | null): Pa
 }
 
 function parsePattern(pattern: RegExp, error: string) {
-  return typed((text) => (pattern.test(text.trim()) ? { ok: true, value: text.trim() } : { ok: false, error }));
+  return typed((text) => parsePatternText(text, pattern, error));
 }
 
 const MAIN_MENU_OPTION: MenuOption = { id: "main_menu", title: "Main menu" };

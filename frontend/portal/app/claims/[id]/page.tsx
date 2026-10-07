@@ -273,7 +273,7 @@ export default function ClaimDetailPage() {
                   <DetailRow label="Claimant" value={claim.claimantName} />
                   <DetailRow label="Email" value={claim.claimantEmail} />
                   {claim.claimantPhone && <DetailRow label="Phone" value={claim.claimantPhone} />}
-                  <DetailRow label="Filed via" value={claim.channel === "whatsapp" ? "WhatsApp" : "Portal"} />
+                  <DetailRow label="Filed via" value={claim.channel === "whatsapp" ? "WhatsApp" : claim.channel === "email" ? "Email" : "Portal"} />
                 </div>
               </Section>
 
