@@ -31,7 +31,7 @@
 **Out of scope:**
 - **Building Phase 2 (the in-portal chatbot UI) itself** — flagged and designed for, not built, in this draft. Needs its own spec when it's actually scheduled.
 - **Which WhatsApp intake style to use for "raise a claim"** (Flows vs. plain text Q&A vs. a reduced field set) — unresolved, see Open Question 1.
-- Email intake — the other half of `SPEC.md` §14's combined backlog bullet; a separate spec.
+- Email intake — the other half of `SPEC.md` §14's combined backlog bullet; a separate spec — now [`generic/email-claim-intake`](email-claim-intake.md) (Draft).
 - Any outbound/business-initiated use of WhatsApp (e.g. as a `NotificationProvider` channel for `notify-claimant`, or unsolicited status pings) — every message here is a reply to something the user sent first. Business-initiated messages reintroduce per-message costs this spec's free-tier framing depends on avoiding, so that's a materially different feature.
 - Designing/approving an actual WhatsApp Flow in Meta's tooling, if that path is chosen for the raise-a-claim intent — happens in Meta's Flow Builder, outside this codebase.
 - Any change to `POST /api/claims`'s validation rules themselves (ICD-10/CPT-HCPCS/NPI patterns, required-field list), or to `GET /api/claims`/`GET /api/policies`'s existing authorization rules — this spec's job is to satisfy/reuse those existing contracts from a new channel, not loosen them.
