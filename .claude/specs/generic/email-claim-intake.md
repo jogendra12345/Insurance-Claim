@@ -10,14 +10,21 @@
 
 A claimant emails a dedicated claims address with a description of what happened and their bills/receipts attached. The app pulls out the claim fields with AI, checks them with the same validation the portal and WhatsApp use, replies in the same thread asking **only** for whatever is missing or invalid, and raises the claim once everything is there. The same address also answers "where is my claim?" / "what's my policy status?" emails, reusing the shared assistant layer.
 
-**Why not just copy the WhatsApp bot:** WhatsApp asks one question per message with tappable menus. Email has no buttons and a slow round trip — a 17-question email exchange would take days. So email intake is **extract-then-ask-for-gaps**: one email can carry most of a claim, and follow-ups are batched into a single reply listing every gap at once.
+**Why not just copy the WhatsApp bot:** WhatsApp asks one question per message with tappable menus. Email has no buttons and a slow round trip — a 17-question email exchange would take days. So email intake is **form-or-extract, then ask for gaps**:
+- A claimant who emails **"raise a claim"** (or sends a new email with no claim details) gets a **plain-text claim form** back — every field as a `Label: value` line, pre-filled where we already know the answer — to fill in and send back with their documents. This is email's equivalent of WhatsApp's menu: an explicit, predictable starting point.
+- A claimant who just describes their claim in their own words skips the form; AI extracts what it can.
+- Either way, follow-ups are batched into a single reply that re-sends the form with accepted answers filled in and only the missing/invalid lines flagged.
+
+**Added 2026-10-07 (same day, product direction):** the claim-form template, the reply-keyword menu, and code-first form parsing were added after the first draft — the first draft relied on AI extraction alone and replied with a bare "still needed" list.
 
 ## Scope
 
 **In scope**
 - Receiving inbound email on a dedicated claims mailbox (mechanism: Open Question 1).
 - Sender verification and an up-front "known sender" check (Open Question 2).
-- AI extraction of `CreateClaimInput` fields from the email body (and attachment text where useful), followed by deterministic validation — the AI never decides validity.
+- A reply-keyword **menu** (`RAISE A CLAIM` / `CLAIM STATUS` / `POLICY STATUS`) for greetings and unclear emails.
+- A plain-text **claim form template** sent in reply to "raise a claim", parsed deterministically when it comes back.
+- AI extraction of `CreateClaimInput` fields from free text outside the form (and attachment text where useful), followed by deterministic validation — the AI never decides validity.
 - A per-thread **draft** that accumulates fields and documents across replies, keyed on email threading headers.
 - Gap replies: one reply per inbound email listing every missing/invalid field, with the same error messages the portal shows.
 - Attachments → MinIO, same bucket/path as WhatsApp's already-uploaded document variant of `createClaim()`.
@@ -58,40 +65,101 @@ Status replies (claim/policy status) only need steps 1–2: they go back to the 
 
 ### Intent detection
 
-Per inbound email, in order:
-1. Reply to an open draft thread (`In-Reply-To`/`References` matches a draft's message ids) → **continue that draft**.
-2. Subject/body is a status ask (keywords `status`, `where is my claim`, a `#<shortref>` with no attachments, etc. — final list at build; AI may assist with classification) → **claim status** (list of the sender's claims, or one claim's detail if a `#shortref` in scope is mentioned) or **policy status**.
-3. Otherwise → **new claim draft**.
+Per inbound email, in order (keywords matched case-insensitively against the subject and the first non-quoted lines of the body):
+1. Reply to an open draft thread (`In-Reply-To`/`References` matches a draft's message ids) → **continue that draft**. Control keywords `CONFIRM`, `CANCEL`, `RESTART` apply here.
+2. **`RAISE A CLAIM`** (also `raise claim`, `new claim`, `file a claim`, `make a claim`) → create an empty draft and reply with the **claim form** (below).
+3. **`CLAIM STATUS`** (also `status`, `where is my claim`, or a `#<shortref>` with no attachments) → **claim status**: list of the sender's claims, or one claim's detail if a `#shortref` in the sender's scope is mentioned.
+4. **`POLICY STATUS`** → **policy status**.
+5. Email that already describes a claim (AI classifies: mentions an incident/treatment/bill, or has attachments) → **new claim draft** via extraction, skipping the blank form — the first reply is the pre-filled form with gaps flagged.
+6. Anything else (`hi`, `help`, empty, unclear) → **menu reply**:
+
+   > Hi Sara — I'm the ClaimFlow claims assistant. Reply to this email with one of:
+   > - **RAISE A CLAIM** — I'll send you a short form to fill in
+   > - **CLAIM STATUS** — see where your claims are
+   > - **POLICY STATUS** — see your policies
+   >
+   > You can also just describe your claim and attach your bill — I'll work out the details.
 
 Status reply wording reuses `claimStatusCopy()`/`claimProgressLine()` from `claims-assistant.ts`, so email matches WhatsApp and the portal.
 
+### Claim form template
+
+Sent in reply to `RAISE A CLAIM`, and re-sent (pre-filled) in every follow-up while a draft is collecting. Plain text so it survives every mail client and can be filled in by typing after each colon:
+
+```
+Hi Sara, to raise a claim, reply to this email with the form below filled
+in, and attach at least one supporting document (bill, receipt or report —
+PDF or photo). Leave a line blank if you don't know it; we'll ask about it.
+
+----- CLAIM FORM -----
+Policy number: POL-1234        (your policies: POL-1234, POL-5678)
+Claim type:                    (outpatient / inpatient / pharmacy / dental / maternity / other)
+Incident date:                 (e.g. 03/10/2026, 3 Oct 2026, today)
+What happened:
+Claim amount (USD):
+Diagnosis code (ICD-10):       (e.g. J18.9 — on your bill)
+Procedure code (CPT/HCPCS):    (e.g. 99284 — on your bill)
+Service date from:
+Service date to:               (leave blank if same day)
+Total billed (USD):
+Provider NPI:                  (10 digits)
+Provider tax ID:
+Facility name:
+Facility address:
+Other insurance? (yes/no):
+I confirm this is accurate (yes/no):
+----- END OF FORM -----
+```
+
+- **One line per `CreateClaimInput` field** except `channel`, `claimantPhone`, `claimantEmail` (the verified sender) and `claimantName` (from the policy/dependent record on file — Design "Field extraction"). Order matches the portal `ClaimForm` / WhatsApp step order. Claim-type options come from the same list WhatsApp uses (`CLAIM_TYPES`, moved to the shared parsers module).
+- **Pre-filling**: policy number when the sender has exactly one policy (listed in the hint when they have several); on follow-ups, every accepted value.
+- **Hints** in `(…)` after the value area are ignored by the parser.
+- **Follow-up form**: lines needing attention are prefixed `⚠` with the reason on the line below, e.g.
+  ```
+  ⚠ Provider NPI: 123456789
+    → Provider NPI must be exactly 10 digits.
+  ⚠ Procedure code (CPT/HCPCS):
+    → Still needed.
+  ```
+  and low-confidence AI values are prefixed `?` ("please check"). A short "What we have" summary above the form is unnecessary — the filled-in form *is* the summary.
+
+### Form parsing (code first, AI second)
+
+When a reply to a draft arrives:
+1. Strip quoted history (see "Quoted history" below), then look for the `----- CLAIM FORM -----` … `----- END OF FORM -----` block. If the claimant replied *above* our quoted form without copying it, the block is searched in the quoted text too — but only lines whose value differs from what we sent count as answers.
+2. **Deterministic pass**: each line is matched to a field by its label (case-insensitive, tolerant of a missing `⚠`/`?` prefix, extra spaces, and a removed hint), and its value is everything after the first `:` up to an optional trailing `(…)` hint. Blank values are ignored (field stays as it was). This pass needs no AI and is exact.
+3. **AI pass** only for: free text outside the form block (e.g. "NPI is 1234567890, sorry forgot"), form lines the label matcher couldn't place, and attachments (Open Question 5). Same extraction call as "Field extraction" below.
+4. Every value from either pass goes through the shared deterministic validators; deterministic form values win over AI values for the same field in the same email.
+
 ### Field extraction
 
-For a new draft or a reply to one:
+For a free-text new claim email, or the AI pass of "Form parsing" above:
 - **AI step** — send the new text (quoted history stripped, see below) to the app's existing AI client (`backend/shared/gemini-client.ts`, which every AI worker uses today) with a JSON-schema prompt over the `CreateClaimInput` keys minus `channel`/`claimantPhone`/`claimantEmail`. Output per field: `value` and `confidence` (`high`/`low`). Missing fields are omitted, not guessed. Instruct the model to quote codes (ICD-10, CPT/HCPCS, NPI) **only** if they literally appear in the email or an attachment — never infer a code from a description.
 - **Deterministic step** — every extracted value goes through the same parsers/patterns WhatsApp uses (`ICD10_PATTERN`, `CPT_OR_HCPCS_PATTERN`, `NPI_PATTERN`, positive amounts, the multi-format date parser, the sender's-own-policy check, claim-type list). To avoid a third copy, move WhatsApp's field parsers (`parseDate`, `toIsoDate`, `parsePositiveNumber`, `parseClaimType`, policy-number check) out of `routes/whatsapp.ts` into a shared module (e.g. `backend/api/src/claim-field-parsers.ts`) used by both adapters — WhatsApp's behavior must stay identical.
 - **Merge** — a value already accepted in the draft is only overwritten if the claimant's new email clearly supplies a different one (AI flags it as a correction); otherwise earlier answers stand.
 - **Fixed fields** — `claimantEmail` = the verified sender address (never extracted). `claimantName` defaults to the policyholder/dependent name on file for that address; the claimant can override it.
-- **Low-confidence values** are kept but listed under "please confirm" in the next reply rather than silently accepted. Yes/no fields (`coordinationOfBenefits`, `attested`) are never inferred — they must be answered explicitly (attestation always appears in the final summary).
+- **Low-confidence values** are kept but marked `?` (please check) on the next returned form rather than silently accepted. Yes/no fields (`coordinationOfBenefits`, `attested`) are never inferred — they must be answered explicitly (attestation always appears in the final summary).
 - **Quoted history** — strip quoted reply text (lines starting `>`, `On … wrote:` blocks, Gmail/Outlook quote markers) before extraction so the bot's own previous questions aren't re-read as answers.
 
 ### What happens when details are missing
 
-No claim exists until every required field passes validation — a draft just waits. After each inbound email, the reply lists in one message:
-- **What we have** — the accepted fields, in plain words (so the claimant can spot a wrong extraction).
-- **Still needed** — each missing required field, with a short hint on where to find it (e.g. "Diagnosis code (ICD-10, e.g. J18.9) — usually on your bill or discharge papers").
-- **Needs fixing** — each invalid value, quoting what was sent and the same error message the portal/WhatsApp show.
-- **Please confirm** — low-confidence values.
-- **Documents** — if none received yet: "Please attach at least one supporting document (bill, receipt, report — PDF or photo)."
+No claim exists until every required field passes validation — a draft just waits. After each inbound email, the reply is the **claim form again**, pre-filled with every accepted value (so the claimant can spot a wrong extraction), with:
+- **Missing** required fields left blank and marked `⚠ … → Still needed.`
+- **Invalid** values kept as sent and marked `⚠ … → <the same error message the portal/WhatsApp show>`.
+- **Low-confidence** AI values marked `?` with "please check — change it if it's wrong".
+- **Documents** — a line above the form: "Documents received: bill.pdf" or, if none yet, "⚠ Please attach at least one supporting document (bill, receipt, report — PDF or photo)."
 
 | Situation | Behavior |
 |---|---|
-| Field missing | Listed under *Still needed* with a hint |
-| Field present but invalid | Listed under *Needs fixing* with the portal's error message |
-| No attachment | Asked for; required, as on WhatsApp |
-| Policy number not one of the sender's | Rejected immediately; reply lists the sender's own policies (same scope as policy status) |
-| AI unsure of a value | Listed under *Please confirm* |
-| Reply contains nothing usable | Nothing lost; reply restates what's still needed |
+| Claimant emails "raise a claim" | Blank form (policy pre-filled if they have one) |
+| Claimant describes a claim without the form | Extraction, then the pre-filled form with gaps flagged |
+| Field missing | Blank line marked `⚠ Still needed` |
+| Field present but invalid | Line kept, marked `⚠` with the portal's error message |
+| No attachment | Asked for above the form; required, as on WhatsApp |
+| Policy number not one of the sender's | Marked `⚠`; hint lists the sender's own policies (same scope as policy status) |
+| AI unsure of a value | Line marked `?` to check |
+| Form lines deleted or mangled | Label matcher is tolerant; anything it can't place goes to the AI pass; still-missing fields are re-flagged |
+| Reply contains nothing usable | Nothing lost; the same pre-filled form is re-sent |
 | New email (not a reply) while a draft is open | Open Question 4 |
 | Claimant goes silent | Open Question 3 |
 | Complete draft | Confirmation summary (if Open Question 2 adopts confirm-before-submit), then `createClaim()` |
@@ -152,7 +220,7 @@ New env vars in `backend/api/.env` (exact set depends on Open Question 1): `EMAI
 2. **Sender verification** — adopt both the SPF/DKIM/DMARC check **and** confirm-before-submit (recommended), only one, or neither (demo-grade)? Confirm-before-submit adds one round trip per claim but is the only defense when a sender's domain has no DMARC.
 3. **Silent claimants** — proposed: one reminder after 3 days without a reply, draft `expired` after 14 days with a final "this draft has closed — just email us again" message. Alternatively no expiry for v1, matching WhatsApp's Decision 3. Needs a scheduler either way (the IMAP poll loop can sweep drafts; webhook mode would need a timer).
 4. **New email while a draft is open** — (a) always start a separate draft (simplest; a claimant might genuinely file two claims), (b) merge into the most recent open draft, or (c) ask in the reply ("Is this about your claim in progress or a new one?"). Recommended: (a), with the reply mentioning the other open draft.
-5. **Attachments as a field source** — should extraction also read attached bills/EOBs (where most ICD-10/CPT/NPI codes actually live) via `fetchAsInlinePart()`, or body text only? Recommended: read attachments too, since it's the main way email intake can beat the portal form — at the cost of a larger AI call per email. Codes taken from attachments would still be listed under *Please confirm* the first time.
+5. **Attachments as a field source** — should extraction also read attached bills/EOBs (where most ICD-10/CPT/NPI codes actually live) via `fetchAsInlinePart()`, or only the email text and form? Recommended: read attachments too and pre-fill blank form lines from them, so the claimant doesn't have to copy codes off the bill by hand — at the cost of a larger AI call per email. Values taken from attachments are marked `?` (please check) on the returned form, never silently accepted.
 6. **Size/type limits** — max attachments per email and per draft, max size, allowed types (proposed: PDF/JPEG/PNG/HEIC, 10 MB each, 10 per draft — align with the portal's multer limits).
 
 ## Build notes
