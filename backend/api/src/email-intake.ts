@@ -694,7 +694,8 @@ async function continueDraft(draft: DraftRow, email: InboundEmail, newText: stri
 
 // ---------- Entry point ----------
 
-const AUTOMATED_LOCAL_PART = /^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounces?)\b/i;
+// Anywhere in the local part, e.g. googlecommunityteam-noreply@google.com.
+const AUTOMATED_LOCAL_PART = /^(mailer-daemon|postmaster|bounces?)\b|(^|[-_.+])(no-?reply|do-?not-?reply)([-_.+]|$)/i;
 
 export async function processInboundEmail(email: InboundEmail): Promise<void> {
   const sender = email.from.trim().toLowerCase();
