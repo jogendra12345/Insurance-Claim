@@ -201,7 +201,7 @@ export async function nameForEmail(email: string): Promise<string | null> {
      ) names ORDER BY rank LIMIT 1`,
     [email]
   );
-  return rows[0]?.name ?? null;
+  return rows[0]?.name?.trim() || null;
 }
 
 // claimantEmail is the verified sender address, never a typed value.

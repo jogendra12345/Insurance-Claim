@@ -231,7 +231,7 @@ All six took the recommended option.
 **Built 2026-10-07.** Files:
 - `backend/api/src/email-intake.ts` — `processInboundEmail()` (sender checks, intents, drafts, form + AI merge, confirm, `createClaim()`), `sweepDrafts()` (Decision 3), and `emailIntakeDeps` (outbound mail / AI / document storage, swappable in tests).
 - `backend/api/src/email-intake-form.ts` — pure pieces: `FORM_FIELDS`, `renderForm()`, `parseFormLines()`/`changedFormValues()`, `stripQuoted()`, `detectIntent()`, `controlKeyword()`, `checkSenderAuth()`.
-- `backend/api/src/email-intake-poller.ts` — Gmail IMAP receiver (`imapflow` + `mailparser`), started from `index.ts` when `EMAIL_INTAKE_ENABLED=true`.
+- `backend/api/src/email-intake-poller.ts` — Gmail IMAP receiver (see the shared-inbox addendum below for `EMAIL_INTAKE_ADDRESS`/`EMAIL_INTAKE_UNTIL`) (`imapflow` + `mailparser`), started from `index.ts` when `EMAIL_INTAKE_ENABLED=true`.
 - `backend/api/src/email-intake-mailer.ts` — replies over the claims account's Gmail SMTP with `Message-ID`/`In-Reply-To`/`References` and `Auto-Submitted: auto-replied`; logs instead when the account isn't configured.
 - `backend/api/src/claim-field-parsers.ts` — the date/amount/claim-type/yes-no/pattern parsers moved out of `routes/whatsapp.ts`, now used by both channels. WhatsApp behavior re-checked unchanged against a mock-mode API (claim-type number, bad email, impossible date, `$1,200`).
 - `claims-assistant.ts`: `isKnownEmail()`, `nameForEmail()`, `raiseClaimByEmail()`. `create-claim.ts`: `channel` gains `'email'`, audit source `email-intake`. `backend/workers/validate-claim.ts`: the email-only authorized-claimant branch. Portal "Filed via" shows *Email*.
@@ -248,4 +248,17 @@ Deviations from the Design above, decided at build:
 - **Authentication-Results trust**: only the topmost header whose authserv-id is `EMAIL_INTAKE_AUTHSERV_ID` (default `mx.google.com`) is read. Lower ones could have been written by the sender.
 - **At-most-once processing**: the `Message-ID` is recorded before processing, and an IMAP message is marked seen even if processing throws (the error is logged), so a poison message can't loop.
 
-Not yet verified: a real Gmail round trip (no dedicated claims account exists yet — `PREREQUISITES.md`), and AI extraction against the live Gemini API (the tests fake it).
+**Addendum (2026-10-07) — shared inbox and end date.** The first live run used an existing personal Gmail account as the claims inbox, and the poller treated its ~340-email unread backlog as claimant mail: newsletters were dropped, but 12 Amazon/Facebook/Google notification senders got the unknown-sender reply and everything was marked read. Two options were added so a demo can share a personal account:
+- `EMAIL_INTAKE_ADDRESS` set to a plus-address of the account (e.g. `you+claims@gmail.com`) — the poller only handles mail sent to it (Gmail `X-GM-RAW deliveredto:` search, then a To/Cc/Delivered-To/X-Original-To header check that decides for any server). Other mail is fetched with `BODY.PEEK` and skipped, so it stays unread and unanswered. Replies are sent `From`/`Reply-To` the plus-address so the claimant's answers come back to it. Mail from the account's own main address is also treated as our own (no reply).
+- `EMAIL_INTAKE_UNTIL=YYYY-MM-DD` — polling doesn't start after that day (inclusive, server-local), and a running poller stops at the first tick past it.
+- The automated-sender check now matches `noreply`/`do-not-reply` anywhere in the local part (`googlecommunityteam-noreply@…` got a reply on the first run).
+
+**Addendum (2026-10-07) — fixes from the first live round trip** (claimant on Gmail mobile replying to the form):
+- **Read flag ignored in shared-inbox mode.** The account owner opened the reply in Gmail before the poll, so an unread-only search skipped it — and Gmail returns nothing when `deliveredto:` is combined with `is:unread`/`UNSEEN` anyway. The poller now searches `deliveredto:<address> newer_than:15d` and skips anything already in `email_processed_messages` (cheap envelope fetch first); 15 days covers a draft's 14-day life.
+- **Answers typed above the quoted form are read.** The parser used to read only the first `CLAIM FORM` block (here, the empty quoted one). Known-label lines in the new text are now read too and win over the block.
+- **Wrapped labels are rejoined.** Mail clients hard-wrap at ~76 characters, splitting `Claim type (… / maternity /` + `other): dental`; a line with an unclosed `(` is joined to the next. The claim-type hint lost its spaces so the line no longer wraps, and every rendered line is kept ≤ 76 characters (tested). Value continuation onto following lines is limited to prose fields (description, facility name/address) inside a form block — a wrapped label had been glued onto the policy number.
+- **Inline photos count as documents.** Gmail mobile embeds a photo inline (`multipart/related`); inline images ≥ 10 KB are kept (signature logos are a few KB — the photo was 29.8 KB).
+- **Gemini fallback** — `GEMINI_MODEL`/`GEMINI_FALLBACK_MODELS` added to `backend/api/.env` (same as the workers); the first extraction hit a 503 with no fallback.
+- `nameForEmail()` trims the stored name (a seeded policyholder name had a leading space, which also blanked the menu greeting).
+
+Verified live 2026-10-07 up to the filled-in form (all 16 answers and the inline photo read, AI extraction via the Gemini fallback model). Not yet verified live: `CONFIRM` → claim creation, reminders/expiry.

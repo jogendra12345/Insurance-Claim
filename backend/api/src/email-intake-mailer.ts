@@ -43,6 +43,9 @@ export async function sendIntakeEmail(message: OutboundEmail): Promise<void> {
   }
   await getTransporter().sendMail({
     from: `"ClaimFlow Claims" <${intakeAddress()}>`,
+    // In case Gmail rewrites From to the account's main address, replies
+    // still go to the claims address (shared-inbox mode only handles those).
+    replyTo: intakeAddress(),
     to: message.to,
     subject: message.subject,
     text: message.text,

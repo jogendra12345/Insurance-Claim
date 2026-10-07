@@ -175,10 +175,18 @@ WHATSAPP_WEBHOOK_VERIFY_TOKEN=
 EMAIL_INTAKE_ENABLED=
 EMAIL_INTAKE_IMAP_USER=
 EMAIL_INTAKE_IMAP_PASSWORD=
+# Optional — share a personal inbox: only mail to this plus-address is handled
+# (e.g. you+claims@gmail.com); everything else is left untouched and unread.
+EMAIL_INTAKE_ADDRESS=
+# Optional — last day intake runs (YYYY-MM-DD, inclusive); polling stops after it.
+EMAIL_INTAKE_UNTIL=
 # Optional — reads claim details from free text and attached bills; without
 # it email intake still works from the claim form alone. Same key as
-# backend/workers/.env.
+# backend/workers/.env. Copy GEMINI_MODEL / GEMINI_FALLBACK_MODELS from there
+# too, so a busy model (503) falls back instead of skipping extraction.
 GEMINI_API_KEY=
+GEMINI_MODEL=
+GEMINI_FALLBACK_MODELS=
 ```
 
 **Watch out:** if a previous `npm run dev` for this package is still holding
@@ -402,8 +410,14 @@ IMAP and replies over its SMTP.
    Then send `raise a claim`, fill in the form that comes back, attach a
    PDF/photo, reply, and reply `CONFIRM` to the summary.
 
-The inbox is read as unseen mail and marked seen, so start with an empty
-inbox — anything already unread there gets processed. Unknown senders get one
+**Sharing a personal inbox:** set `EMAIL_INTAKE_ADDRESS` to a plus-address of
+the account (e.g. `you+claims@gmail.com` — Gmail delivers it to the same
+inbox) and have claimants email that. Only mail sent to it is processed, marked
+read, or replied to; ordinary mail to the account is left exactly as it was.
+Without `EMAIL_INTAKE_ADDRESS`, **every unread email in the inbox is treated as
+claimant mail** — newsletters are ignored, but anything else gets a reply, and
+all of it is marked read — so only do that with an empty, dedicated inbox.
+`EMAIL_INTAKE_UNTIL` switches intake off after a given day, for demos. Unknown senders get one
 "not linked to a policy" reply per 24h; mail failing SPF/DKIM/DMARC is dropped
 without a reply. Every step is logged in `email_intake_events`
 (`SELECT action, detail FROM email_intake_events ORDER BY created_at DESC`).

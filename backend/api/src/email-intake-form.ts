@@ -90,7 +90,8 @@ export const FORM_FIELDS: FormField[] = [
   {
     key: "claimType",
     label: "Claim type",
-    hint: () => CLAIM_TYPES.join(" / "),
+    // No spaces, so the line stays under the ~76 characters mail clients wrap at.
+    hint: () => CLAIM_TYPES.join("/"),
     required: true,
     aiExtractable: true,
     parse: (t) => parseClaimTypeText(t),
@@ -332,25 +333,52 @@ function unquoteLine(line: string): string {
 
 const CONTINUATION_SKIP = /^\s*(→|->|\(.*\)\s*$)/;
 
+// Prose fields whose value may wrap onto following lines; a stray line after
+// any other field (a code, a date) is never glued onto it.
+const MULTILINE_FIELDS = new Set(["incidentDescription", "facilityName", "facilityAddress"]);
+
+const BLOCK_PATTERN = /-+\s*claim form\s*-+[\s\S]*?(-+\s*end of form\s*-+|$)/i;
+
+// Mail clients hard-wrap long lines (~76 chars), which can split a label
+// mid-hint: "Claim type (outpatient / … /" + "other): dental". A line that
+// leaves a "(" open is joined to the next one.
+function unwrapHints(lines: string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && (prev.match(/\(/g)?.length ?? 0) > (prev.match(/\)/g)?.length ?? 0)) {
+      out[out.length - 1] = `${prev.trimEnd()} ${line.trim()}`;
+    } else {
+      out.push(line);
+    }
+  }
+  return out;
+}
+
 /**
- * Reads "Label: value" lines. Inside the first CLAIM FORM block when there is
- * one (quote markers stripped, so a form left in the quoted part still
- * counts); otherwise any known-label line in the new, unquoted text. A value
- * wrapped onto following lines (long descriptions) is joined back up.
+ * Reads "Label: value" lines from the first CLAIM FORM block (quote markers
+ * stripped, so a form left in the quoted part still counts), then from any
+ * known-label lines in the new, unquoted text — which win, since claimants
+ * often type their answers above the quoted form without copying its markers.
  */
 export function parseFormLines(fullText: string, newText: string): ParsedForm {
-  const allLines = fullText.split(/\r?\n/).map(unquoteLine);
+  const allLines = unwrapHints(fullText.split(/\r?\n/).map(unquoteLine));
   const start = allLines.findIndex((l) => /^-+\s*claim form\s*-+$/i.test(l.trim()));
-  let lines: string[];
+  const values: Record<string, string> = {};
   let foundBlock = false;
   if (start !== -1) {
     const endOffset = allLines.slice(start + 1).findIndex((l) => /^-+\s*end of form\s*-+$/i.test(l.trim()));
-    lines = allLines.slice(start + 1, endOffset === -1 ? undefined : start + 1 + endOffset);
+    Object.assign(values, readLabelLines(allLines.slice(start + 1, endOffset === -1 ? undefined : start + 1 + endOffset), true));
     foundBlock = true;
-  } else {
-    lines = newText.split(/\r?\n/);
   }
+  const typed = unwrapHints(newText.replace(BLOCK_PATTERN, "").split(/\r?\n/));
+  Object.assign(values, readLabelLines(typed, false));
+  return { values, foundBlock };
+}
 
+// Wrapped-value joining only inside a form block — in free text, the next
+// line is just more prose ("Thanks", a signature).
+function readLabelLines(lines: string[], inBlock: boolean): Record<string, string> {
   const values: Record<string, string> = {};
   let current: string | null = null;
   for (const raw of lines) {
@@ -364,17 +392,14 @@ export function parseFormLines(fullText: string, newText: string): ParsedForm {
       else delete values[field.key];
       continue;
     }
-    // Continuation of the previous field's value, inside a form block only —
-    // in free text, a following line is just more prose.
-    if (foundBlock && current && line && !CONTINUATION_SKIP.test(line)) {
+    if (!line || CONTINUATION_SKIP.test(line)) continue; // blank/hint/arrow lines add nothing
+    if (inBlock && current && MULTILINE_FIELDS.has(current)) {
       values[current] = values[current] ? `${values[current]} ${line}` : line;
-    } else if (!line || CONTINUATION_SKIP.test(line)) {
-      // a hint/arrow/blank line ends nothing but adds nothing
     } else {
       current = null;
     }
   }
-  return { values, foundBlock };
+  return values;
 }
 
 function sameValue(a: string, b: string): boolean {

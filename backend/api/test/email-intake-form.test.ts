@@ -32,7 +32,7 @@ describe("renderForm", () => {
     expect(lines[lines.length - 1]).toBe(FORM_END);
     expect(form).toContain("Policy number (yours: POL-1234, POL-5678):");
     expect(form).toContain("Your full name: Sara Khan");
-    expect(form).toContain("Claim type (outpatient / inpatient / pharmacy / dental / maternity / other):");
+    expect(form).toContain("Claim type (outpatient/inpatient/pharmacy/dental/maternity/other):");
     expect(form).not.toContain("⚠");
   });
 
@@ -76,6 +76,37 @@ describe("parseFormLines", () => {
     const full = `Filled in below\n\nOn Tue, 7 Oct 2026 at 10:00, ClaimFlow Claims <claims@x.com> wrote:\n${quoted}`;
     const parsed = parseFormLines(full, stripQuoted(full));
     expect(parsed.values.providerNpi).toBe("1234567890");
+  });
+
+  it("reads answers typed above the quoted form, including a label Gmail wrapped (first live reply, 2026-10-07)", () => {
+    const typed = [
+      "Policy number (yours: POL-100013): POL-100013",
+      "Claim type (outpatient / inpatient / pharmacy / dental / maternity /",
+      "other): dental",
+      "Incident date (e.g. 03/10/2026, 3 Oct 2026, today): 4 oct 2026",
+      "What happened: Car Accident",
+      "Provider NPI (10 digits):1234567890",
+      "Total billed (USD, the provider's full bill):",
+    ].join("\n");
+    const quoted = renderForm(empty(), { policies: ["POL-100013"] }, false)
+      .split("\n")
+      .map((l) => `> ${l}`)
+      .join("\n");
+    const full = `${typed}\n\n\nOn Wed, 7 Oct 2026, 16:56 ClaimFlow Claims, <claims@x.com> wrote:\n\n${quoted}`;
+    const parsed = parseFormLines(full, stripQuoted(full));
+    expect(parsed.values).toMatchObject({
+      policyNumber: "POL-100013",
+      claimType: "dental",
+      incidentDate: "4 oct 2026",
+      incidentDescription: "Car Accident",
+      providerNpi: "1234567890",
+    });
+    expect(parsed.values.totalBilledAmount).toBeUndefined();
+  });
+
+  it("keeps every rendered form line under the 76-character wrap", () => {
+    const state = empty();
+    for (const line of renderForm(state, ctx, true).split("\n")) expect(line.length).toBeLessThanOrEqual(76);
   });
 
   it("without a form block, reads known-label lines from free text", () => {

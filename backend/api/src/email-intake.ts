@@ -161,6 +161,12 @@ async function logEvent(
   );
 }
 
+/** Whether this Message-ID has been handled — lets the poller skip it before downloading. */
+export async function alreadyProcessed(messageId: string): Promise<boolean> {
+  const { rowCount } = await pool.query(`SELECT 1 FROM email_processed_messages WHERE message_id = $1`, [messageId]);
+  return (rowCount ?? 0) > 0;
+}
+
 // False if this Message-ID was already handled (IMAP re-fetch).
 async function markProcessed(messageId: string): Promise<boolean> {
   const { rowCount } = await pool.query(
@@ -704,7 +710,8 @@ export async function processInboundEmail(email: InboundEmail): Promise<void> {
   const ref = { messageId: email.messageId };
 
   // Our own mail, bounces, auto-replies and lists never get a reply (no loops).
-  if (sender === intakeAddress() || email.automated || AUTOMATED_LOCAL_PART.test(sender.split("@")[0])) {
+  const ownAddresses = [intakeAddress(), (process.env.EMAIL_INTAKE_IMAP_USER ?? "").toLowerCase()];
+  if (ownAddresses.includes(sender) || email.automated || AUTOMATED_LOCAL_PART.test(sender.split("@")[0])) {
     await logEvent(sender, "dropped-automated", undefined, ref);
     return;
   }

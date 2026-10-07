@@ -137,7 +137,7 @@ describe("raise a claim via the form", () => {
   it("reads the returned form, keeps good answers and flags the bad NPI", async () => {
     const form = outbox[outbox.length - 1].text;
     const filled = form
-      .replace("Claim type (outpatient / inpatient / pharmacy / dental / maternity / other):", "Claim type (outpatient / inpatient / pharmacy / dental / maternity / other): outpatient")
+      .replace("Claim type (outpatient/inpatient/pharmacy/dental/maternity/other):", "Claim type (outpatient/inpatient/pharmacy/dental/maternity/other): outpatient")
       .replace("Incident date (e.g. 03/10/2026, 3 Oct 2026, today):", "Incident date (e.g. 03/10/2026, 3 Oct 2026, today): 03/10/2026")
       .replace("What happened:", "What happened: ER visit for a chest infection")
       .replace("Claim amount (USD):", "Claim amount (USD): 1200")
@@ -330,6 +330,34 @@ describe("IMAP message → InboundEmail", () => {
 
     const ooo = toInboundEmail(await simpleParser(Buffer.from("From: a@b.com\r\nAuto-Submitted: auto-replied\r\nSubject: Out of office\r\n\r\nAway")));
     expect(ooo.automated).toBe(true);
+  });
+});
+
+describe("shared inbox and end date", () => {
+  it("only claims mail sent to the +claims address", async () => {
+    const { simpleParser } = await import("mailparser");
+    const { isAddressedTo } = await import("../src/email-intake-poller");
+    const mail = (headers: string) => simpleParser(Buffer.from(`${headers}\r\nFrom: a@b.com\r\nSubject: x\r\n\r\nbody`));
+    const claims = "me+claims@gmail.com";
+    expect(isAddressedTo(await mail("To: Me <Me+Claims@gmail.com>"), claims)).toBe(true);
+    expect(isAddressedTo(await mail("To: other@x.com\r\nCc: me+claims@gmail.com"), claims)).toBe(true);
+    expect(isAddressedTo(await mail("Delivered-To: me+claims@gmail.com\r\nTo: undisclosed-recipients:;"), claims)).toBe(true);
+    expect(isAddressedTo(await mail("Delivered-To: me@gmail.com\r\nTo: me@gmail.com"), claims)).toBe(false);
+  });
+
+  it("stops after EMAIL_INTAKE_UNTIL, inclusive of that day", async () => {
+    const { intakeEndPassed } = await import("../src/email-intake-poller");
+    const saved = process.env.EMAIL_INTAKE_UNTIL;
+    try {
+      delete process.env.EMAIL_INTAKE_UNTIL;
+      expect(intakeEndPassed(new Date(2030, 0, 1))).toBe(false);
+      process.env.EMAIL_INTAKE_UNTIL = "2026-10-21";
+      expect(intakeEndPassed(new Date(2026, 9, 21, 23, 0))).toBe(false);
+      expect(intakeEndPassed(new Date(2026, 9, 22, 0, 1))).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.EMAIL_INTAKE_UNTIL;
+      else process.env.EMAIL_INTAKE_UNTIL = saved;
+    }
   });
 });
 
