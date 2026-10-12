@@ -14,7 +14,7 @@
 
 ## Purpose
 
-Give a claimant (and, in practice today, whoever's operating the portal — see the Policies tab below) a working home for the whole claims/policies lifecycle in `frontend/portal/` (`SPEC.md` §6–§7): see all claims at a glance with headline numbers, drill into any one of them, submit a new one, and manage the policies claims are filed against. This spans `BUILD-PLAN.md` feature #1 ("Claim submission form"), the claimant-facing half of feature #18 ("Status tracking & monitoring"), and policy management — which wasn't a named `BUILD-PLAN.md` feature but is a direct prerequisite for `validate-claim` (feature #5) having real policies to check against.
+Give a claimant (and, in practice today, whoever's operating the portal — see the Policies tab below) a working home for the whole claims/policies lifecycle in `frontend/portal/` (`SPEC.md` §6–§7): see all claims at a glance with headline numbers, drill into any one of them, submit a new one, and manage the policies claims are filed against. This spans `resources/BUILD-PLAN.md` feature #1 ("Claim submission form"), the claimant-facing half of feature #18 ("Status tracking & monitoring"), and policy management — which wasn't a named `resources/BUILD-PLAN.md` feature but is a direct prerequisite for `validate-claim` (feature #5) having real policies to check against.
 
 ## Scope
 
@@ -79,7 +79,7 @@ Fields, per `SPEC.md` §9's `claims` columns that a claimant actually supplies (
 
 **Structure.** A 4-step wizard with a stepper header (Policy → About the incident → Documents → Review), not one long scroll of fields — each step validates before advancing, and the final step shows a read-only summary of every entered value before submit. This replaces the original single-screen field-list design; the field set and validation rules themselves are unchanged, only how they're paced.
 
-**Validation.** Required-field checks client-side per step before advancing, mirroring (not replacing) the server-side `validate-claim` worker's checks (`BUILD-PLAN.md` feature #5) — this is a UX nicety so a claimant doesn't get to the end and find out a field was missing; the server remains the source of truth.
+**Validation.** Required-field checks client-side per step before advancing, mirroring (not replacing) the server-side `validate-claim` worker's checks (`resources/BUILD-PLAN.md` feature #5) — this is a UX nicety so a claimant doesn't get to the end and find out a field was missing; the server remains the source of truth.
 
 **Submit behavior.** On the Review step's submit: disable the button, show a submitting state, call `POST /api/claims`. On success, show a clear confirmation (claim reference id) and a button back to `/`, which now shows every claim by default — no query-param handoff needed. On failure, show what went wrong in plain language and leave the form filled in — never clear a claimant's typed data on error.
 

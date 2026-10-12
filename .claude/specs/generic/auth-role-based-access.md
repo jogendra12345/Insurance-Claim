@@ -7,13 +7,13 @@
 > Locked 2026-09-04. Open Questions 1–4 are resolved below (folded into Design); Open Question 5 (Camunda `assignee` passthrough) stays open as a non-blocking follow-up since it doesn't affect access control either way.
 >
 > - **Session storage (was Q1):** signed cookie, not a Postgres `sessions` table — simplest option for an internal test app (`[[project_demo_app_no_real_payments]]`); no revocation requirement was raised to justify the extra table. If logout-everywhere/forced-revocation becomes a real need later, revisit with a `token_version` column on `users`.
-> - **Staff account provisioning (was Q2):** admin user-management UI is **cut from this spec's build scope**. The handful of staff test accounts needed to unblock `ROADMAP.md` Step 6 are seeded directly (SQL or the `[[seed-data]]` skill) — faster than building a UI for a one-time need. "In scope" below is amended accordingly; a self-service admin page is deferred to a future spec if staff turnover ever makes seeding impractical.
+> - **Staff account provisioning (was Q2):** admin user-management UI is **cut from this spec's build scope**. The handful of staff test accounts needed to unblock `resources/ROADMAP.md` Step 6 are seeded directly (SQL or the `[[seed-data]]` skill) — faster than building a UI for a one-time need. "In scope" below is amended accordingly; a self-service admin page is deferred to a future spec if staff turnover ever makes seeding impractical.
 > - **Password hashing (was Q3):** bcrypt (via `bcryptjs` or equivalent), matching `backend/api`'s existing Node/TS stack with no new native-binary dependency.
 > - **Staff read-scope (was Q4):** confirmed as designed — no role restriction on `GET /api/claims` beyond claimant-scoping; every staff role sees all claims, same as `admin`. Revisit only if a concrete need for role-scoped visibility (not just task-action scoping) comes up.
 
 ## Purpose
 
-Give ClaimFlow AI real authentication and role-based access control, replacing today's fully open API (`GET /api/claims`/`/api/policies` return every row to anyone) and the fact that every Camunda Tasklist action is performed as the single `demo` basic-auth user regardless of which BPMN candidate group a task is actually restricted to. This is `BUILD-PLAN.md` Phase 2 item #21, already scoped at a high level in `SPEC.md` §14 ("Auth + role-based access for the frontend portal, plus a custom in-app task page") as **Option B** — this spec fleshes that paragraph out into a buildable design. It directly unblocks `ROADMAP.md` Step 6 (human review with real distinct users per candidate group) by sidestepping rather than resolving the "Open decision before Step 6" — no Identity/Keycloak, no Camunda SaaS migration. It's also a hard dependency for the `moreInfo` resubmit endpoint (§14) and the audit view (§14, `BUILD-PLAN.md` #33), both of which need to know who's asking before trusting a request scoped to one claim.
+Give ClaimFlow AI real authentication and role-based access control, replacing today's fully open API (`GET /api/claims`/`/api/policies` return every row to anyone) and the fact that every Camunda Tasklist action is performed as the single `demo` basic-auth user regardless of which BPMN candidate group a task is actually restricted to. This is `resources/BUILD-PLAN.md` Phase 2 item #21, already scoped at a high level in `SPEC.md` §14 ("Auth + role-based access for the frontend portal, plus a custom in-app task page") as **Option B** — this spec fleshes that paragraph out into a buildable design. It directly unblocks `resources/ROADMAP.md` Step 6 (human review with real distinct users per candidate group) by sidestepping rather than resolving the "Open decision before Step 6" — no Identity/Keycloak, no Camunda SaaS migration. It's also a hard dependency for the `moreInfo` resubmit endpoint (§14) and the audit view (§14, `resources/BUILD-PLAN.md` #33), both of which need to know who's asking before trusting a request scoped to one claim.
 
 ## Scope
 
@@ -30,7 +30,7 @@ Give ClaimFlow AI real authentication and role-based access control, replacing t
 - Per-carrier tenant isolation (auth scoping by `carrier_id`) — a separate §14 item; this spec's role scoping is orthogonal to carrier scoping and doesn't block it, but doesn't implement it either.
 - The `moreInfo` resubmit endpoint itself (`POST /api/claims/:id/resubmit`) — this spec only unblocks it by existing; the endpoint is specced separately in `SPEC.md` §14's `moreInfo` item.
 - The audit view page/endpoint — same relationship: unblocked, not built here.
-- Switching to Camunda-native Identity/Keycloak (`docker-compose-full.yaml`) or Camunda SaaS — explicitly the alternative this spec avoids (Option B over Options 1/2 in `ROADMAP.md`).
+- Switching to Camunda-native Identity/Keycloak (`docker-compose-full.yaml`) or Camunda SaaS — explicitly the alternative this spec avoids (Option B over Options 1/2 in `resources/ROADMAP.md`).
 - Password reset / email-ownership verification (confirmation code) / DOB-or-zip identity checks — v1 signup only proves policy-holder status via policy number + email match (see "Claimant signup verification" in Design), not inbox ownership; see Open Questions.
 - OAuth/SSO providers (Google, Microsoft, etc.) — internal test app, not a product requiring third-party login.
 - Per-request Camunda `assignee` passthrough of the real app-user's identity — flagged as an open question in `SPEC.md` §14 (whether the lightweight Camunda stack accepts an arbitrary `assignee` string); noted here as a nice-to-have, not required for access control since the app's own auth is the enforcement boundary, not Camunda's.
@@ -123,5 +123,5 @@ Minimal: a `/login` page and a `/signup` page (claimant self-registration only) 
 ## Follow-up dependencies
 
 - `moreInfo` resubmit endpoint (`SPEC.md` §14) — explicitly depends on this spec landing first.
-- Audit view (`SPEC.md` §14, `BUILD-PLAN.md` #33) — explicitly depends on this spec landing first.
-- `ROADMAP.md` Step 6 (human review with real distinct users) — this spec is the chosen mechanism (Option B) to unblock it without touching Camunda's own identity setup.
+- Audit view (`SPEC.md` §14, `resources/BUILD-PLAN.md` #33) — explicitly depends on this spec landing first.
+- `resources/ROADMAP.md` Step 6 (human review with real distinct users) — this spec is the chosen mechanism (Option B) to unblock it without touching Camunda's own identity setup.

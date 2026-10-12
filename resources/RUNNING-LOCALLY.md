@@ -23,6 +23,20 @@ Start-Process "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe"
 On such installs `docker-compose` is usually already on PATH (check with
 `docker-compose --version`), so the PATH workaround below isn't needed.
 
+**Give Docker's VM at least 8 GB.** Docker Desktop runs in a WSL2 VM whose
+size is capped by `%USERPROFILE%\.wslconfig` (`[wsl2]` → `memory=`). At 4 GB
+the VM filled up on 2026-10-07 and the kernel killed Camunda (exit 137), which
+then took the API — and the whole portal — down with it. Set:
+
+```ini
+[wsl2]
+memory=8GB
+swap=4GB
+```
+
+then `wsl --shutdown` (stops Docker) and start Docker Desktop again. Check
+with `docker info --format "{{.MemTotal}}"` (should read ~8 GB).
+
 **Note:** on some machines the `docker compose` plugin subcommand isn't wired
 up (`docker: unknown command: docker compose`). Use the standalone
 `docker-compose` binary instead for every command on this page:
@@ -280,6 +294,15 @@ orchestration` prints nothing; `localhost:8080` doesn't answer). Fix:
 data is kept). While Camunda was unreachable, the portal's Tasks page used to
 crash the whole API (policies/claims stopped loading too); `backend/api/src/
 index.ts` now survives that specific Camunda-client error.
+
+**Watch out (2026-10-08):** the same `port is already allocated` error, but
+`down`/`up` doesn't fix it — another project's Camunda is holding the ports.
+`docker ps` shows `zeebe` / `tasklist` / `elasticsearch` containers (the
+Treasury Reconciliation project's stack) publishing `9600` and `26500`. Stop
+them with `docker stop zeebe tasklist elasticsearch` (containers and data are
+kept), then `docker-compose down && docker-compose up -d` here. Don't start
+the API/workers while they're up — both would talk to that project's Zeebe
+on `26500`.
 
 Deploy the process, DMN, and forms after any change to
 `process/claim-case-process.bpmn`, `process/health-claim-routing.dmn`, or

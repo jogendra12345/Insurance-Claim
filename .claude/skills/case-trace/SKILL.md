@@ -15,7 +15,7 @@ Reconstructs the full case history for one claim by merging two sources: the dur
 3. Fetch its full `audit_log` history: `SELECT * FROM audit_log WHERE claim_id = '<claim-id>' ORDER BY created_at` — this is the SPEC.md-mandated business-level trail (§13).
 4. Fetch Camunda's process instance history for that `process_instance_key`:
    - First, check for a connected MCP tool that exposes Camunda/Zeebe/Operate process instance data (search for one via tool search if unsure what's available this session) and use it if present.
-   - If no such MCP tool is connected, fall back to Camunda's REST API v2 directly, per `PREREQUISITES.md`/`CLAUDE.md`: `http://localhost:8080/v2`, basic auth `demo`/`demo` (the lightweight config's only user). Query the process instance by `process_instance_key` and its flow node / job / user-task history.
+   - If no such MCP tool is connected, fall back to Camunda's REST API v2 directly, per `resources/PREREQUISITES.md`/`CLAUDE.md`: `http://localhost:8080/v2`, basic auth `demo`/`demo` (the lightweight config's only user). Query the process instance by `process_instance_key` and its flow node / job / user-task history.
    - If neither is reachable (Camunda stack not running), say so explicitly and stop rather than presenting a partial or fabricated timeline.
 5. Merge both event lists into one chronological timeline by timestamp.
 

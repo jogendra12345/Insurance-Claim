@@ -150,7 +150,7 @@ export async function deletePolicy(policyId: string): Promise<void> {
   }
 }
 
-// POST /api/claims — SPEC.md §5/§7 (BUILD-PLAN.md feature #3).
+// POST /api/claims — SPEC.md §5/§7 (resources/BUILD-PLAN.md feature #3).
 // carrierId/insuranceType are intentionally omitted here: per the locked UI spec
 // they're hidden/derived fields, resolved server-side from policyNumber, not
 // claimant-entered.

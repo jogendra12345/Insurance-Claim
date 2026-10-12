@@ -1,5 +1,5 @@
 // Per-tab bearer-token sessions — .claude/specs/generic/auth-role-based-access.md,
-// addendum 2026-10-05. Runs against the local Postgres (RUNNING-LOCALLY.md §2-3)
+// addendum 2026-10-05. Runs against the local Postgres (resources/RUNNING-LOCALLY.md §2-3)
 // with throwaway users created and deleted here; no email is sent (the reset
 // test writes the one-time code's hash straight to the DB).
 import { randomUUID } from "node:crypto";

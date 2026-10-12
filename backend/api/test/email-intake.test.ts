@@ -1,6 +1,6 @@
 // Email claim intake end to end through processInboundEmail() —
 // .claude/specs/generic/email-claim-intake.md. Runs against the local
-// Postgres (RUNNING-LOCALLY.md §2-3) with a throwaway policy; outbound mail,
+// Postgres (resources/RUNNING-LOCALLY.md §2-3) with a throwaway policy; outbound mail,
 // the AI and MinIO are swapped for in-memory fakes, and Zeebe is stubbed so
 // createClaim() doesn't need Camunda running.
 import { randomUUID } from "node:crypto";

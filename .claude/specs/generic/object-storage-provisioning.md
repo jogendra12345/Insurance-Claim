@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Stand up local MinIO (S3-compatible object storage) as specified in `SPEC.md` §6 ("Document storage: S3-compatible object storage (local MinIO for dev)"), and switch `backend/api`'s claim-document upload path onto it. This is `BUILD-PLAN.md` feature #2, a prerequisite finding raised against feature #3 ("Claim storage"): feature #3 was already built, but against local disk as a stand-in since MinIO wasn't provisioned yet — that gap is flagged explicitly in `backend/api/src/routes/claims.ts`'s upload comment and in `BUILD-PLAN.md`'s analysis point #7. This spec is what closes it.
+Stand up local MinIO (S3-compatible object storage) as specified in `SPEC.md` §6 ("Document storage: S3-compatible object storage (local MinIO for dev)"), and switch `backend/api`'s claim-document upload path onto it. This is `resources/BUILD-PLAN.md` feature #2, a prerequisite finding raised against feature #3 ("Claim storage"): feature #3 was already built, but against local disk as a stand-in since MinIO wasn't provisioned yet — that gap is flagged explicitly in `backend/api/src/routes/claims.ts`'s upload comment and in `resources/BUILD-PLAN.md`'s analysis point #7. This spec is what closes it.
 
 ## Scope
 
@@ -16,7 +16,7 @@ Stand up local MinIO (S3-compatible object storage) as specified in `SPEC.md` §
 - A `minio` service added to the root `docker-compose.yaml`, alongside the existing `postgres` service — separate containers, one compose file, matching how `claimflow-postgres` is already configured (`.env`-driven credentials, named volume, healthcheck).
 - Bucket creation for claim documents (name TBD — see Design), created automatically rather than requiring a manual console step.
 - Changing `backend/api/src/routes/claims.ts`'s document upload from `multer.diskStorage` (local `backend/api/uploads/`) to uploading into the new MinIO bucket, and changing `claim_documents.file_url` to point at MinIO instead of `/uploads/<filename>`.
-- `.env.example` (root) and `PREREQUISITES.md` updates for the new service, matching the pattern already used for Postgres.
+- `.env.example` (root) and `resources/PREREQUISITES.md` updates for the new service, matching the pattern already used for Postgres.
 
 **Out of scope (for this spec):**
 - Migrating already-uploaded local-disk test files (`backend/api/uploads/*`) into MinIO — that's throwaway dev data, not worth a migration path.
@@ -55,6 +55,6 @@ The bucket is set public-read at creation (part of the same startup check that c
 ### Docs to update
 
 - `.env.example` (root): add `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_PORT`, `MINIO_CONSOLE_PORT`.
-- `PREREQUISITES.md`: add MinIO to the tools table (mirroring the Postgres row and its "Running the local app Postgres" usage section — this needs an equivalent "Running local object storage" section with `docker compose up -d` / console URL / login).
+- `resources/PREREQUISITES.md`: add MinIO to the tools table (mirroring the Postgres row and its "Running the local app Postgres" usage section — this needs an equivalent "Running local object storage" section with `docker compose up -d` / console URL / login).
 - `backend/api/.env.example`: add whatever `backend/api` itself needs to reach MinIO (endpoint, bucket name, credentials) — same duplication pattern already used for `DATABASE_URL` there.
 

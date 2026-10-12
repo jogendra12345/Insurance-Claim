@@ -1,7 +1,7 @@
 // WhatsApp Cloud API send wrapper, per the locked
 // .claude/specs/generic/claims-assistant.md. Mirrors backend/shared/
 // notification-provider.ts's mock-fallback pattern: no Meta Business Account
-// exists yet (PREREQUISITES.md "still needed"), so every send logs instead
+// exists yet (resources/PREREQUISITES.md "still needed"), so every send logs instead
 // of calling the Graph API until WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID
 // are set — keeps routes/whatsapp.ts testable today against direct HTTP
 // POSTs shaped like Meta's webhook payload, without failing on a missing

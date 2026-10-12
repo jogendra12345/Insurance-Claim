@@ -26,7 +26,7 @@ const JOB_TYPE = "notify-claimant";
 // mock (console.log): Gmail delivers to any claimant address today (relays
 // through a real mailbox via an App Password), whereas Resend's free-tier
 // sandbox only delivers to the account's own signup address until a domain
-// is verified (see PREREQUISITES.md). Falls back to the mock when neither
+// is verified (see resources/PREREQUISITES.md). Falls back to the mock when neither
 // is configured, so a dev machine without either still runs instead of
 // failing every claim into an Operate incident.
 const provider = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD

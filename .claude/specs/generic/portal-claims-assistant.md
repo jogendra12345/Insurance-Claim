@@ -8,7 +8,7 @@
 
 Phase 2 of [`generic/claims-assistant`](claims-assistant.md): a chat assistant **inside the Next.js portal** for a logged-in claimant, offering the same three intents the WhatsApp bot offers today — *Check claim status*, *Check policy status*, *Raise a claim*.
 
-Where this came from: `SPEC.md` §14 gained a "Chatbot integration" backlog item on 2026-09-15 ("an automated conversational assistant for claim filing … likely feeding into the same submission path as the portal form"). The next day, `claims-assistant.md` split the idea into two phases and built Phase 1 (WhatsApp) with a channel-agnostic intent layer "so Phase 2 only needs a new *adapter*, not new intent logic", while explicitly leaving Phase 2 unscheduled (its Decision 5: "no commitment on when the portal chatbot gets built, or whether it reuses WhatsApp's exact 3-intent menu or grows its own"). It is not in `ROADMAP.md` or `BUILD-PLAN.md`.
+Where this came from: `SPEC.md` §14 gained a "Chatbot integration" backlog item on 2026-09-15 ("an automated conversational assistant for claim filing … likely feeding into the same submission path as the portal form"). The next day, `claims-assistant.md` split the idea into two phases and built Phase 1 (WhatsApp) with a channel-agnostic intent layer "so Phase 2 only needs a new *adapter*, not new intent logic", while explicitly leaving Phase 2 unscheduled (its Decision 5: "no commitment on when the portal chatbot gets built, or whether it reuses WhatsApp's exact 3-intent menu or grows its own"). It is not in `resources/ROADMAP.md` or `resources/BUILD-PLAN.md`.
 
 Why build it at all when the portal already has claim and policy pages and a claim form: the form asks for ICD-10, CPT/HCPCS and NPI codes up front and is the hardest part of the portal for a claimant to get through; a guided conversation can break that into smaller steps and explain each one. For status, a chat is a faster "where is my claim?" than navigating to the right page. Whether that justifies a second intake path is itself part of Open Question 1.
 
@@ -105,4 +105,4 @@ The portal-matching status labels and 3-stage progress, the "what happens next" 
 - ~~**Resolves `claims-assistant.md` Decision 5**~~ — done at Lock: that line now points here.
 - **Shared-layer identity refactor** touches WhatsApp code paths; the WhatsApp intents need a regression check (menu, claim status, policy status, raise a claim) after it.
 - **`generic/dynamic-form-builder` (Draft)**: if admin-defined claim forms land, the chat's claim intake should read the same field definitions rather than hardcoding `ClaimForm`'s order.
-- ~~**`SPEC.md` §14 "Chatbot integration"**~~ — linked here, and `BUILD-PLAN.md` Phase 2 row #36 added, at Lock.
+- ~~**`SPEC.md` §14 "Chatbot integration"**~~ — linked here, and `resources/BUILD-PLAN.md` Phase 2 row #36 added, at Lock.

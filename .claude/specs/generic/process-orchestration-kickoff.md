@@ -7,8 +7,8 @@
 ## Purpose
 
 Make claim submission actually start a Camunda process instance. This is
-`BUILD-PLAN.md` feature #4 ("Process orchestration kickoff", 21-Aug) and
-`ROADMAP.md` step 2 combined — the roadmap step (authoring/deploying the
+`resources/BUILD-PLAN.md` feature #4 ("Process orchestration kickoff", 21-Aug) and
+`resources/ROADMAP.md` step 2 combined — the roadmap step (authoring/deploying the
 process) has to happen first since the API-side kickoff has nothing to start
 without it.
 
@@ -40,7 +40,7 @@ row.
   `backend/workers/` stays empty. A started instance is expected to sit
   waiting at the first service task with no worker to pick it up; that's
   the correct, verified state for this feature, not a bug to fix here.
-- Tasklist candidate-group configuration (`ROADMAP.md` step 6, still
+- Tasklist candidate-group configuration (`resources/ROADMAP.md` step 6, still
   blocked on the Identity/Keycloak decision noted there).
 - Real business logic in the DMN table beyond matching `SPEC.md` §11's
   documented rule set — no per-carrier tuning.
@@ -119,7 +119,7 @@ confirming both resources show up as deployed.
 - New `backend/api/src/zeebe.ts` (mirroring the existing `storage.ts`
   pattern): constructs one shared `ZBClient` (or whatever the current SDK's
   client class is named) pointed at `ZEEBE_ADDRESS`, no-auth per the
-  lightweight stack's unprotected API (confirmed: `camunda-docker/README.md`
+  lightweight stack's unprotected API (confirmed: `resources/CAMUNDA-DOCKER.md`
   line 48 — the lightweight `docker-compose.yaml` runs with no
   Identity/Keycloak, so the Zeebe client needs no credentials).
 - `backend/api/.env.example` and `.env`: add `ZEEBE_ADDRESS=localhost:26500`.

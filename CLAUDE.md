@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repo is pre-implementation. Only the spec, roadmap, prerequisites, and a local Camunda 8 runtime exist so far — `backend/`, `frontend/`, and `process/` (referenced throughout `SPEC.md`) have not been created yet. Before writing app code, read `SPEC.md` in full — it is the source of truth for the data model, BPMN process flow, DMN routing table, and job worker contracts. Update `SPEC.md` first when scope changes, then implement. Check off completed steps in `ROADMAP.md` as you build (it defines the build order: DB → Camunda process → backend API → job workers → frontend → human review config → e2e test).
+This repo is pre-implementation. Only the spec, roadmap, prerequisites, and a local Camunda 8 runtime exist so far — `backend/`, `frontend/`, and `process/` (referenced throughout `SPEC.md`) have not been created yet. Before writing app code, read `SPEC.md` in full — it is the source of truth for the data model, BPMN process flow, DMN routing table, and job worker contracts. Update `SPEC.md` first when scope changes, then implement. Check off completed steps in `resources/ROADMAP.md` as you build (it defines the build order: DB → Camunda process → backend API → job workers → frontend → human review config → e2e test).
 
 ## What this project is
 
@@ -38,7 +38,7 @@ Planned repo layout (SPEC.md §6):
 
 Key architectural rules to preserve when implementing:
 - `carrier_id` is a first-class field on every claim from v1 (multi-carrier/TPA support), even though tenant isolation/enforcement is future work.
-- `SettlementProvider` is a swappable interface with a mock implementation only — do not wire a real payment integration in v1. `NotificationProvider` is the exception: it has a real implementation (Resend, `backend/shared/notification-provider.ts`) per explicit product direction (2026-08-31) — `notify-claimant` uses it whenever `RESEND_API_KEY` is set, falling back to the mock otherwise. See PREREQUISITES.md and SPEC.md §12.
+- `SettlementProvider` is a swappable interface with a mock implementation only — do not wire a real payment integration in v1. `NotificationProvider` is the exception: it has a real implementation (Resend, `backend/shared/notification-provider.ts`) per explicit product direction (2026-08-31) — `notify-claimant` uses it whenever `RESEND_API_KEY` is set, falling back to the mock otherwise. See resources/PREREQUISITES.md and SPEC.md §12.
 - Unhandled worker exceptions rely on Zeebe's built-in retry (3 attempts) then fail into an Operate incident — no custom BPMN error boundaries in v1.
 - Every job worker and every user-task completion must write at least one `audit_log` row (`actor_type`: `system`/`ai`/`human`).
 - Role-based review uses stock Camunda Tasklist with candidate groups (`triage-team`, `adjusters`, `investigators`, `legal-reviewers`, `supervisors`) — no custom review UI in v1.
@@ -61,9 +61,9 @@ docker compose down -v    # stop and wipe data
 - Zeebe gRPC gateway: `localhost:26500`
 - Login: `demo` / `demo`
 
-The lightweight config has **no Identity/Keycloak** — just the single `demo` basic-auth user, so there is no real multi-user group membership yet. This blocks meaningfully testing Tasklist candidate-group routing (adjusters vs. investigators vs. legal). See the "Open decision before Step 6" note in `ROADMAP.md`: either switch to `docker-compose-full.yaml` for real users/groups before building human review, or accept `demo` claiming any task and defer.
+The lightweight config has **no Identity/Keycloak** — just the single `demo` basic-auth user, so there is no real multi-user group membership yet. This blocks meaningfully testing Tasklist candidate-group routing (adjusters vs. investigators vs. legal). See the "Open decision before Step 6" note in `resources/ROADMAP.md`: either switch to `docker-compose-full.yaml` for real users/groups before building human review, or accept `demo` claiming any task and defer.
 
-Switching secondary storage or enabling multi-tenancy: see `camunda-docker/README.md` (sets `ORCHESTRATION_CONFIG_FILE` in `.env`, or adds a `docker-compose.override.yaml` for multi-tenancy).
+Switching secondary storage or enabling multi-tenancy: see `resources/CAMUNDA-DOCKER.md` (sets `ORCHESTRATION_CONFIG_FILE` in `.env`, or adds a `docker-compose.override.yaml` for multi-tenancy).
 
 ### Compose e2e tests
 
@@ -86,6 +86,6 @@ Run a single test file: `npx playwright test <file>.spec.ts` (from inside the re
 ## Documents to keep in sync
 
 - `SPEC.md` — source of truth for scope, data model, BPMN/DMN design, worker contracts. Update before implementing a scope change.
-- `ROADMAP.md` — build order checklist; check items off as completed.
-- `PREREQUISITES.md` — installed tooling and versions, and what's still undecided (backend language, Claude API key, notification/payment provider credentials, Postgres). Update when a "still needed" item gets decided.
+- `resources/ROADMAP.md` — build order checklist; check items off as completed.
+- `resources/PREREQUISITES.md` — installed tooling and versions, and what's still undecided (backend language, Claude API key, notification/payment provider credentials, Postgres). Update when a "still needed" item gets decided.
 - `claim-lifecycle.html` — reference material on claims-industry lifecycle/process context (large static file; read selectively).

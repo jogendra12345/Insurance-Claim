@@ -2,7 +2,7 @@
 
 **Status:** Locked
 
-> Note: this spec covers the initial database setup as a whole (Roadmap step 1: `claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) rather than a single table, since that's what "database setup" refers to in `ROADMAP.md`. Each table is broken out below in the same Purpose / Columns / Constraints / Relationships / Indexes shape used for a single-table db spec, per `SPEC.md` §9.
+> Note: this spec covers the initial database setup as a whole (Roadmap step 1: `claims`, `claim_documents`, `claim_fraud_indicators`, `audit_log`) rather than a single table, since that's what "database setup" refers to in `resources/ROADMAP.md`. Each table is broken out below in the same Purpose / Columns / Constraints / Relationships / Indexes shape used for a single-table db spec, per `SPEC.md` §9.
 >
 > Updated 2026-08-19 to match `SPEC.md`'s insurance-type extensibility rewrite (§3): `claims` gained `insurance_type`, and the `claim_type`/`document_type` enumerations below are health-specific. Amended in place rather than as a follow-on migration, since nothing had been applied to a live database yet.
 >

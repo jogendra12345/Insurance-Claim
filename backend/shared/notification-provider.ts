@@ -154,7 +154,7 @@ export const resendNotificationProvider: NotificationProvider = {
 // itself. Lower sending limits than a dedicated email API (~500/day) and
 // mail arrives "from" a personal Gmail address, but unblocks real delivery
 // to arbitrary claimant addresses immediately — no DNS/domain ownership
-// needed, which the Resend path does require (see PREREQUISITES.md).
+// needed, which the Resend path does require (see resources/PREREQUISITES.md).
 export const gmailNotificationProvider: NotificationProvider = {
   async send(context) {
     const { subject, html, text } = buildEmail(context);

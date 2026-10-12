@@ -332,8 +332,8 @@ claimsRouter.post("/:id/resubmit", uploadDocuments, async (req, res) => {
   }
 });
 
-// POST /api/claims — SPEC.md §5/§7 (BUILD-PLAN.md feature #3), plus Zeebe
-// process kickoff (BUILD-PLAN.md feature #4 —
+// POST /api/claims — SPEC.md §5/§7 (resources/BUILD-PLAN.md feature #3), plus Zeebe
+// process kickoff (resources/BUILD-PLAN.md feature #4 —
 // .claude/specs/generic/process-orchestration-kickoff.md), plus the FNOL
 // extended fields (.claude/specs/db/fnol_extended_fields.md,
 // .claude/specs/generic/fnol_form_ui_update.md). Validation/insert/Zeebe

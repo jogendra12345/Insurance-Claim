@@ -13,7 +13,7 @@ Seven skills for working against `SPEC.md`, this repo's source of truth, plus tw
 | [`dmn-table-review`](dmn-table-review/SKILL.md) | You want to check a `.dmn` file against the routing table documented in §11 | No — report only |
 | [`case-trace`](case-trace/SKILL.md) | You need the full history of one claim, spanning `audit_log` and Camunda | No — report only |
 | [`commit-and-push`](commit-and-push/SKILL.md) | You want the current changes committed (message reflecting why) and pushed to `origin/main` — no feature branches in this repo | Yes — a git commit, pushed to `main` |
-| [`manage-app`](manage-app/SKILL.md) `start\|stop` | You want the full local stack (Docker, Camunda, API, workers, frontend) brought up or down per `RUNNING-LOCALLY.md`, freeing `vmmem` on stop | No — starts/stops processes, doesn't edit files |
+| [`manage-app`](manage-app/SKILL.md) `start\|stop` | You want the full local stack (Docker, Camunda, API, workers, frontend) brought up or down per `resources/RUNNING-LOCALLY.md`, freeing `vmmem` on stop | No — starts/stops processes, doesn't edit files |
 
 ## Suggested order of use
 

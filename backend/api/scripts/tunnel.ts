@@ -1,5 +1,5 @@
 // Starts the ngrok tunnel that gives Meta's WhatsApp webhook a fixed public
-// URL (RUNNING-LOCALLY.md §8). Runs alongside `npm run dev`, not on boot —
+// URL (resources/RUNNING-LOCALLY.md §8). Runs alongside `npm run dev`, not on boot —
 // the tunnel is useless without the API behind it.
 //
 // Looks for ngrok on PATH first, then in winget's install folders: winget
@@ -33,7 +33,7 @@ function findNgrok(): string | null {
 const ngrok = findNgrok();
 if (!ngrok) {
   console.error(
-    "ngrok not found. Install it (winget install Ngrok.Ngrok) and set it up per RUNNING-LOCALLY.md §8.",
+    "ngrok not found. Install it (winget install Ngrok.Ngrok) and set it up per resources/RUNNING-LOCALLY.md §8.",
   );
   process.exit(1);
 }

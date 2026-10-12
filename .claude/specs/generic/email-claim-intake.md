@@ -49,7 +49,7 @@ A claimant emails a dedicated claims address with a description of what happened
 Two options; the rest of the design is the same either way — the receiver hands a normalized `InboundEmail` (`messageId`, `inReplyTo`, `references[]`, `from`, `subject`, `textBody`, `attachments[]`, `authResults`) to one channel-adapter function.
 
 - **(a) Gmail IMAP polling (recommended for v1).** Poll a dedicated claims Gmail account every ~60 s with an IMAP client (e.g. `imapflow`) using an App Password, fetch unseen messages, process, mark seen. Runs as a small loop inside `backend/api` (or a separate process — decide at build). Works locally today with no domain, no tunnel, no new paid service. Gmail stamps an `Authentication-Results` header with SPF/DKIM/DMARC verdicts, which Decision 2 uses.
-- **(b) Inbound-parse webhook** (Resend inbound, SendGrid Inbound Parse, Mailgun Routes) → `POST /api/email/inbound`, signature-verified like the WhatsApp webhook. Real-time, scales better, but needs a domain we control with MX records pointed at the provider plus a public URL — neither exists yet (`PREREQUISITES.md`: Resend domain unverified).
+- **(b) Inbound-parse webhook** (Resend inbound, SendGrid Inbound Parse, Mailgun Routes) → `POST /api/email/inbound`, signature-verified like the WhatsApp webhook. Real-time, scales better, but needs a domain we control with MX records pointed at the provider plus a public URL — neither exists yet (`resources/PREREQUISITES.md`: Resend domain unverified).
 
 Swap later by replacing the receiver only; keep the adapter and everything below it unchanged.
 
@@ -202,7 +202,7 @@ SPEC.md §9's channel-scoped signal gets a third case: an email-channel claim is
 
 - Sent through `backend/shared/email-sender.ts` (Gmail SMTP preferred, Resend fallback, console mock when neither is set) from the claims mailbox address, with `In-Reply-To`/`References` set and `Re: <original subject>`, so they thread in the claimant's client. Each sent `Message-ID` is appended to the draft's `thread_message_ids`.
 - Claimant-facing copy follows the repo's existing tone (plain language, no raw field keys/status codes).
-- **Test-mode redirect:** `notification-provider.ts` currently redirects all claimant email to `TEST_RECIPIENT`. Email intake replies must go to the real sender (otherwise the conversation can't work), but seeded `@example.com` addresses can't send mail anyway — a tester emails from their own address, which must be on a seeded policy. Note this in `RUNNING-LOCALLY.md` at build.
+- **Test-mode redirect:** `notification-provider.ts` currently redirects all claimant email to `TEST_RECIPIENT`. Email intake replies must go to the real sender (otherwise the conversation can't work), but seeded `@example.com` addresses can't send mail anyway — a tester emails from their own address, which must be on a seeded policy. Note this in `resources/RUNNING-LOCALLY.md` at build.
 
 ### Audit log
 
@@ -213,7 +213,7 @@ Pre-claim rows have no `claim_id`; on submit, the draft id is logged in the clai
 
 ### Configuration
 
-New env vars in `backend/api/.env` (Decision 1): `EMAIL_INTAKE_ENABLED`, `EMAIL_INTAKE_ADDRESS`, and for (a) `EMAIL_INTAKE_IMAP_USER`/`EMAIL_INTAKE_IMAP_PASSWORD` (the dedicated claims account's Gmail address and App Password — used for both IMAP and SMTP), `EMAIL_INTAKE_POLL_SECONDS`. Unset → intake off, logged at startup. Add a "still needed"/decided line to `PREREQUISITES.md`.
+New env vars in `backend/api/.env` (Decision 1): `EMAIL_INTAKE_ENABLED`, `EMAIL_INTAKE_ADDRESS`, and for (a) `EMAIL_INTAKE_IMAP_USER`/`EMAIL_INTAKE_IMAP_PASSWORD` (the dedicated claims account's Gmail address and App Password — used for both IMAP and SMTP), `EMAIL_INTAKE_POLL_SECONDS`. Unset → intake off, logged at startup. Add a "still needed"/decided line to `resources/PREREQUISITES.md`.
 
 ## Decisions at Lock (2026-10-07)
 

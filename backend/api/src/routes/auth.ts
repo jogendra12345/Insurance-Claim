@@ -75,7 +75,7 @@ authRouter.post("/signup", async (req, res) => {
 
 // POST /api/auth/register-staff — admin-only. Creates a non-claimant
 // (staff) account directly, the app-level equivalent of the seeded staff
-// rows described in ROADMAP.md ("no admin UI in this pass") — this is that
+// rows described in resources/ROADMAP.md ("no admin UI in this pass") — this is that
 // admin UI. Deliberately separate from /signup: no policy-match gate, and
 // the role is caller-chosen rather than hardcoded to 'claimant'.
 authRouter.post("/register-staff", requireRole("admin"), async (req, res) => {
