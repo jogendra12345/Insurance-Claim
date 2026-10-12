@@ -24,6 +24,41 @@ Camunda 8 (Zeebe) runs process/claim-case-process.bpmn
           └─► Human tasks (triage → adjuster / investigator / legal → supervisor)
 ```
 
+## How the code is organised
+
+### Backend: `api/src` vs `workers` vs `shared`
+
+The backend is **two separately running programs** plus a folder of code they share:
+
+| Folder | Runs as | Rule of thumb |
+|---|---|---|
+| `backend/api/src/` | The **API server** (`npm run dev` in `backend/api`, port 4000). Its own `package.json`. | Code only the API needs: HTTP routes, login/auth, claim creation, WhatsApp and email intake. It answers *requests from people* (portal, WhatsApp, email). |
+| `backend/workers/` | The **worker process** (`npm run dev` in `backend/workers`). Its own `package.json`. | One file per Camunda job type. It does work *when Camunda asks for it* — it never serves HTTP. |
+| `backend/shared/` | Nothing on its own — it's a library. | Code that **both** programs, or several workers, need: the audit-log writer, Gemini client, email sender, notification/settlement providers, insurance-type configs, business-day maths. Put code here when a second consumer needs it, not before. |
+| `backend/db/` | Run once via `npm run migrate` in `backend/`. | SQL migrations — the schema both programs read and write. |
+
+Inside `api/src/`:
+- `routes/` holds one Express router per URL prefix (`/api/claims`, `/api/tasks`, …). A route file should stay thin: check auth, parse the request, call a helper, shape the response.
+- The top-level files in `api/src/` (`create-claim.ts`, `claims-assistant.ts`, `email-intake*.ts`, `auth.ts`, …) are the **business logic** the routes and intake channels call. For example, `create-claim.ts` is used by the portal route, the WhatsApp bot, *and* email intake — which is why it isn't inside `routes/`.
+
+Who uses `shared/` today:
+- **Workers** use it for almost everything: `audit-log`, `db`, and `zeebe-client` (~17 imports each), plus `reviewer-notifications`, `gemini-client`, `business-days`, `insurance-types/health`, and the providers.
+- **The API** uses only three modules from it: `email-sender`, `gemini-client`, `short-claim-id`.
+
+> **Watch out:** the API keeps **its own** Postgres and Camunda clients (`api/src/db.ts`, `api/src/zeebe.ts`) instead of using `shared/db.ts` and `shared/zeebe-client.ts`. They're configured slightly differently (e.g. the API caps Camunda retries, because a retried "start process" call can create a duplicate process for the same claim). When you change connection settings, check both places.
+
+### Frontend: `app` vs `components` vs `lib`
+
+The portal uses the Next.js **App Router**, where folder names are URLs:
+
+| Folder | What goes here | Example |
+|---|---|---|
+| `frontend/portal/app/` | **Pages (routes).** Each `page.tsx` is a screen and its folder path is its URL. `[id]` / `[key]` folders are dynamic URL segments. `layout.tsx` wraps every page (top bar, theme, auth provider). | `app/claims/[id]/page.tsx` → `/claims/123`; `app/tasks/page.tsx` → `/tasks` |
+| `frontend/portal/components/` | **Reusable UI pieces** with no URL of their own, imported by pages. Subfolders group pieces for one feature (`landing/` for the public home page, `assistant/` for the chat). | `ClaimForm.tsx`, `StatusBadge.tsx`, `Pagination.tsx`, `TopBar.tsx` |
+| `frontend/portal/lib/` | **Non-visual helpers:** the API client, login session, TypeScript types, formatting. No JSX layout. | `api.ts` (every backend call), `auth-context.tsx` (who's logged in), `types.ts`, `time.ts` |
+
+Rule of thumb: a new *screen* is a folder under `app/`; something drawn on more than one screen goes in `components/`; logic with no UI goes in `lib/`. Pages import the other two with the `@/` alias, e.g. `import { fetchPolicies } from "@/lib/api"`.
+
 ## 1. Process definitions — `process/`
 
 | File | Purpose |
