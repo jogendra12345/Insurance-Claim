@@ -29,3 +29,8 @@ dist/
 *.tsbuildinfo
 frontend/portal/.env.local
 backend/api/.env
+
+# Client demo decks — kept locally, not in the repo
+docs/AppBay-Client-Demo.pdf
+docs/ClaimFlow-AI-Client-Demo.pdf
+docs/ClaimFlow-AI-Client-Demo.pptx
